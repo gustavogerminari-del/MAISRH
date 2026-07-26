@@ -1,0 +1,338 @@
+import React, { useState, useEffect } from 'react';
+import { X, Plus, Trash2, Briefcase, ShieldAlert, CheckCircle2 } from 'lucide-react';
+import { Job, JobStatus, JobType, JobLocationType } from '../types/job';
+import {
+  JOB_STATUS_OPTIONS,
+  JOB_TYPE_OPTIONS,
+  JOB_LOCATION_OPTIONS,
+  CORPORATE_DEPARTMENTS,
+  CORPORATE_RECRUITERS,
+} from '../constants/jobOptions';
+import { useAuth } from '../../auth';
+import { Button, Input, Select } from '../../shared';
+
+export interface JobFormModalProps {
+  isOpen: boolean;
+  onClose: () => void;
+  onSaveJob: (jobData: Omit<Job, 'id' | 'applicantsCount' | 'createdAt'>, existingId?: string) => void;
+  initialJob?: Job | null;
+}
+
+export const JobFormModal: React.FC<JobFormModalProps> = ({
+  isOpen,
+  onClose,
+  onSaveJob,
+  initialJob,
+}) => {
+  const { hasActionAccess } = useAuth();
+
+  const canCreate = hasActionAccess('create_job');
+  const canEdit = hasActionAccess('edit_job');
+  const canEditBudget = hasActionAccess('edit_budget');
+
+  const isEditing = !!initialJob;
+
+  const [title, setTitle] = useState('');
+  const [department, setDepartment] = useState(CORPORATE_DEPARTMENTS[0]);
+  const [location, setLocation] = useState('São Paulo - SP');
+  const [locationType, setLocationType] = useState<JobLocationType>('Híbrido');
+  const [type, setType] = useState<JobType>('CLT');
+  const [status, setStatus] = useState<JobStatus>('Aberta');
+  const [salaryRange, setSalaryRange] = useState('R$ 8.000 - R$ 12.000');
+  const [openings, setOpenings] = useState<number>(1);
+  const [deadline, setDeadline] = useState('2026-08-30');
+  const [description, setDescription] = useState('');
+  const [recruiterName, setRecruiterName] = useState(CORPORATE_RECRUITERS[0].name);
+  const [managerName, setManagerName] = useState('Luciana Mello');
+  const [centerCostCode, setCenterCostCode] = useState('CC-RH-101');
+  const [requirements, setRequirements] = useState<string[]>([]);
+  const [newRequirementText, setNewRequirementText] = useState('');
+  const [error, setError] = useState('');
+
+  useEffect(() => {
+    if (initialJob) {
+      setTitle(initialJob.title);
+      setDepartment(initialJob.department);
+      setLocation(initialJob.location);
+      setLocationType(initialJob.locationType);
+      setType(initialJob.type);
+      setStatus(initialJob.status);
+      setSalaryRange(initialJob.salaryRange);
+      setOpenings(initialJob.openings);
+      setDeadline(initialJob.deadline);
+      setDescription(initialJob.description);
+      setRecruiterName(initialJob.recruiterName);
+      setManagerName(initialJob.managerName || 'Luciana Mello');
+      setCenterCostCode(initialJob.budget?.centerCostCode || 'CC-RH-101');
+      setRequirements(initialJob.requirements || []);
+    } else {
+      setTitle('');
+      setDepartment(CORPORATE_DEPARTMENTS[0]);
+      setLocation('São Paulo - SP');
+      setLocationType('Híbrido');
+      setType('CLT');
+      setStatus('Aberta');
+      setSalaryRange('R$ 8.000 - R$ 12.000');
+      setOpenings(1);
+      setDeadline('2026-08-30');
+      setDescription('');
+      setRecruiterName(CORPORATE_RECRUITERS[0].name);
+      setManagerName('Luciana Mello');
+      setCenterCostCode('CC-RH-101');
+      setRequirements([
+        'Experiência prévia comprovada na função',
+        'Boa comunicação interpessoal',
+      ]);
+    }
+    setError('');
+  }, [initialJob, isOpen]);
+
+  if (!isOpen) return null;
+
+  // Check general permission
+  const isAllowed = isEditing ? canEdit : canCreate;
+
+  const handleAddRequirement = () => {
+    if (!newRequirementText.trim()) return;
+    setRequirements((prev) => [...prev, newRequirementText.trim()]);
+    setNewRequirementText('');
+  };
+
+  const handleRemoveRequirement = (index: number) => {
+    setRequirements((prev) => prev.filter((_, i) => i !== index));
+  };
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!title.trim() || !description.trim()) {
+      setError('Por favor, preencha o título e a descrição da vaga.');
+      return;
+    }
+
+    if (requirements.length === 0) {
+      setError('Adicione ao menos um requisito obrigatório para a vaga.');
+      return;
+    }
+
+    onSaveJob(
+      {
+        title,
+        department,
+        location,
+        locationType,
+        type,
+        status,
+        salaryRange,
+        openings: Number(openings) || 1,
+        deadline,
+        description,
+        requirements,
+        recruiterName,
+        managerName,
+        budget: {
+          approvedSalaryRange: salaryRange,
+          centerCostCode,
+          isApproved: true,
+        },
+        isArchived: status === 'Arquivada',
+      },
+      initialJob?.id
+    );
+
+    onClose();
+  };
+
+  return (
+    <div className="fixed inset-0 bg-black/50 backdrop-blur-xs z-50 flex items-center justify-center p-4 overflow-y-auto">
+      <div className="bg-white rounded-3xl max-w-2xl w-full p-6 sm:p-8 space-y-6 shadow-2xl relative my-8 max-h-[90vh] overflow-y-auto">
+        <button
+          type="button"
+          onClick={onClose}
+          className="absolute top-6 right-6 text-slate-400 hover:text-slate-600 bg-slate-100 p-2 rounded-full cursor-pointer transition-colors"
+        >
+          <X className="w-5 h-5" />
+        </button>
+
+        <div className="flex items-center gap-2">
+          <Briefcase className="w-6 h-6 text-indigo-600" />
+          <h2 className="text-xl font-extrabold text-slate-900">
+            {isEditing ? 'Editar Registro de Vaga' : 'Cadastrar Nova Vaga Corporativa'}
+          </h2>
+        </div>
+
+        {!isAllowed ? (
+          <div className="p-6 bg-rose-50 border border-rose-200 rounded-2xl text-center space-y-3">
+            <ShieldAlert className="w-8 h-8 text-rose-600 mx-auto" />
+            <h4 className="text-base font-extrabold text-slate-900">Permissão Insuficiente</h4>
+            <p className="text-xs text-slate-600">
+              Seu perfil atual não autoriza a {isEditing ? 'edição' : 'criação'} de vagas no sistema.
+            </p>
+            <Button variant="outline" size="sm" onClick={onClose}>
+              Voltar
+            </Button>
+          </div>
+        ) : (
+          <form onSubmit={handleSubmit} className="space-y-4">
+            {error && (
+              <div className="p-3 bg-rose-50 border border-rose-200 text-rose-700 text-xs rounded-xl font-semibold">
+                {error}
+              </div>
+            )}
+
+            <Input
+              label="Cargo / Título da Vaga"
+              placeholder="Ex: Desenvolvedor(a) Frontend Senior"
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
+              required
+            />
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <Select
+                label="Departamento"
+                value={department}
+                onChange={(e) => setDepartment(e.target.value)}
+                options={CORPORATE_DEPARTMENTS.map((d) => ({ value: d, label: d }))}
+              />
+
+              <Select
+                label="Status da Vaga"
+                value={status}
+                onChange={(e) => setStatus(e.target.value as JobStatus)}
+                options={JOB_STATUS_OPTIONS.map((s) => ({ value: s, label: s }))}
+              />
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <Input
+                label="Localização"
+                placeholder="Ex: São Paulo - SP"
+                value={location}
+                onChange={(e) => setLocation(e.target.value)}
+              />
+
+              <Select
+                label="Modalidade"
+                value={locationType}
+                onChange={(e) => setLocationType(e.target.value as JobLocationType)}
+                options={JOB_LOCATION_OPTIONS.map((l) => ({ value: l, label: l }))}
+              />
+
+              <Select
+                label="Tipo de Contrato"
+                value={type}
+                onChange={(e) => setType(e.target.value as JobType)}
+                options={JOB_TYPE_OPTIONS.map((t) => ({ value: t, label: t }))}
+              />
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <Input
+                label="Faixa Salarial"
+                placeholder="Ex: R$ 8.000 - R$ 12.000"
+                value={salaryRange}
+                onChange={(e) => setSalaryRange(e.target.value)}
+                disabled={!canEditBudget}
+              />
+
+              <Input
+                label="Centro de Custo"
+                placeholder="Ex: CC-RH-101"
+                value={centerCostCode}
+                onChange={(e) => setCenterCostCode(e.target.value)}
+                disabled={!canEditBudget}
+              />
+
+              <Input
+                type="number"
+                label="Número de Vagas"
+                value={openings}
+                onChange={(e) => setOpenings(Number(e.target.value))}
+                min={1}
+                required
+              />
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <Select
+                label="Recrutador Responsável"
+                value={recruiterName}
+                onChange={(e) => setRecruiterName(e.target.value)}
+                options={CORPORATE_RECRUITERS.map((r) => ({ value: r.name, label: `${r.name} (${r.role})` }))}
+              />
+
+              <Input
+                label="Gestor Solicitante"
+                value={managerName}
+                onChange={(e) => setManagerName(e.target.value)}
+              />
+
+              <Input
+                type="date"
+                label="Data Limite (Prazo SLA)"
+                value={deadline}
+                onChange={(e) => setDeadline(e.target.value)}
+                required
+              />
+            </div>
+
+            <div className="space-y-1">
+              <label className="text-xs font-bold text-slate-700">Descrição Detalhada das Atividades</label>
+              <textarea
+                value={description}
+                onChange={(e) => setDescription(e.target.value)}
+                rows={3}
+                className="w-full bg-slate-50 border border-slate-200 text-slate-800 text-xs rounded-xl p-3 outline-none focus:border-indigo-500 font-medium"
+                placeholder="Descreva as responsabilidades, principais entregas e desafios da posição..."
+                required
+              />
+            </div>
+
+            {/* Requirements Manager */}
+            <div className="space-y-2 pt-2 border-t border-slate-100">
+              <label className="text-xs font-bold text-slate-700 block">Requisitos da Vaga</label>
+              <div className="flex gap-2">
+                <Input
+                  placeholder="Ex: Mínimo 3 anos de experiência em React"
+                  value={newRequirementText}
+                  onChange={(e) => setNewRequirementText(e.target.value)}
+                  className="flex-1"
+                />
+                <Button type="button" variant="outline" onClick={handleAddRequirement} leftIcon={<Plus className="w-4 h-4" />}>
+                  Adicionar
+                </Button>
+              </div>
+
+              <div className="space-y-1.5 max-h-36 overflow-y-auto">
+                {requirements.map((req, idx) => (
+                  <div
+                    key={idx}
+                    className="flex items-center justify-between p-2 bg-slate-50 rounded-xl border border-slate-200 text-xs text-slate-800"
+                  >
+                    <span>• {req}</span>
+                    <button
+                      type="button"
+                      onClick={() => handleRemoveRequirement(idx)}
+                      className="text-slate-400 hover:text-rose-600 p-1 rounded transition-colors cursor-pointer"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div className="pt-4 border-t border-slate-100 flex justify-end gap-3">
+              <Button type="button" variant="ghost" onClick={onClose}>
+                Cancelar
+              </Button>
+              <Button type="submit" variant="primary">
+                {isEditing ? 'Salvar Alterações' : 'Cadastrar Vaga'}
+              </Button>
+            </div>
+          </form>
+        )}
+      </div>
+    </div>
+  );
+};

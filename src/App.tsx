@@ -1,0 +1,311 @@
+import React, { useState } from 'react';
+import { AuthProvider, useAuth, LoginForm, ProfileSwitchSelector, ProtectedRoute } from './auth';
+import { Navbar } from './components/Navbar';
+import { Sidebar, MainTab } from './components/Sidebar';
+import { DashboardView } from './components/DashboardView';
+import { JobsView } from './components/JobsView';
+import { TalentBankView } from './components/TalentBankView';
+import { InterviewsView } from './components/InterviewsView';
+import { ReportsView } from './components/ReportsView';
+import { CompanyView } from './components/CompanyView';
+import { SettingsView } from './components/SettingsView';
+import { TeamManagementView } from './internal-team';
+import { PublicJobsView } from './public-jobs';
+import { RHConsultantView } from './rh-consultant';
+import { BenefitsLeavesView } from './benefits-leaves';
+import { DocumentsSignatureView } from './documents-signature';
+import { AuditLogsView } from './audit-logs';
+import { SubscriptionsView } from './subscriptions';
+import { MasterAdminView } from './master-admin';
+
+import { NewJobModal } from './components/NewJobModal';
+import { NewCandidateModal } from './components/NewCandidateModal';
+import { ScheduleInterviewModal } from './components/ScheduleInterviewModal';
+
+import { 
+  INITIAL_JOBS, 
+  INITIAL_CANDIDATES, 
+  INITIAL_INTERVIEWS, 
+  INITIAL_DEPARTMENTS, 
+  INITIAL_RECRUITERS, 
+  fontStages 
+} from './data/initialData';
+
+import { Job, Candidate, Interview, StageId } from './types/rh';
+
+function MainAppContent() {
+  const { user, isAuthenticated } = useAuth();
+  const [showLoginScreen, setShowLoginScreen] = useState(false);
+  const [activeTab, setActiveTab] = useState<MainTab>(() => {
+    return user?.role === 'Super Administrador' ? 'acesso-master' : 'dashboard';
+  });
+  const [searchTerm, setSearchTerm] = useState<string>('');
+
+  // Auto-switch to Master Panel when Super Admin logs in or switches profile
+  React.useEffect(() => {
+    if (user?.role === 'Super Administrador' && activeTab !== 'acesso-master') {
+      setActiveTab('acesso-master');
+    }
+  }, [user?.role]);
+
+  // Main state
+  const [jobs, setJobs] = useState<Job[]>(INITIAL_JOBS);
+  const [candidates, setCandidates] = useState<Candidate[]>(INITIAL_CANDIDATES);
+  const [interviews, setInterviews] = useState<Interview[]>(INITIAL_INTERVIEWS);
+  const [departments] = useState(INITIAL_DEPARTMENTS);
+  const [recruiters] = useState(INITIAL_RECRUITERS);
+
+  // Modals state
+  const [isJobModalOpen, setIsJobModalOpen] = useState(false);
+  const [isCandidateModalOpen, setIsCandidateModalOpen] = useState(false);
+  const [isInterviewModalOpen, setIsInterviewModalOpen] = useState(false);
+
+  // Handlers
+  const handleAddJob = (newJobData: Omit<Job, 'id' | 'applicantsCount' | 'createdAt'>) => {
+    const newJob: Job = {
+      ...newJobData,
+      id: `vaga-${Date.now()}`,
+      applicantsCount: 0,
+      createdAt: new Date().toISOString().split('T')[0],
+    };
+    setJobs(prev => [newJob, ...prev]);
+  };
+
+  const handleAddCandidate = (newCandData: Omit<Candidate, 'id' | 'appliedDate'>) => {
+    const newCandidate: Candidate = {
+      ...newCandData,
+      id: `cand-${Date.now()}`,
+      appliedDate: new Date().toISOString().split('T')[0],
+    };
+
+    setCandidates(prev => [newCandidate, ...prev]);
+
+    // If candidate assigned to a job, increment applicants count
+    if (newCandData.currentJobId) {
+      setJobs(prev => prev.map(j => {
+        if (j.id === newCandData.currentJobId) {
+          return { ...j, applicantsCount: (j.applicantsCount || 0) + 1 };
+        }
+        return j;
+      }));
+    }
+  };
+
+  // If user is not logged in, show Public Job Site as initial page, or LoginForm when requested
+  if (!isAuthenticated) {
+    if (showLoginScreen) {
+      return <LoginForm onBackToJobs={() => setShowLoginScreen(false)} />;
+    }
+    return (
+      <PublicJobsView
+        jobs={jobs}
+        onApplyCandidate={handleAddCandidate}
+        onGoToLogin={() => setShowLoginScreen(true)}
+      />
+    );
+  }
+
+  const handleScheduleInterview = (newInterviewData: Omit<Interview, 'id' | 'status'>) => {
+    const newInterview: Interview = {
+      ...newInterviewData,
+      id: `int-${Date.now()}`,
+      status: 'Agendada',
+    };
+    setInterviews(prev => [newInterview, ...prev]);
+  };
+
+  const handleMoveCandidateStage = (candidateId: string, newStageId: StageId) => {
+    setCandidates(prev => prev.map(c => {
+      if (c.id === candidateId) {
+        return {
+          ...c,
+          currentStageId: newStageId,
+          status: newStageId === 'contratado' ? 'Contratado' : 'Em Processo'
+        };
+      }
+      return c;
+    }));
+  };
+
+  const handleAssignCandidateToJob = (candidateId: string, jobId: string) => {
+    setCandidates(prev => prev.map(c => {
+      if (c.id === candidateId) {
+        return {
+          ...c,
+          currentJobId: jobId,
+          currentStageId: 'triagem',
+          status: 'Em Processo'
+        };
+      }
+      return c;
+    }));
+
+    setJobs(prev => prev.map(j => {
+      if (j.id === jobId) {
+        return { ...j, applicantsCount: j.applicantsCount + 1 };
+      }
+      return j;
+    }));
+  };
+
+  const handleUpdateInterviewFeedback = (interviewId: string, feedback: Interview['feedback']) => {
+    setInterviews(prev => prev.map(i => {
+      if (i.id === interviewId) {
+        return {
+          ...i,
+          status: 'Concluída',
+          feedback,
+        };
+      }
+      return i;
+    }));
+  };
+
+  const departmentNames = departments.map(d => d.name);
+
+  return (
+    <div className="min-h-screen bg-slate-50 text-slate-800 flex flex-col font-sans antialiased">
+      {/* Top Profile Switch Bar */}
+      <ProfileSwitchSelector />
+
+      {/* Navbar Header */}
+      <Navbar
+        searchTerm={searchTerm}
+        setSearchTerm={setSearchTerm}
+        openNewCandidateModal={() => setIsCandidateModalOpen(true)}
+        openScheduleInterviewModal={() => setIsInterviewModalOpen(true)}
+        openNewJobModal={() => setIsJobModalOpen(true)}
+        onOpenMasterPanel={() => setActiveTab('acesso-master')}
+      />
+
+      {/* Main Layout Container */}
+      <div className="flex flex-1 overflow-hidden">
+        {/* Operational Sidebar (hidden when in Master Admin mode) */}
+        {activeTab !== 'acesso-master' && (
+          <Sidebar
+            activeTab={activeTab}
+            setActiveTab={setActiveTab}
+            openNewJobModal={() => setIsJobModalOpen(true)}
+            openNewCandidateModal={() => setIsCandidateModalOpen(true)}
+            openScheduleInterviewModal={() => setIsInterviewModalOpen(true)}
+            jobsCount={jobs.length}
+            candidatesCount={candidates.length}
+            interviewsCount={interviews.length}
+          />
+        )}
+
+        {/* View Router Protected by Role */}
+        <main className="flex-1 overflow-y-auto p-4 sm:p-6 lg:p-8 bg-slate-50/50">
+
+          <ProtectedRoute screenKey={activeTab as any}>
+            {activeTab === 'dashboard' && (
+              <DashboardView
+                jobs={jobs}
+                candidates={candidates}
+                interviews={interviews}
+                stages={fontStages}
+                onNavigateToJobs={() => setActiveTab('vagas')}
+                onNavigateToCandidates={() => setActiveTab('banco-talentos')}
+                onNavigateToInterviews={() => setActiveTab('entrevistas')}
+                openNewJobModal={() => setIsJobModalOpen(true)}
+                openNewCandidateModal={() => setIsCandidateModalOpen(true)}
+              />
+            )}
+
+            {activeTab === 'vagas' && (
+              <JobsView
+                jobs={jobs}
+                candidates={candidates}
+                stages={fontStages}
+                openNewJobModal={() => setIsJobModalOpen(true)}
+                onMoveCandidateStage={handleMoveCandidateStage}
+                searchTerm={searchTerm}
+              />
+            )}
+
+            {activeTab === 'banco-talentos' && (
+              <TalentBankView
+                candidates={candidates}
+                jobs={jobs}
+                openNewCandidateModal={() => setIsCandidateModalOpen(true)}
+                onAssignCandidateToJob={handleAssignCandidateToJob}
+                searchTerm={searchTerm}
+              />
+            )}
+
+            {activeTab === 'entrevistas' && (
+              <InterviewsView
+                interviews={interviews}
+                openScheduleInterviewModal={() => setIsInterviewModalOpen(true)}
+                onUpdateInterviewFeedback={handleUpdateInterviewFeedback}
+              />
+            )}
+
+            {activeTab === 'relatorios' && <ReportsView />}
+
+            {activeTab === 'empresa' && (
+              <CompanyView departments={departments} recruiters={recruiters} />
+            )}
+
+            {activeTab === 'equipe-interna' && (
+              <TeamManagementView departments={departments as any} />
+            )}
+
+            {activeTab === 'site-vagas' && (
+              <PublicJobsView
+                jobs={jobs}
+                onApplyCandidate={handleAddCandidate}
+                isInternalView={true}
+              />
+            )}
+
+            {activeTab === 'consultor-rh' && <RHConsultantView />}
+
+            {activeTab === 'ferias-beneficios' && <BenefitsLeavesView />}
+
+            {activeTab === 'documentos' && <DocumentsSignatureView />}
+
+            {activeTab === 'auditoria' && <AuditLogsView />}
+
+            {activeTab === 'planos-saas' && <SubscriptionsView />}
+
+            {activeTab === 'acesso-master' && <MasterAdminView />}
+
+            {activeTab === 'configuracoes' && <SettingsView stages={fontStages} />}
+          </ProtectedRoute>
+        </main>
+      </div>
+
+      {/* Creation & Action Modals */}
+      <NewJobModal
+        isOpen={isJobModalOpen}
+        onClose={() => setIsJobModalOpen(false)}
+        onSubmit={handleAddJob}
+        departments={departmentNames}
+      />
+
+      <NewCandidateModal
+        isOpen={isCandidateModalOpen}
+        onClose={() => setIsCandidateModalOpen(false)}
+        onSubmit={handleAddCandidate}
+        jobs={jobs}
+      />
+
+      <ScheduleInterviewModal
+        isOpen={isInterviewModalOpen}
+        onClose={() => setIsInterviewModalOpen(false)}
+        onSubmit={handleScheduleInterview}
+        candidates={candidates}
+        jobs={jobs}
+      />
+    </div>
+  );
+}
+
+export default function App() {
+  return (
+    <AuthProvider>
+      <MainAppContent />
+    </AuthProvider>
+  );
+}
