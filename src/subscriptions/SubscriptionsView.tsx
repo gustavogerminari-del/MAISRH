@@ -2,32 +2,23 @@ import React, { useState } from 'react';
 import { 
   CreditCard, 
   Building2, 
-  CheckCircle2, 
-  AlertTriangle, 
   Clock, 
   TrendingUp, 
   Lock, 
   Unlock, 
   DollarSign, 
   PlusCircle, 
-  ShieldCheck, 
-  Sparkles, 
-  Sliders, 
-  Zap,
-  Calendar,
-  FileText
+  Sliders
 } from 'lucide-react';
 import { ClientSubscription, BillingInvoice, PlanTier, ModuleAccessConfig } from './types';
 import { MOCK_INVOICES } from './mockData';
 import { getSubscriptions, addSubscription, saveSubscriptionsToStorage } from './subscriptionsStore';
-import { saveTenant } from '../master-admin/masterTenantsStore';
+import { saveTenant, updateTenantModule } from '../master-admin/masterTenantsStore';
+import { saveEmpresaModuloFirestore } from '../lib/firestoreServices';
 
 export const SubscriptionsView: React.FC = () => {
   const [subscriptions, setSubscriptions] = useState<ClientSubscription[]>(() => getSubscriptions());
-  const [invoices, setInvoices] = useState<BillingInvoice[]>(MOCK_INVOICES);
-  const [selectedSubForEdit, setSelectedSubForEdit] = useState<ClientSubscription | null>(null);
-
-  // New Subscription Modal
+  const [invoices] = useState<BillingInvoice[]>(MOCK_INVOICES);
   const [showNewSubModal, setShowNewSubModal] = useState(false);
   const [newCompanyName, setNewCompanyName] = useState('');
   const [newCnpj, setNewCnpj] = useState('');
@@ -46,20 +37,31 @@ export const SubscriptionsView: React.FC = () => {
 
   // Toggle Module Permission
   const handleToggleModule = (subId: string, moduleKey: keyof ModuleAccessConfig) => {
+    const targetSub = subscriptions.find(s => s.id === subId);
+    if (!targetSub) return;
+
+    const nextState = !targetSub.modulesEnabled[moduleKey];
+
     const nextSubs = subscriptions.map(s => {
       if (s.id === subId) {
         return {
           ...s,
           modulesEnabled: {
             ...s.modulesEnabled,
-            [moduleKey]: !s.modulesEnabled[moduleKey]
+            [moduleKey]: nextState
           }
         };
       }
       return s;
     });
+
     saveSubscriptionsToStorage(nextSubs);
     setSubscriptions(nextSubs);
+
+    // Sync Firestore & Tenant Store
+    const empresaId = subId.startsWith('sub-') ? `t-${subId.replace('sub-', '')}` : subId;
+    saveEmpresaModuloFirestore(empresaId, moduleKey as string, nextState).catch(console.error);
+    updateTenantModule(empresaId, moduleKey as string, nextState);
   };
 
   const handleCreateSub = (e: React.FormEvent) => {
@@ -95,16 +97,31 @@ export const SubscriptionsView: React.FC = () => {
     const updatedSubs = addSubscription(newSub);
     setSubscriptions(updatedSubs);
 
-    // Sync with Master Admin Tenant store
+    // Sync with Master Admin Tenant store and Firestore
+    const newTenantId = `t-${Date.now()}`;
     saveTenant({
-      id: `t-${Date.now()}`,
+      id: newTenantId,
       code: newCompanyName.substring(0, 5).toUpperCase().replace(/\s/g, ''),
       companyName: newCompanyName,
       tradeName: newCompanyName,
-      cnpj: newCnpj || '00.000.000/0001-00',
-      ownerName: 'Administrador ' + newCompanyName,
-      ownerEmail: `contato@${newCompanyName.toLowerCase().replace(/\s/g, '')}.com.br`,
-      ownerPhone: '(11) 99999-9999',
+      cnpj: newSub.cnpj,
+      ownerName: 'Administrador Responsável',
+      ownerEmail: `admin@${newCompanyName.toLowerCase().replace(/[^a-z0-9]/g, '')}.com.br`,
+      ownerPhone: '(11) 98888-7777',
+      address: {
+        cep: '01310-100',
+        street: 'Avenida Paulista',
+        number: '1000',
+        complement: 'Conjunto 50',
+        neighborhood: 'Bela Vista',
+        cityUf: 'São Paulo / SP'
+      },
+      adminCredentials: {
+        adminEmail: `admin@${newCompanyName.toLowerCase().replace(/[^a-z0-9]/g, '')}.com.br`,
+        initialPassword: '••••••••',
+        sendWelcomeEmail: true,
+        createdAt: new Date().toISOString()
+      },
       status: 'Ativo',
       maxUsers: newSub.userLimit,
       maxActiveJobs: 20,
@@ -121,8 +138,9 @@ export const SubscriptionsView: React.FC = () => {
         siteVagasPersonalizado: true
       },
       branding: {
-        primaryColor: '#2563EB',
-        companyDisplayName: newCompanyName
+        primaryColor: '#4F46E5',
+        companyDisplayName: newCompanyName,
+        customDomain: ''
       },
       metrics: {
         activeUsersCount: 1,
@@ -130,12 +148,12 @@ export const SubscriptionsView: React.FC = () => {
         totalTalentsStored: 0,
         totalDocumentsSigned: 0,
         storageUsedMB: 10,
-        lastLoginAt: 'Hoje'
+        lastLoginAt: 'Agora'
       },
       contract: {
         id: `ctr-${Date.now()}`,
         contractNumber: `CTR-${new Date().getFullYear()}-${Math.floor(1000 + Math.random() * 9000)}`,
-        planName: newPlanTier as any,
+        planName: newPlanTier === 'Enterprise' ? 'Completo / Enterprise' : 'Intermediário',
         monthlyFee: newMrrValue,
         billingCycle: 'Mensal',
         startDate: newSub.contractStart,
@@ -144,7 +162,7 @@ export const SubscriptionsView: React.FC = () => {
         autoRenew: true
       },
       createdAt: new Date().toISOString().split('T')[0],
-      notes: 'Cadastrada através do painel de Assinaturas & Módulos'
+      notes: 'Empresa criada via Módulo de Assinaturas SaaS'
     });
 
     setShowNewSubModal(false);
@@ -154,259 +172,311 @@ export const SubscriptionsView: React.FC = () => {
 
   return (
     <div className="space-y-6">
-      {/* SaaS Revenue Metrics Header */}
-      <div className="bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 text-white p-6 rounded-2xl shadow-md border border-slate-800">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+      {/* Top Banner */}
+      <div className="bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 rounded-2xl p-6 text-white border border-slate-800 shadow-xl flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+        <div>
+          <div className="flex items-center gap-2">
+            <span className="px-2.5 py-0.5 rounded-full bg-indigo-500/30 text-indigo-300 text-[10px] font-black uppercase tracking-wider border border-indigo-400/30">
+              Módulo Gestão SaaS & Licenciamento
+            </span>
+            <span className="text-xs text-slate-400">• Firebase Firestore Integrated</span>
+          </div>
+          <h1 className="text-2xl font-black mt-1 flex items-center gap-2">
+            <Sliders className="w-6 h-6 text-indigo-400" />
+            Controle de Assinaturas & Módulos Liberados
+          </h1>
+          <p className="text-xs text-slate-300 mt-0.5">
+            Gerencie o ciclo de vida dos contratos, libere módulos às empresas e acompanhe renovações de faturamento.
+          </p>
+        </div>
+
+        <button
+          onClick={() => setShowNewSubModal(true)}
+          className="px-4 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white font-black text-xs rounded-xl shadow-lg shadow-indigo-600/30 transition-all cursor-pointer flex items-center gap-2 border border-indigo-400/30"
+        >
+          <PlusCircle className="w-4 h-4" />
+          <span>Nova Assinatura / Cliente</span>
+        </button>
+      </div>
+
+      {/* KPI Cards */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <div className="bg-white rounded-2xl p-4 border border-slate-200 shadow-xs space-y-1">
+          <span className="text-xs font-bold text-slate-500 flex items-center justify-between">
+            MRR Ativo (Mensal)
+            <DollarSign className="w-4 h-4 text-emerald-600" />
+          </span>
+          <p className="text-2xl font-black text-slate-900">
+            R$ {totalMRR.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+          </p>
+          <span className="text-[10px] text-emerald-700 font-bold bg-emerald-50 px-2 py-0.5 rounded-md inline-block">
+            +14% vs mês anterior
+          </span>
+        </div>
+
+        <div className="bg-white rounded-2xl p-4 border border-slate-200 shadow-xs space-y-1">
+          <span className="text-xs font-bold text-slate-500 flex items-center justify-between">
+            ARR Projetado (Anual)
+            <TrendingUp className="w-4 h-4 text-indigo-600" />
+          </span>
+          <p className="text-2xl font-black text-slate-900">
+            R$ {totalARR.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+          </p>
+          <span className="text-[10px] text-indigo-700 font-bold bg-indigo-50 px-2 py-0.5 rounded-md inline-block">
+            Base 100% adimplente
+          </span>
+        </div>
+
+        <div className="bg-white rounded-2xl p-4 border border-slate-200 shadow-xs space-y-1">
+          <span className="text-xs font-bold text-slate-500 flex items-center justify-between">
+            Total de Empresas
+            <Building2 className="w-4 h-4 text-slate-600" />
+          </span>
+          <p className="text-2xl font-black text-slate-900">{subscriptions.length}</p>
+          <span className="text-[10px] text-slate-600 font-bold bg-slate-100 px-2 py-0.5 rounded-md inline-block">
+            Clientes ativos
+          </span>
+        </div>
+
+        <div className="bg-white rounded-2xl p-4 border border-slate-200 shadow-xs space-y-1">
+          <span className="text-xs font-bold text-slate-500 flex items-center justify-between">
+            Vencimentos Próximos
+            <Clock className="w-4 h-4 text-amber-600" />
+          </span>
+          <p className="text-2xl font-black text-amber-600">{expiringSoonSubs.length}</p>
+          <span className="text-[10px] text-amber-800 font-bold bg-amber-50 px-2 py-0.5 rounded-md inline-block">
+            Exigem renovação
+          </span>
+        </div>
+      </div>
+
+      {/* Subscriptions Table with Module Matrix */}
+      <div className="bg-white rounded-2xl border border-slate-200 shadow-xs overflow-hidden">
+        <div className="p-4 border-b border-slate-200 bg-slate-50/50 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
           <div>
-            <div className="inline-flex items-center gap-2 px-2.5 py-1 rounded-full bg-indigo-500/20 text-indigo-300 text-xs font-semibold mb-2">
-              <Zap className="w-3.5 h-3.5 text-indigo-400" />
-              Painel de Assinaturas & Faturamento SaaS MAIS RH
-            </div>
-            <h2 className="text-2xl font-bold tracking-tight">Gestão de Contratos de Clientes & Módulos</h2>
-            <p className="text-xs text-indigo-200 mt-0.5">
-              Liberação e bloqueio dinâmico de recursos por cliente, controle de renovações de planos e receita recorrente.
-            </p>
-          </div>
-
-          <button
-            onClick={() => setShowNewSubModal(true)}
-            className="inline-flex items-center gap-2 px-4 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-xl shadow-md transition-all self-start sm:self-center"
-          >
-            <PlusCircle className="w-4 h-4" />
-            Ativar Nova Empresa Cliente
-          </button>
-        </div>
-
-        {/* Revenue Cards */}
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mt-6">
-          <div className="bg-white/10 p-4 rounded-xl backdrop-blur-xs border border-white/10">
-            <span className="text-xs text-indigo-200 font-semibold">MRR (Receita Mensal Recorrente)</span>
-            <p className="text-2xl font-extrabold text-white mt-1">
-              R$ {totalMRR.toLocaleString('pt-BR')} <span className="text-xs text-indigo-300 font-normal">/mês</span>
-            </p>
-          </div>
-
-          <div className="bg-white/10 p-4 rounded-xl backdrop-blur-xs border border-white/10">
-            <span className="text-xs text-indigo-200 font-semibold">ARR (Projeção Anual Recorrente)</span>
-            <p className="text-2xl font-extrabold text-emerald-400 mt-1">
-              R$ {totalARR.toLocaleString('pt-BR')} <span className="text-xs text-emerald-300 font-normal">/ano</span>
-            </p>
-          </div>
-
-          <div className="bg-white/10 p-4 rounded-xl backdrop-blur-xs border border-white/10">
-            <span className="text-xs text-indigo-200 font-semibold">Contratos Ativos</span>
-            <p className="text-2xl font-extrabold text-white mt-1">
-              {subscriptions.length} <span className="text-xs text-indigo-300 font-normal">empresas parceiras</span>
+            <h3 className="text-sm font-black text-slate-900">Matriz de Relacionamento: Empresas x Módulos Liberados</h3>
+            <p className="text-xs text-slate-500">
+              Clique nas chaves abaixo para liberar ou revogar módulos instantaneamente para cada empresa em tempo real no Firestore.
             </p>
           </div>
         </div>
-      </div>
 
-      {/* Renewal Warning Banner */}
-      {expiringSoonSubs.length > 0 && (
-        <div className="bg-amber-50 border border-amber-200 rounded-2xl p-4 flex items-center justify-between gap-4">
-          <div className="flex items-center gap-3">
-            <div className="p-2 bg-amber-100 rounded-xl text-amber-800">
-              <AlertTriangle className="w-5 h-5" />
-            </div>
-            <div>
-              <h4 className="text-xs font-bold text-amber-900">Alerta de Renovação Contratual para o Proprietário</h4>
-              <p className="text-[11px] text-amber-700 mt-0.5">
-                Existem <strong>{expiringSoonSubs.length} contratos de clientes</strong> vencendo nos próximos 30 dias. Entre em contato para renovação de licença.
-              </p>
-            </div>
-          </div>
-        </div>
-      )}
+        <div className="overflow-x-auto">
+          <table className="w-full text-left border-collapse min-w-[900px]">
+            <thead>
+              <tr className="bg-slate-100/70 border-b border-slate-200 text-[11px] font-extrabold text-slate-600 uppercase tracking-wider">
+                <th className="p-3">Empresa & Plano</th>
+                <th className="p-3">Recrutamento</th>
+                <th className="p-3">Banco Talentos</th>
+                <th className="p-3">Entrevistas</th>
+                <th className="p-3">DP / Colaboradores</th>
+                <th className="p-3">Benefícios</th>
+                <th className="p-3">Consultoria RH</th>
+                <th className="p-3">Documentos</th>
+                <th className="p-3 text-right">Ação</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100 text-xs">
+              {subscriptions.map(sub => (
+                <tr key={sub.id} className="hover:bg-slate-50/80 transition-colors">
+                  <td className="p-3">
+                    <div className="font-bold text-slate-900">{sub.companyName}</div>
+                    <div className="text-[10px] text-slate-500 flex items-center gap-1">
+                      <span>CNPJ: {sub.cnpj}</span>
+                      <span>•</span>
+                      <span className="font-extrabold text-indigo-600">{sub.planTier}</span>
+                    </div>
+                  </td>
 
-      {/* Subscription Cards & Module Permissions */}
-      <div className="space-y-4">
-        <h3 className="text-base font-bold text-slate-900">Empresas Assinantes & Ativação de Módulos</h3>
+                  {/* Recrutamento / Vagas */}
+                  <td className="p-3">
+                    <button
+                      onClick={() => handleToggleModule(sub.id, 'vagas')}
+                      className={`px-2.5 py-1 rounded-lg text-[10px] font-extrabold flex items-center gap-1 cursor-pointer transition-all ${
+                        sub.modulesEnabled.vagas 
+                          ? 'bg-emerald-100 text-emerald-800 border border-emerald-300' 
+                          : 'bg-slate-100 text-slate-400 border border-slate-200 hover:bg-slate-200'
+                      }`}
+                    >
+                      {sub.modulesEnabled.vagas ? <Unlock className="w-3 h-3 text-emerald-600" /> : <Lock className="w-3 h-3 text-slate-400" />}
+                      <span>{sub.modulesEnabled.vagas ? 'Liberado' : 'Bloqueado'}</span>
+                    </button>
+                  </td>
 
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          {subscriptions.map((sub) => (
-            <div key={sub.id} className="bg-white rounded-2xl p-6 border border-slate-200 shadow-2xs space-y-4 hover:border-indigo-300 transition-all">
-              <div className="flex items-start justify-between">
-                <div>
-                  <div className="flex items-center gap-2">
-                    <span className="text-[10px] font-bold px-2.5 py-0.5 rounded-full bg-indigo-50 text-indigo-700 border border-indigo-200">
-                      Plano {sub.planTier}
-                    </span>
-                    <span className={`text-[10px] font-bold px-2.5 py-0.5 rounded-full ${
-                      sub.paymentStatus === 'Em Dia / Ativo' ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-700'
-                    }`}>
-                      {sub.paymentStatus}
-                    </span>
-                  </div>
-                  <h4 className="text-lg font-bold text-slate-900 mt-2">{sub.companyName}</h4>
-                  <p className="text-xs text-slate-500">CNPJ: {sub.cnpj}</p>
-                </div>
+                  {/* Banco Talentos */}
+                  <td className="p-3">
+                    <button
+                      onClick={() => handleToggleModule(sub.id, 'bancoTalentos')}
+                      className={`px-2.5 py-1 rounded-lg text-[10px] font-extrabold flex items-center gap-1 cursor-pointer transition-all ${
+                        sub.modulesEnabled.bancoTalentos 
+                          ? 'bg-emerald-100 text-emerald-800 border border-emerald-300' 
+                          : 'bg-slate-100 text-slate-400 border border-slate-200 hover:bg-slate-200'
+                      }`}
+                    >
+                      {sub.modulesEnabled.bancoTalentos ? <Unlock className="w-3 h-3 text-emerald-600" /> : <Lock className="w-3 h-3 text-slate-400" />}
+                      <span>{sub.modulesEnabled.bancoTalentos ? 'Liberado' : 'Bloqueado'}</span>
+                    </button>
+                  </td>
 
-                <div className="text-right">
-                  <span className="text-xl font-extrabold text-slate-900 block">
-                    R$ {sub.mrrValue.toLocaleString('pt-BR')}
-                  </span>
-                  <span className="text-[10px] text-slate-400 font-medium">Faturamento {sub.billingCycle}</span>
-                </div>
-              </div>
+                  {/* Entrevistas */}
+                  <td className="p-3">
+                    <button
+                      onClick={() => handleToggleModule(sub.id, 'entrevistas')}
+                      className={`px-2.5 py-1 rounded-lg text-[10px] font-extrabold flex items-center gap-1 cursor-pointer transition-all ${
+                        sub.modulesEnabled.entrevistas 
+                          ? 'bg-emerald-100 text-emerald-800 border border-emerald-300' 
+                          : 'bg-slate-100 text-slate-400 border border-slate-200 hover:bg-slate-200'
+                      }`}
+                    >
+                      {sub.modulesEnabled.entrevistas ? <Unlock className="w-3 h-3 text-emerald-600" /> : <Lock className="w-3 h-3 text-slate-400" />}
+                      <span>{sub.modulesEnabled.entrevistas ? 'Liberado' : 'Bloqueado'}</span>
+                    </button>
+                  </td>
 
-              {/* Users & Expiration */}
-              <div className="grid grid-cols-2 gap-2 text-xs bg-slate-50 p-3 rounded-xl border border-slate-100">
-                <div>
-                  <span className="text-slate-400 block text-[10px]">Licenças de Usuário</span>
-                  <span className="font-semibold text-slate-800">{sub.activeUsersCount} / {sub.userLimit} ativas</span>
-                </div>
-                <div>
-                  <span className="text-slate-400 block text-[10px]">Vencimento do Contrato</span>
-                  <span className="font-bold text-indigo-700">{sub.contractExpiration}</span>
-                </div>
-              </div>
+                  {/* DP / Colaboradores */}
+                  <td className="p-3">
+                    <button
+                      onClick={() => handleToggleModule(sub.id, 'equipeInterna')}
+                      className={`px-2.5 py-1 rounded-lg text-[10px] font-extrabold flex items-center gap-1 cursor-pointer transition-all ${
+                        sub.modulesEnabled.equipeInterna 
+                          ? 'bg-emerald-100 text-emerald-800 border border-emerald-300' 
+                          : 'bg-slate-100 text-slate-400 border border-slate-200 hover:bg-slate-200'
+                      }`}
+                    >
+                      {sub.modulesEnabled.equipeInterna ? <Unlock className="w-3 h-3 text-emerald-600" /> : <Lock className="w-3 h-3 text-slate-400" />}
+                      <span>{sub.modulesEnabled.equipeInterna ? 'Liberado' : 'Bloqueado'}</span>
+                    </button>
+                  </td>
 
-              {/* Module Lock/Unlock Matrix */}
-              <div className="space-y-2 pt-2 border-t border-slate-100">
-                <span className="text-xs font-bold text-slate-900 block flex items-center gap-1.5">
-                  <Sliders className="w-3.5 h-3.5 text-indigo-600" />
-                  Módulos Habilitados no Contrato:
-                </span>
+                  {/* Benefícios */}
+                  <td className="p-3">
+                    <button
+                      onClick={() => handleToggleModule(sub.id, 'feriasBeneficios')}
+                      className={`px-2.5 py-1 rounded-lg text-[10px] font-extrabold flex items-center gap-1 cursor-pointer transition-all ${
+                        sub.modulesEnabled.feriasBeneficios 
+                          ? 'bg-emerald-100 text-emerald-800 border border-emerald-300' 
+                          : 'bg-slate-100 text-slate-400 border border-slate-200 hover:bg-slate-200'
+                      }`}
+                    >
+                      {sub.modulesEnabled.feriasBeneficios ? <Unlock className="w-3 h-3 text-emerald-600" /> : <Lock className="w-3 h-3 text-slate-400" />}
+                      <span>{sub.modulesEnabled.feriasBeneficios ? 'Liberado' : 'Bloqueado'}</span>
+                    </button>
+                  </td>
 
-                <div className="grid grid-cols-2 gap-2 text-xs">
-                  <button
-                    onClick={() => handleToggleModule(sub.id, 'vagas')}
-                    className={`p-2 rounded-lg border text-left flex items-center justify-between transition-all ${
-                      sub.modulesEnabled.vagas ? 'bg-emerald-50/60 border-emerald-200 text-emerald-900' : 'bg-slate-50 border-slate-200 text-slate-400'
-                    }`}
-                  >
-                    <span>Vagas & Recrutamento</span>
-                    {sub.modulesEnabled.vagas ? <Unlock className="w-3 h-3 text-emerald-600" /> : <Lock className="w-3 h-3 text-slate-400" />}
-                  </button>
+                  {/* Consultoria RH */}
+                  <td className="p-3">
+                    <button
+                      onClick={() => handleToggleModule(sub.id, 'consultoriaRH')}
+                      className={`px-2.5 py-1 rounded-lg text-[10px] font-extrabold flex items-center gap-1 cursor-pointer transition-all ${
+                        sub.modulesEnabled.consultoriaRH 
+                          ? 'bg-emerald-100 text-emerald-800 border border-emerald-300' 
+                          : 'bg-slate-100 text-slate-400 border border-slate-200 hover:bg-slate-200'
+                      }`}
+                    >
+                      {sub.modulesEnabled.consultoriaRH ? <Unlock className="w-3 h-3 text-emerald-600" /> : <Lock className="w-3 h-3 text-slate-400" />}
+                      <span>{sub.modulesEnabled.consultoriaRH ? 'Liberado' : 'Bloqueado'}</span>
+                    </button>
+                  </td>
 
-                  <button
-                    onClick={() => handleToggleModule(sub.id, 'bancoTalentos')}
-                    className={`p-2 rounded-lg border text-left flex items-center justify-between transition-all ${
-                      sub.modulesEnabled.bancoTalentos ? 'bg-emerald-50/60 border-emerald-200 text-emerald-900' : 'bg-slate-50 border-slate-200 text-slate-400'
-                    }`}
-                  >
-                    <span>Banco de Talentos</span>
-                    {sub.modulesEnabled.bancoTalentos ? <Unlock className="w-3 h-3 text-emerald-600" /> : <Lock className="w-3 h-3 text-slate-400" />}
-                  </button>
+                  {/* Documentos Assinatura */}
+                  <td className="p-3">
+                    <button
+                      onClick={() => handleToggleModule(sub.id, 'documentosAssinatura')}
+                      className={`px-2.5 py-1 rounded-lg text-[10px] font-extrabold flex items-center gap-1 cursor-pointer transition-all ${
+                        sub.modulesEnabled.documentosAssinatura 
+                          ? 'bg-emerald-100 text-emerald-800 border border-emerald-300' 
+                          : 'bg-slate-100 text-slate-400 border border-slate-200 hover:bg-slate-200'
+                      }`}
+                    >
+                      {sub.modulesEnabled.documentosAssinatura ? <Unlock className="w-3 h-3 text-emerald-600" /> : <Lock className="w-3 h-3 text-slate-400" />}
+                      <span>{sub.modulesEnabled.documentosAssinatura ? 'Liberado' : 'Bloqueado'}</span>
+                    </button>
+                  </td>
 
-                  <button
-                    onClick={() => handleToggleModule(sub.id, 'consultoriaRH')}
-                    className={`p-2 rounded-lg border text-left flex items-center justify-between transition-all ${
-                      sub.modulesEnabled.consultoriaRH ? 'bg-emerald-50/60 border-emerald-200 text-emerald-900' : 'bg-slate-50 border-slate-200 text-slate-400'
-                    }`}
-                  >
-                    <span>Consultor de RH</span>
-                    {sub.modulesEnabled.consultoriaRH ? <Unlock className="w-3 h-3 text-emerald-600" /> : <Lock className="w-3 h-3 text-slate-400" />}
-                  </button>
-
-                  <button
-                    onClick={() => handleToggleModule(sub.id, 'feriasBeneficios')}
-                    className={`p-2 rounded-lg border text-left flex items-center justify-between transition-all ${
-                      sub.modulesEnabled.feriasBeneficios ? 'bg-emerald-50/60 border-emerald-200 text-emerald-900' : 'bg-slate-50 border-slate-200 text-slate-400'
-                    }`}
-                  >
-                    <span>Férias & Benefícios</span>
-                    {sub.modulesEnabled.feriasBeneficios ? <Unlock className="w-3 h-3 text-emerald-600" /> : <Lock className="w-3 h-3 text-slate-400" />}
-                  </button>
-
-                  <button
-                    onClick={() => handleToggleModule(sub.id, 'documentosAssinatura')}
-                    className={`p-2 rounded-lg border text-left flex items-center justify-between transition-all ${
-                      sub.modulesEnabled.documentosAssinatura ? 'bg-emerald-50/60 border-emerald-200 text-emerald-900' : 'bg-slate-50 border-slate-200 text-slate-400'
-                    }`}
-                  >
-                    <span>Assinatura Digital</span>
-                    {sub.modulesEnabled.documentosAssinatura ? <Unlock className="w-3 h-3 text-emerald-600" /> : <Lock className="w-3 h-3 text-slate-400" />}
-                  </button>
-
-                  <button
-                    onClick={() => handleToggleModule(sub.id, 'auditoriaLogs')}
-                    className={`p-2 rounded-lg border text-left flex items-center justify-between transition-all ${
-                      sub.modulesEnabled.auditoriaLogs ? 'bg-emerald-50/60 border-emerald-200 text-emerald-900' : 'bg-slate-50 border-slate-200 text-slate-400'
-                    }`}
-                  >
-                    <span>Auditoria & Logs</span>
-                    {sub.modulesEnabled.auditoriaLogs ? <Unlock className="w-3 h-3 text-emerald-600" /> : <Lock className="w-3 h-3 text-slate-400" />}
-                  </button>
-                </div>
-              </div>
-            </div>
-          ))}
+                  <td className="p-3 text-right font-bold text-slate-800">
+                    R$ {sub.mrrValue.toLocaleString('pt-BR')}/mês
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </div>
       </div>
 
-      {/* MODAL: NOVA EMPRESA CLIENTE */}
+      {/* Modal Nova Assinatura */}
       {showNewSubModal && (
-        <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-xs z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl p-6 max-w-md w-full shadow-2xl space-y-4">
-            <h3 className="text-base font-bold text-slate-900">Cadastrar Nova Empresa Assinante</h3>
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl max-w-md w-full shadow-2xl border border-slate-200 overflow-hidden p-6 space-y-4">
+            <h3 className="text-lg font-black text-slate-900">Cadastrar Nova Assinatura de Empresa</h3>
 
-            <form onSubmit={handleCreateSub} className="space-y-3">
+            <form onSubmit={handleCreateSub} className="space-y-3 text-xs">
               <div>
-                <label className="block text-xs font-semibold text-slate-700 mb-1">Razão Social / Empresa *</label>
+                <label className="block font-bold text-slate-700 mb-1">Razão Social / Nome Fantasia *</label>
                 <input
                   type="text"
                   required
+                  placeholder="Ex: TechInnovate Soluções S/A"
                   value={newCompanyName}
-                  onChange={(e) => setNewCompanyName(e.target.value)}
-                  placeholder="Ex: TechCorp Inovações"
-                  className="w-full text-xs px-3 py-2 border border-slate-200 rounded-lg"
+                  onChange={e => setNewCompanyName(e.target.value)}
+                  className="w-full px-3 py-2 rounded-xl border border-slate-300 focus:ring-2 focus:ring-indigo-500 font-semibold"
                 />
               </div>
 
               <div>
-                <label className="block text-xs font-semibold text-slate-700 mb-1">CNPJ *</label>
+                <label className="block font-bold text-slate-700 mb-1">CNPJ</label>
                 <input
                   type="text"
-                  required
-                  value={newCnpj}
-                  onChange={(e) => setNewCnpj(e.target.value)}
                   placeholder="00.000.000/0001-00"
-                  className="w-full text-xs px-3 py-2 border border-slate-200 rounded-lg"
+                  value={newCnpj}
+                  onChange={e => setNewCnpj(e.target.value)}
+                  className="w-full px-3 py-2 rounded-xl border border-slate-300 focus:ring-2 focus:ring-indigo-500 font-semibold"
                 />
               </div>
 
-              <div className="grid grid-cols-2 gap-2">
-                <div>
-                  <label className="block text-xs font-semibold text-slate-700 mb-1">Plano Contratado *</label>
-                  <select
-                    value={newPlanTier}
-                    onChange={(e) => setNewPlanTier(e.target.value as any)}
-                    className="w-full text-xs px-3 py-2 border border-slate-200 rounded-lg"
-                  >
-                    <option value="Starter">Starter</option>
-                    <option value="Professional">Professional</option>
-                    <option value="Enterprise">Enterprise</option>
-                    <option value="Custom Consultoria">Custom Consultoria</option>
-                  </select>
-                </div>
-
-                <div>
-                  <label className="block text-xs font-semibold text-slate-700 mb-1">Valor Mensal (R$) *</label>
-                  <input
-                    type="number"
-                    required
-                    value={newMrrValue}
-                    onChange={(e) => setNewMrrValue(Number(e.target.value))}
-                    className="w-full text-xs px-3 py-2 border border-slate-200 rounded-lg"
-                  />
-                </div>
+              <div>
+                <label className="block font-bold text-slate-700 mb-1">Plano do Contrato</label>
+                <select
+                  value={newPlanTier}
+                  onChange={e => {
+                    const tier = e.target.value as PlanTier;
+                    setNewPlanTier(tier);
+                    if (tier === 'Starter') setNewMrrValue(490);
+                    else if (tier === 'Professional') setNewMrrValue(1200);
+                    else if (tier === 'Enterprise') setNewMrrValue(3500);
+                    else if (tier === 'Custom Consultoria') setNewMrrValue(5800);
+                  }}
+                  className="w-full px-3 py-2 rounded-xl border border-slate-300 font-bold text-slate-800"
+                >
+                  <option value="Starter">Starter (R$ 490/mês)</option>
+                  <option value="Professional">Professional (R$ 1.200/mês)</option>
+                  <option value="Enterprise">Enterprise Corp (R$ 3.500/mês)</option>
+                  <option value="Custom Consultoria">Custom Consultoria (R$ 5.800/mês)</option>
+                </select>
               </div>
 
-              <div className="flex items-center justify-end gap-2 pt-3 border-t border-slate-100">
+              <div>
+                <label className="block font-bold text-slate-700 mb-1">Valor Mensal (MRR)</label>
+                <input
+                  type="number"
+                  value={newMrrValue}
+                  onChange={e => setNewMrrValue(Number(e.target.value))}
+                  className="w-full px-3 py-2 rounded-xl border border-slate-300 font-extrabold text-indigo-600"
+                />
+              </div>
+
+              <div className="pt-2 flex justify-end gap-2">
                 <button
                   type="button"
                   onClick={() => setShowNewSubModal(false)}
-                  className="px-4 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-100 rounded-xl"
+                  className="px-4 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 font-bold text-slate-700 cursor-pointer"
                 >
                   Cancelar
                 </button>
                 <button
                   type="submit"
-                  className="px-4 py-2 text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-700 rounded-xl"
+                  className="px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 font-extrabold text-white cursor-pointer shadow-md"
                 >
-                  Ativar Contrato
+                  Confirmar e Criar
                 </button>
               </div>
             </form>

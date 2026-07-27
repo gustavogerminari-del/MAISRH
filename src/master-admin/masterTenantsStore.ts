@@ -1,5 +1,11 @@
-import { ClientTenant } from './types/master';
+import { ClientTenant, TenantModulePermissions } from './types/master';
 import { MOCK_TENANTS } from './data/mockMasterData';
+import { 
+  fetchEmpresasFirestore, 
+  saveEmpresaFirestore, 
+  deleteEmpresaFirestore,
+  saveEmpresaModuloFirestore 
+} from '../lib/firestoreServices';
 
 const STORAGE_KEY = 'mais_rh_master_tenants';
 
@@ -29,6 +35,22 @@ export function getTenants(): ClientTenant[] {
 }
 
 /**
+ * Async fetch from Firestore and update localStorage.
+ */
+export async function syncTenantsFromFirestore(): Promise<ClientTenant[]> {
+  try {
+    const firestoreTenants = await fetchEmpresasFirestore();
+    if (firestoreTenants && firestoreTenants.length > 0) {
+      saveTenantsToStorage(firestoreTenants);
+      return firestoreTenants;
+    }
+  } catch (err) {
+    console.warn('Erro na sincronização de empresas do Firestore:', err);
+  }
+  return getTenants();
+}
+
+/**
  * Saves full tenant list to localStorage.
  */
 export function saveTenantsToStorage(tenants: ClientTenant[]): void {
@@ -40,20 +62,61 @@ export function saveTenantsToStorage(tenants: ClientTenant[]): void {
 }
 
 /**
- * Adds or updates a single tenant and persists to localStorage.
+ * Adds or updates a single tenant and persists to Firestore and localStorage.
  */
 export function saveTenant(tenantData: Partial<ClientTenant>): ClientTenant[] {
   const current = getTenants();
-  const exists = current.find(t => t.id === tenantData.id);
+  const tenantId = tenantData.id || `t-${Date.now()}`;
+  const fullTenantData = {
+    ...tenantData,
+    id: tenantId
+  };
+
+  const exists = current.find(t => t.id === tenantId);
   let updated: ClientTenant[];
 
   if (exists) {
-    updated = current.map(t => t.id === tenantData.id ? { ...t, ...tenantData } as ClientTenant : t);
+    updated = current.map(t => t.id === tenantId ? { ...t, ...fullTenantData } as ClientTenant : t);
   } else {
-    updated = [tenantData as ClientTenant, ...current];
+    updated = [fullTenantData as ClientTenant, ...current];
   }
 
   saveTenantsToStorage(updated);
+
+  // Firestore Sync
+  saveEmpresaFirestore(fullTenantData).catch(err => {
+    console.error('Falha na persistência remota da empresa no Firestore:', err);
+  });
+
+  return updated;
+}
+
+/**
+ * Updates a specific module activation for a given tenant.
+ */
+export function updateTenantModule(tenantId: string, moduleKey: string, active: boolean): ClientTenant[] {
+  const current = getTenants();
+  const updated: ClientTenant[] = current.map(t => {
+    if (t.id === tenantId) {
+      const updatedModules = {
+        ...(t.modules || {}),
+        [moduleKey]: active
+      } as TenantModulePermissions;
+      return {
+        ...t,
+        modules: updatedModules
+      };
+    }
+    return t;
+  });
+
+  saveTenantsToStorage(updated);
+
+  // Sync with Firestore `empresa_modulos` and `empresas`
+  saveEmpresaModuloFirestore(tenantId, moduleKey, active).catch(err => {
+    console.error('Erro ao salvar permissão no Firestore empresa_modulos:', err);
+  });
+
   return updated;
 }
 
@@ -65,6 +128,12 @@ export function toggleTenantStatus(tenantId: string, currentStatus: string): Cli
   const nextStatus = currentStatus === 'Ativo' ? 'Suspenso' : 'Ativo';
   const updated = current.map(t => t.id === tenantId ? { ...t, status: nextStatus as any } : t);
   saveTenantsToStorage(updated);
+
+  const target = updated.find(t => t.id === tenantId);
+  if (target) {
+    saveEmpresaFirestore(target).catch(console.error);
+  }
+
   return updated;
 }
 
@@ -75,5 +144,8 @@ export function deleteTenant(tenantId: string): ClientTenant[] {
   const current = getTenants();
   const updated = current.filter(t => t.id !== tenantId);
   saveTenantsToStorage(updated);
+
+  deleteEmpresaFirestore(tenantId).catch(console.error);
+
   return updated;
 }

@@ -10,6 +10,8 @@ export type RoleProfile =
   | 'Recrutador Sênior'
   | 'Analista de RH';
 
+export type UserType = 'MASTER' | 'EMPRESA' | 'CANDIDATO' | 'FUNCIONARIO';
+
 export type ScreenRouteKey =
   | 'dashboard'
   | 'vagas'
@@ -46,6 +48,8 @@ export interface UserProfile {
   role: RoleProfile;
   department: string;
   avatar: string;
+  tipoUsuario?: UserType;
+  empresaId?: string;
   companyId?: string;
   companyName?: string;
   tenantId?: string;

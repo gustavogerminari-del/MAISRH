@@ -1,5 +1,6 @@
 import { PlatformModule } from './types/master';
 import { MOCK_PLATFORM_MODULES } from './data/mockMasterData';
+import { fetchModulosFirestore, saveModuloFirestore } from '../lib/firestoreServices';
 
 const STORAGE_KEY = 'mais_rh_platform_modules';
 
@@ -24,6 +25,19 @@ export function getPlatformModules(): PlatformModule[] {
   return MOCK_PLATFORM_MODULES;
 }
 
+export async function syncPlatformModulesFromFirestore(): Promise<PlatformModule[]> {
+  try {
+    const remoteModules = await fetchModulosFirestore();
+    if (remoteModules && remoteModules.length > 0) {
+      savePlatformModulesToStorage(remoteModules);
+      return remoteModules;
+    }
+  } catch (err) {
+    console.warn('Erro ao sincronizar módulos do Firestore:', err);
+  }
+  return getPlatformModules();
+}
+
 export function savePlatformModulesToStorage(modules: PlatformModule[]): void {
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(modules));
@@ -44,5 +58,11 @@ export function savePlatformModule(moduleData: PlatformModule): PlatformModule[]
   }
 
   savePlatformModulesToStorage(updated);
+
+  // Firestore sync
+  saveModuloFirestore(moduleData).catch(err => {
+    console.error('Erro ao salvar módulo no Firestore:', err);
+  });
+
   return updated;
 }

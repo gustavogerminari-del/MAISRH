@@ -1,0 +1,60 @@
+{
+  "entities": {
+    "empresas": {
+      "title": "Empresas Clientes",
+      "description": "Cadastro de empresas clientes no MAIS RH",
+      "type": "object",
+      "properties": {
+        "empresaId": { "type": "string" },
+        "nomeEmpresa": { "type": "string" },
+        "CNPJ": { "type": "string" },
+        "email": { "type": "string" },
+        "plano": { "type": "string" },
+        "status": { "type": "string" },
+        "dataCriacao": { "type": "string" }
+      },
+      "required": ["empresaId", "nomeEmpresa"]
+    },
+    "modulos": {
+      "title": "Módulos de Plataforma",
+      "description": "Módulos disponíveis no SaaS",
+      "type": "object",
+      "properties": {
+        "moduloId": { "type": "string" },
+        "nome": { "type": "string" },
+        "codigo": { "type": "string" },
+        "descricao": { "type": "string" },
+        "ativo": { "type": "boolean" }
+      },
+      "required": ["moduloId", "nome", "codigo"]
+    },
+    "empresa_modulos": {
+      "title": "Relacionamento Empresa X Módulo",
+      "description": "Associação de módulos liberados para empresas",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "empresaId": { "type": "string" },
+        "moduloId": { "type": "string" },
+        "ativo": { "type": "boolean" },
+        "dataLiberacao": { "type": "string" }
+      },
+      "required": ["empresaId", "moduloId", "ativo"]
+    },
+    "usuarios": {
+      "title": "Usuários",
+      "description": "Perfis dos usuários no Firestore",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string" },
+        "nome": { "type": "string" },
+        "email": { "type": "string" },
+        "tipoUsuario": { "type": "string" },
+        "empresaId": { "type": "string" },
+        "status": { "type": "string" },
+        "dataCriacao": { "type": "string" }
+      },
+      "required": ["uid", "email", "tipoUsuario"]
+    }
+  }
+}
