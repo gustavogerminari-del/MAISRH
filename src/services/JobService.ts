@@ -124,6 +124,10 @@ export class JobService {
     return INITIAL_JOBS;
   }
 
+  static async listByCompany(companyId?: string): Promise<Job[]> {
+    return this.list(companyId);
+  }
+
   static async search(term: string, companyId?: string): Promise<Job[]> {
     const all = await this.list(companyId);
     const lower = term.toLowerCase();

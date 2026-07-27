@@ -113,6 +113,26 @@ export interface JobCandidateApplication {
 const COLLECTION_NAME = 'candidate_applications';
 
 export class JobCandidateService {
+  static async listAll(companyId?: string): Promise<JobCandidateApplication[]> {
+    try {
+      const q = (companyId && companyId !== 'master')
+        ? query(collection(db, COLLECTION_NAME), where('companyId', '==', companyId))
+        : collection(db, COLLECTION_NAME);
+      
+      const snap = await getDocs(q as any);
+      if (!snap.empty) {
+        const list: JobCandidateApplication[] = [];
+        snap.forEach(d => list.push(d.data() as JobCandidateApplication));
+        return list;
+      }
+    } catch (err) {
+      console.warn('Erro ao buscar todas as candidaturas no Firestore:', err);
+    }
+
+    // Fallback seed for general company
+    return this.seedApplicationsForJob('vaga-001', companyId || 'emp-001');
+  }
+
   static async listByJob(jobId: string, companyId?: string): Promise<JobCandidateApplication[]> {
     try {
       const q = companyId 

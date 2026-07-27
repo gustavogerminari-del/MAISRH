@@ -20,7 +20,11 @@ import {
   MessageCircle, 
   Download, 
   RefreshCw,
-  Plus
+  Plus,
+  Star,
+  History,
+  Award,
+  Zap
 } from 'lucide-react';
 import { Job } from '../types/job';
 import { 
@@ -29,8 +33,11 @@ import {
   ApplicationStatus 
 } from '../../services/JobCandidateService';
 import { CandidateDrawerPanel } from './CandidateDrawerPanel';
+import { JobTalentBankAiTab } from './JobTalentBankAiTab';
 import { Button, Card } from '../../shared';
 import { useAuth } from '../../auth';
+
+export type JobViewTab = 'inscritos' | 'banco_ia' | 'entrevistas' | 'avaliacoes' | 'historico';
 
 interface JobCandidatesManagementViewProps {
   job: Job;
@@ -43,6 +50,9 @@ export const JobCandidatesManagementView: React.FC<JobCandidatesManagementViewPr
 }) => {
   const { user } = useAuth();
   const companyId = user?.companyId || user?.tenantId || user?.id || 'emp-001';
+
+  // Navigation Tabs
+  const [activeTab, setActiveTab] = useState<JobViewTab>('inscritos');
 
   const [candidates, setCandidates] = useState<JobCandidateApplication[]>([]);
   const [loading, setLoading] = useState(true);
@@ -249,349 +259,551 @@ export const JobCandidatesManagementView: React.FC<JobCandidatesManagementViewPr
         </div>
       </div>
 
-      {/* 2. INDICADORES RÁPIDOS (Metric Filter Cards) */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-3">
+      {/* 5 NAVIGATION TABS */}
+      <div className="bg-white rounded-2xl p-1.5 border border-slate-200 shadow-2xs flex items-center gap-1.5 overflow-x-auto">
         <button
-          onClick={() => setStatusFilter('Todos')}
-          className={`p-3.5 rounded-2xl border text-left transition-all ${
-            statusFilter === 'Todos'
-              ? 'border-indigo-600 bg-indigo-50/80 shadow-2xs ring-2 ring-indigo-500/20'
-              : 'border-slate-200 bg-white hover:bg-slate-50'
+          onClick={() => setActiveTab('inscritos')}
+          className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-black transition-all whitespace-nowrap ${
+            activeTab === 'inscritos'
+              ? 'bg-slate-900 text-white shadow-xs'
+              : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
           }`}
         >
-          <div className="flex items-center justify-between mb-1">
-            <span className="text-[10px] uppercase font-bold text-slate-400">Total</span>
-            <Users className="w-4 h-4 text-slate-400" />
-          </div>
-          <span className="text-xl font-black text-slate-900">{counts.total}</span>
+          <Users className="w-4 h-4" />
+          Candidatos Inscritos
+          <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold ${
+            activeTab === 'inscritos' ? 'bg-slate-800 text-slate-200' : 'bg-slate-100 text-slate-600'
+          }`}>
+            {candidates.length}
+          </span>
         </button>
 
         <button
-          onClick={() => setStatusFilter('Novos')}
-          className={`p-3.5 rounded-2xl border text-left transition-all ${
-            statusFilter === 'Novos'
-              ? 'border-blue-600 bg-blue-50/80 shadow-2xs ring-2 ring-blue-500/20'
-              : 'border-slate-200 bg-white hover:bg-slate-50'
+          onClick={() => setActiveTab('banco_ia')}
+          className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-black transition-all whitespace-nowrap ${
+            activeTab === 'banco_ia'
+              ? 'bg-indigo-600 text-white shadow-xs'
+              : 'text-indigo-700 bg-indigo-50/80 hover:bg-indigo-100 border border-indigo-200'
           }`}
         >
-          <div className="flex items-center justify-between mb-1">
-            <span className="text-[10px] uppercase font-bold text-blue-600">Novos</span>
-            <span className="w-2 h-2 rounded-full bg-blue-500" />
-          </div>
-          <span className="text-xl font-black text-slate-900">{counts.novos}</span>
+          <Sparkles className="w-4 h-4 text-amber-300 fill-amber-300" />
+          Banco de Talentos IA
+          <span className="text-[10px] bg-amber-400 text-slate-950 px-2 py-0.5 rounded-full font-black uppercase tracking-wider">
+            Match IA
+          </span>
         </button>
 
         <button
-          onClick={() => setStatusFilter('Triagem IA')}
-          className={`p-3.5 rounded-2xl border text-left transition-all ${
-            statusFilter === 'Triagem IA'
-              ? 'border-purple-600 bg-purple-50/80 shadow-2xs ring-2 ring-purple-500/20'
-              : 'border-slate-200 bg-white hover:bg-slate-50'
+          onClick={() => setActiveTab('entrevistas')}
+          className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-black transition-all whitespace-nowrap ${
+            activeTab === 'entrevistas'
+              ? 'bg-slate-900 text-white shadow-xs'
+              : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
           }`}
         >
-          <div className="flex items-center justify-between mb-1">
-            <span className="text-[10px] uppercase font-bold text-purple-600">Triagem IA</span>
-            <Sparkles className="w-4 h-4 text-purple-600" />
-          </div>
-          <span className="text-xl font-black text-slate-900">{counts.triagemIa}</span>
+          <Calendar className="w-4 h-4" />
+          Entrevistas
         </button>
 
         <button
-          onClick={() => setStatusFilter('Em Análise RH')}
-          className={`p-3.5 rounded-2xl border text-left transition-all ${
-            statusFilter === 'Em Análise RH'
-              ? 'border-amber-600 bg-amber-50/80 shadow-2xs ring-2 ring-amber-500/20'
-              : 'border-slate-200 bg-white hover:bg-slate-50'
+          onClick={() => setActiveTab('avaliacoes')}
+          className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-black transition-all whitespace-nowrap ${
+            activeTab === 'avaliacoes'
+              ? 'bg-slate-900 text-white shadow-xs'
+              : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
           }`}
         >
-          <div className="flex items-center justify-between mb-1">
-            <span className="text-[10px] uppercase font-bold text-amber-600">Em Análise</span>
-            <UserCheck className="w-4 h-4 text-amber-600" />
-          </div>
-          <span className="text-xl font-black text-slate-900">{counts.emAnaliseRh}</span>
+          <Award className="w-4 h-4" />
+          Avaliações
         </button>
 
         <button
-          onClick={() => setStatusFilter('Entrevistas')}
-          className={`p-3.5 rounded-2xl border text-left transition-all ${
-            statusFilter === 'Entrevistas'
-              ? 'border-indigo-600 bg-indigo-50/80 shadow-2xs ring-2 ring-indigo-500/20'
-              : 'border-slate-200 bg-white hover:bg-slate-50'
+          onClick={() => setActiveTab('historico')}
+          className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-black transition-all whitespace-nowrap ${
+            activeTab === 'historico'
+              ? 'bg-slate-900 text-white shadow-xs'
+              : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
           }`}
         >
-          <div className="flex items-center justify-between mb-1">
-            <span className="text-[10px] uppercase font-bold text-indigo-600">Entrevistas</span>
-            <Calendar className="w-4 h-4 text-indigo-600" />
-          </div>
-          <span className="text-xl font-black text-slate-900">{counts.entrevistas}</span>
-        </button>
-
-        <button
-          onClick={() => setStatusFilter('Contratados')}
-          className={`p-3.5 rounded-2xl border text-left transition-all ${
-            statusFilter === 'Contratados'
-              ? 'border-teal-600 bg-teal-50/80 shadow-2xs ring-2 ring-teal-500/20'
-              : 'border-slate-200 bg-white hover:bg-slate-50'
-          }`}
-        >
-          <div className="flex items-center justify-between mb-1">
-            <span className="text-[10px] uppercase font-bold text-teal-600">Contratados</span>
-            <CheckCircle2 className="w-4 h-4 text-teal-600" />
-          </div>
-          <span className="text-xl font-black text-slate-900">{counts.contratados}</span>
-        </button>
-
-        <button
-          onClick={() => setStatusFilter('Reprovado')}
-          className={`p-3.5 rounded-2xl border text-left transition-all ${
-            statusFilter === 'Reprovado'
-              ? 'border-rose-600 bg-rose-50/80 shadow-2xs ring-2 ring-rose-500/20'
-              : 'border-slate-200 bg-white hover:bg-slate-50'
-          }`}
-        >
-          <div className="flex items-center justify-between mb-1">
-            <span className="text-[10px] uppercase font-bold text-rose-600">Reprovados</span>
-            <XCircle className="w-4 h-4 text-rose-600" />
-          </div>
-          <span className="text-xl font-black text-slate-900">{counts.reprovados}</span>
+          <History className="w-4 h-4" />
+          Histórico
         </button>
       </div>
 
-      {/* 3 & 4. PESQUISA E FILTROS */}
-      <div className="bg-white rounded-3xl p-5 border border-slate-200 shadow-2xs space-y-4">
-        {/* Search Bar Input */}
-        <div className="relative">
-          <Search className="w-4 h-4 text-slate-400 absolute left-4 top-3.5" />
-          <input
-            type="text"
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            placeholder="Buscar por Nome, CPF, Cidade, Telefone, E-mail, Formação, Curso ou Palavras do currículo..."
-            className="w-full text-xs font-semibold pl-11 pr-4 py-3 rounded-2xl border border-slate-200 bg-slate-50/50 focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-all"
-          />
-        </div>
-
-        {/* Dropdown Filters Bar */}
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 pt-2 border-t border-slate-100">
-          <div>
-            <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Cidade</label>
-            <select
-              value={cityFilter}
-              onChange={(e) => setCityFilter(e.target.value)}
-              className="w-full text-xs font-bold p-2.5 rounded-xl border border-slate-200 bg-white"
+      {/* TAB CONTENT 1: CANDIDATOS INSCRITOS */}
+      {activeTab === 'inscritos' && (
+        <div className="space-y-6">
+          {/* INDICADORES RÁPIDOS */}
+          <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-3">
+            <button
+              onClick={() => setStatusFilter('Todos')}
+              className={`p-3.5 rounded-2xl border text-left transition-all ${
+                statusFilter === 'Todos'
+                  ? 'border-indigo-600 bg-indigo-50/80 shadow-2xs ring-2 ring-indigo-500/20'
+                  : 'border-slate-200 bg-white hover:bg-slate-50'
+              }`}
             >
-              <option value="Todas">Todas as Cidades</option>
-              {uniqueCities.map(c => <option key={c} value={c}>{c}</option>)}
-            </select>
-          </div>
+              <div className="flex items-center justify-between mb-1">
+                <span className="text-[10px] uppercase font-bold text-slate-400">Total</span>
+                <Users className="w-4 h-4 text-slate-400" />
+              </div>
+              <span className="text-xl font-black text-slate-900">{counts.total}</span>
+            </button>
 
-          <div>
-            <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Escolaridade</label>
-            <select
-              value={educationFilter}
-              onChange={(e) => setEducationFilter(e.target.value)}
-              className="w-full text-xs font-bold p-2.5 rounded-xl border border-slate-200 bg-white"
+            <button
+              onClick={() => setStatusFilter('Novos')}
+              className={`p-3.5 rounded-2xl border text-left transition-all ${
+                statusFilter === 'Novos'
+                  ? 'border-blue-600 bg-blue-50/80 shadow-2xs ring-2 ring-blue-500/20'
+                  : 'border-slate-200 bg-white hover:bg-slate-50'
+              }`}
             >
-              <option value="Todas">Todas</option>
-              <option value="Ensino Médio">Ensino Médio</option>
-              <option value="Superior Incompleto">Superior Incompleto</option>
-              <option value="Superior Completo">Superior Completo</option>
-              <option value="Pós-Graduação">Pós-Graduação</option>
-              <option value="Mestrado">Mestrado</option>
-            </select>
-          </div>
+              <div className="flex items-center justify-between mb-1">
+                <span className="text-[10px] uppercase font-bold text-blue-600">Novos</span>
+                <span className="w-2 h-2 rounded-full bg-blue-500" />
+              </div>
+              <span className="text-xl font-black text-slate-900">{counts.novos}</span>
+            </button>
 
-          <div>
-            <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Experiência</label>
-            <select
-              value={experienceFilter}
-              onChange={(e) => setExperienceFilter(e.target.value)}
-              className="w-full text-xs font-bold p-2.5 rounded-xl border border-slate-200 bg-white"
+            <button
+              onClick={() => setStatusFilter('Triagem IA')}
+              className={`p-3.5 rounded-2xl border text-left transition-all ${
+                statusFilter === 'Triagem IA'
+                  ? 'border-purple-600 bg-purple-50/80 shadow-2xs ring-2 ring-purple-500/20'
+                  : 'border-slate-200 bg-white hover:bg-slate-50'
+              }`}
             >
-              <option value="Todas">Qualquer</option>
-              <option value="1+">1+ anos</option>
-              <option value="3+">3+ anos</option>
-              <option value="5+">5+ anos</option>
-            </select>
-          </div>
+              <div className="flex items-center justify-between mb-1">
+                <span className="text-[10px] uppercase font-bold text-purple-600">Triagem IA</span>
+                <Sparkles className="w-4 h-4 text-purple-600" />
+              </div>
+              <span className="text-xl font-black text-slate-900">{counts.triagemIa}</span>
+            </button>
 
-          <div>
-            <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">PCD</label>
-            <select
-              value={pcdFilter}
-              onChange={(e) => setPcdFilter(e.target.value)}
-              className="w-full text-xs font-bold p-2.5 rounded-xl border border-slate-200 bg-white"
+            <button
+              onClick={() => setStatusFilter('Em Análise RH')}
+              className={`p-3.5 rounded-2xl border text-left transition-all ${
+                statusFilter === 'Em Análise RH'
+                  ? 'border-amber-600 bg-amber-50/80 shadow-2xs ring-2 ring-amber-500/20'
+                  : 'border-slate-200 bg-white hover:bg-slate-50'
+              }`}
             >
-              <option value="Todos">Todos</option>
-              <option value="Sim">Sim (Apenas PCD)</option>
-              <option value="Não">Não</option>
-            </select>
-          </div>
+              <div className="flex items-center justify-between mb-1">
+                <span className="text-[10px] uppercase font-bold text-amber-600">Em Análise</span>
+                <UserCheck className="w-4 h-4 text-amber-600" />
+              </div>
+              <span className="text-xl font-black text-slate-900">{counts.emAnaliseRh}</span>
+            </button>
 
-          <div>
-            <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Match IA</label>
-            <select
-              value={iaFilter}
-              onChange={(e) => setIaFilter(e.target.value)}
-              className="w-full text-xs font-bold p-2.5 rounded-xl border border-slate-200 bg-white"
+            <button
+              onClick={() => setStatusFilter('Entrevistas')}
+              className={`p-3.5 rounded-2xl border text-left transition-all ${
+                statusFilter === 'Entrevistas'
+                  ? 'border-indigo-600 bg-indigo-50/80 shadow-2xs ring-2 ring-indigo-500/20'
+                  : 'border-slate-200 bg-white hover:bg-slate-50'
+              }`}
             >
-              <option value="Todas">Todas</option>
-              <option value="Muito">Muito Compatível (&gt;85%)</option>
-              <option value="Compativel">Compatível (65-84%)</option>
-              <option value="Baixa">Baixa Compatibilidade (&lt;65%)</option>
-            </select>
-          </div>
+              <div className="flex items-center justify-between mb-1">
+                <span className="text-[10px] uppercase font-bold text-indigo-600">Entrevistas</span>
+                <Calendar className="w-4 h-4 text-indigo-600" />
+              </div>
+              <span className="text-xl font-black text-slate-900">{counts.entrevistas}</span>
+            </button>
 
-          <div>
-            <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Ação Filtros</label>
-            <Button
-              variant="outline"
-              size="sm"
-              className="w-full"
-              onClick={() => {
-                setSearchTerm('');
-                setStatusFilter('Todos');
-                setCityFilter('Todas');
-                setEducationFilter('Todas');
-                setExperienceFilter('Todas');
-                setPcdFilter('Todos');
-                setIaFilter('Todas');
-              }}
+            <button
+              onClick={() => setStatusFilter('Contratados')}
+              className={`p-3.5 rounded-2xl border text-left transition-all ${
+                statusFilter === 'Contratados'
+                  ? 'border-teal-600 bg-teal-50/80 shadow-2xs ring-2 ring-teal-500/20'
+                  : 'border-slate-200 bg-white hover:bg-slate-50'
+              }`}
             >
-              Limpar Filtros
-            </Button>
+              <div className="flex items-center justify-between mb-1">
+                <span className="text-[10px] uppercase font-bold text-teal-600">Contratados</span>
+                <CheckCircle2 className="w-4 h-4 text-teal-600" />
+              </div>
+              <span className="text-xl font-black text-slate-900">{counts.contratados}</span>
+            </button>
+
+            <button
+              onClick={() => setStatusFilter('Reprovado')}
+              className={`p-3.5 rounded-2xl border text-left transition-all ${
+                statusFilter === 'Reprovado'
+                  ? 'border-rose-600 bg-rose-50/80 shadow-2xs ring-2 ring-rose-500/20'
+                  : 'border-slate-200 bg-white hover:bg-slate-50'
+              }`}
+            >
+              <div className="flex items-center justify-between mb-1">
+                <span className="text-[10px] uppercase font-bold text-rose-600">Reprovados</span>
+                <XCircle className="w-4 h-4 text-rose-600" />
+              </div>
+              <span className="text-xl font-black text-slate-900">{counts.reprovados}</span>
+            </button>
           </div>
-        </div>
-      </div>
 
-      {/* 5. LISTA DE CANDIDATOS (Professional Table) */}
-      <div className="bg-white rounded-3xl border border-slate-200 shadow-2xs overflow-hidden">
-        {filteredCandidates.length === 0 ? (
-          <div className="p-12 text-center space-y-3">
-            <Users className="w-10 h-10 text-slate-300 mx-auto" />
-            <h3 className="text-sm font-extrabold text-slate-800">
-              Nenhum candidato encontrado para os filtros selecionados
-            </h3>
-            <p className="text-xs text-slate-500 max-w-sm mx-auto">
-              Tente alterar os termos de busca ou resetar os filtros.
-            </p>
+          {/* PESQUISA E FILTROS */}
+          <div className="bg-white rounded-3xl p-5 border border-slate-200 shadow-2xs space-y-4">
+            <div className="relative">
+              <Search className="w-4 h-4 text-slate-400 absolute left-4 top-3.5" />
+              <input
+                type="text"
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                placeholder="Buscar por Nome, CPF, Cidade, Telefone, E-mail, Formação, Curso ou Palavras do currículo..."
+                className="w-full text-xs font-semibold pl-11 pr-4 py-3 rounded-2xl border border-slate-200 bg-slate-50/50 focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-all"
+              />
+            </div>
+
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 pt-2 border-t border-slate-100">
+              <div>
+                <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Cidade</label>
+                <select
+                  value={cityFilter}
+                  onChange={(e) => setCityFilter(e.target.value)}
+                  className="w-full text-xs font-bold p-2.5 rounded-xl border border-slate-200 bg-white"
+                >
+                  <option value="Todas">Todas as Cidades</option>
+                  {uniqueCities.map(c => <option key={c} value={c}>{c}</option>)}
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Escolaridade</label>
+                <select
+                  value={educationFilter}
+                  onChange={(e) => setEducationFilter(e.target.value)}
+                  className="w-full text-xs font-bold p-2.5 rounded-xl border border-slate-200 bg-white"
+                >
+                  <option value="Todas">Todas</option>
+                  <option value="Ensino Médio">Ensino Médio</option>
+                  <option value="Superior Incompleto">Superior Incompleto</option>
+                  <option value="Superior Completo">Superior Completo</option>
+                  <option value="Pós-Graduação">Pós-Graduação</option>
+                  <option value="Mestrado">Mestrado</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Experiência</label>
+                <select
+                  value={experienceFilter}
+                  onChange={(e) => setExperienceFilter(e.target.value)}
+                  className="w-full text-xs font-bold p-2.5 rounded-xl border border-slate-200 bg-white"
+                >
+                  <option value="Todas">Qualquer</option>
+                  <option value="1+">1+ anos</option>
+                  <option value="3+">3+ anos</option>
+                  <option value="5+">5+ anos</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">PCD</label>
+                <select
+                  value={pcdFilter}
+                  onChange={(e) => setPcdFilter(e.target.value)}
+                  className="w-full text-xs font-bold p-2.5 rounded-xl border border-slate-200 bg-white"
+                >
+                  <option value="Todos">Todos</option>
+                  <option value="Sim">Sim (Apenas PCD)</option>
+                  <option value="Não">Não</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Match IA</label>
+                <select
+                  value={iaFilter}
+                  onChange={(e) => setIaFilter(e.target.value)}
+                  className="w-full text-xs font-bold p-2.5 rounded-xl border border-slate-200 bg-white"
+                >
+                  <option value="Todas">Todas</option>
+                  <option value="Muito">Muito Compatível (&gt;85%)</option>
+                  <option value="Compativel">Compatível (65-84%)</option>
+                  <option value="Baixa">Baixa Compatibilidade (&lt;65%)</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Ação Filtros</label>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="w-full text-xs font-bold"
+                  onClick={() => {
+                    setSearchTerm('');
+                    setStatusFilter('Todos');
+                    setCityFilter('Todas');
+                    setEducationFilter('Todas');
+                    setExperienceFilter('Todas');
+                    setPcdFilter('Todos');
+                    setIaFilter('Todas');
+                  }}
+                >
+                  Limpar Filtros
+                </Button>
+              </div>
+            </div>
           </div>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-left border-collapse">
-              <thead>
-                <tr className="bg-slate-50 border-b border-slate-200 text-[11px] font-extrabold uppercase tracking-wider text-slate-500">
-                  <th className="py-3.5 px-4">Candidato</th>
-                  <th className="py-3.5 px-4">Local</th>
-                  <th className="py-3.5 px-4">Data Aplicação</th>
-                  <th className="py-3.5 px-4">Compatibilidade IA</th>
-                  <th className="py-3.5 px-4">Situação / Etapa</th>
-                  <th className="py-3.5 px-4 text-center">Ações Rápidas</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100 text-xs font-medium">
-                {filteredCandidates.map((cand) => {
-                  const cleanPhone = cand.phone.replace(/\D/g, '');
-                  const waUrl = `https://wa.me/55${cleanPhone}?text=${encodeURIComponent(`Olá ${cand.name}, vi seu perfil no MAIS RH para a vaga de ${job.title}.`)}`;
-                  const mailUrl = `mailto:${cand.email}?subject=${encodeURIComponent(`Oportunidade - ${job.title} (MAIS RH)`)}`;
 
-                  return (
-                    <tr 
-                      key={cand.id} 
-                      onClick={() => handleOpenCandidate(cand)}
-                      className="hover:bg-slate-50/80 transition-colors cursor-pointer group"
-                    >
-                      {/* Avatar + Name + Role */}
-                      <td className="py-3.5 px-4">
-                        <div className="flex items-center gap-3">
-                          <img
-                            src={cand.photo || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150'}
-                            alt={cand.name}
-                            className="w-10 h-10 rounded-xl object-cover border border-slate-200 shrink-0 group-hover:border-indigo-400 transition-colors"
-                          />
-                          <div>
-                            <span className="font-extrabold text-slate-900 group-hover:text-indigo-600 transition-colors block">
-                              {cand.name}
-                            </span>
-                            <span className="text-[11px] text-slate-500">{cand.role}</span>
-                          </div>
-                        </div>
-                      </td>
-
-                      {/* Location */}
-                      <td className="py-3.5 px-4 text-slate-700">
-                        {cand.city}, {cand.state}
-                      </td>
-
-                      {/* Date */}
-                      <td className="py-3.5 px-4 text-slate-500 font-semibold">
-                        {cand.appliedDate}
-                      </td>
-
-                      {/* IA Compatibility */}
-                      <td className="py-3.5 px-4">
-                        <div className="space-y-1 max-w-[160px]">
-                          <div className="flex items-center justify-between text-[11px]">
-                            <span className="font-black text-slate-900">{cand.compatibilityScore}%</span>
-                            <span className="text-[10px] font-extrabold text-slate-500">{cand.compatibilityLevel}</span>
-                          </div>
-                          <div className="w-full bg-slate-100 h-2 rounded-full overflow-hidden">
-                            <div 
-                              className={`h-full rounded-full transition-all duration-300 ${
-                                cand.compatibilityScore >= 85 ? 'bg-emerald-500' :
-                                cand.compatibilityScore >= 65 ? 'bg-indigo-600' : 'bg-amber-500'
-                              }`}
-                              style={{ width: `${cand.compatibilityScore}%` }}
-                            />
-                          </div>
-                        </div>
-                      </td>
-
-                      {/* Status */}
-                      <td className="py-3.5 px-4">
-                        <span className={`text-[11px] font-black px-2.5 py-1 rounded-full border ${getStatusBadgeColor(cand.status)}`}>
-                          {cand.status}
-                        </span>
-                      </td>
-
-                      {/* Quick Actions */}
-                      <td className="py-3.5 px-4" onClick={(e) => e.stopPropagation()}>
-                        <div className="flex items-center justify-center gap-1.5">
-                          <a
-                            href={waUrl}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="p-2 text-emerald-600 hover:bg-emerald-50 rounded-lg transition-colors border border-transparent hover:border-emerald-200"
-                            title="Enviar WhatsApp"
-                          >
-                            <MessageCircle className="w-4 h-4" />
-                          </a>
-
-                          <a
-                            href={mailUrl}
-                            className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors border border-transparent hover:border-blue-200"
-                            title="Enviar E-mail"
-                          >
-                            <Mail className="w-4 h-4" />
-                          </a>
-
-                          <button
-                            onClick={() => handleOpenCandidate(cand)}
-                            className="p-2 text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors border border-transparent hover:border-indigo-200"
-                            title="Ver Perfil Completo & Currículo"
-                          >
-                            <FileText className="w-4 h-4" />
-                          </button>
-                        </div>
-                      </td>
+          {/* LISTA DE CANDIDATOS */}
+          <div className="bg-white rounded-3xl border border-slate-200 shadow-2xs overflow-hidden">
+            {filteredCandidates.length === 0 ? (
+              <div className="p-12 text-center space-y-3">
+                <Users className="w-10 h-10 text-slate-300 mx-auto" />
+                <h3 className="text-sm font-extrabold text-slate-800">
+                  Nenhum candidato inscrito encontrado para os filtros selecionados
+                </h3>
+                <p className="text-xs text-slate-500 max-w-sm mx-auto">
+                  Tente alterar os termos de busca, resetar os filtros ou buscar diretamente no Banco de Talentos IA.
+                </p>
+              </div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-left border-collapse">
+                  <thead>
+                    <tr className="bg-slate-50 border-b border-slate-200 text-[11px] font-extrabold uppercase tracking-wider text-slate-500">
+                      <th className="py-3.5 px-4">Candidato</th>
+                      <th className="py-3.5 px-4">Local</th>
+                      <th className="py-3.5 px-4">Data Aplicação</th>
+                      <th className="py-3.5 px-4">Compatibilidade IA</th>
+                      <th className="py-3.5 px-4">Situação / Etapa</th>
+                      <th className="py-3.5 px-4 text-center">Ações Rápidas</th>
                     </tr>
-                  );
-                })}
-              </tbody>
-            </table>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100 text-xs font-medium">
+                    {filteredCandidates.map((cand) => {
+                      const cleanPhone = cand.phone.replace(/\D/g, '');
+                      const waUrl = `https://wa.me/55${cleanPhone}?text=${encodeURIComponent(`Olá ${cand.name}, vi seu perfil no MAIS RH para a vaga de ${job.title}.`)}`;
+                      const mailUrl = `mailto:${cand.email}?subject=${encodeURIComponent(`Oportunidade - ${job.title} (MAIS RH)`)}`;
+
+                      return (
+                        <tr 
+                          key={cand.id} 
+                          onClick={() => {
+                            setSelectedCandidate(cand);
+                            setIsDrawerOpen(true);
+                          }}
+                          className="hover:bg-slate-50/80 transition-colors cursor-pointer group"
+                        >
+                          <td className="py-3.5 px-4">
+                            <div className="flex items-center gap-3">
+                              <img
+                                src={cand.photo || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150'}
+                                alt={cand.name}
+                                className="w-10 h-10 rounded-xl object-cover border border-slate-200 shrink-0 group-hover:border-indigo-400 transition-colors"
+                              />
+                              <div>
+                                <span className="font-extrabold text-slate-900 group-hover:text-indigo-600 transition-colors block">
+                                  {cand.name}
+                                </span>
+                                <span className="text-[11px] text-slate-500">{cand.role}</span>
+                              </div>
+                            </div>
+                          </td>
+
+                          <td className="py-3.5 px-4 text-slate-700">
+                            {cand.city}, {cand.state}
+                          </td>
+
+                          <td className="py-3.5 px-4 text-slate-500 font-semibold">
+                            {cand.appliedDate}
+                          </td>
+
+                          <td className="py-3.5 px-4">
+                            <div className="space-y-1 max-w-[160px]">
+                              <div className="flex items-center justify-between text-[11px]">
+                                <span className="font-black text-slate-900">{cand.compatibilityScore}%</span>
+                                <span className="text-[10px] font-extrabold text-slate-500">{cand.compatibilityLevel}</span>
+                              </div>
+                              <div className="w-full bg-slate-100 h-2 rounded-full overflow-hidden">
+                                <div 
+                                  className={`h-full rounded-full transition-all duration-300 ${
+                                    cand.compatibilityScore >= 85 ? 'bg-emerald-500' :
+                                    cand.compatibilityScore >= 65 ? 'bg-indigo-600' : 'bg-amber-500'
+                                  }`}
+                                  style={{ width: `${cand.compatibilityScore}%` }}
+                                />
+                              </div>
+                            </div>
+                          </td>
+
+                          <td className="py-3.5 px-4">
+                            <span className="text-[11px] font-black px-2.5 py-1 rounded-full border bg-slate-100 text-slate-800 border-slate-200">
+                              {cand.status}
+                            </span>
+                          </td>
+
+                          <td className="py-3.5 px-4" onClick={(e) => e.stopPropagation()}>
+                            <div className="flex items-center justify-center gap-1.5">
+                              <a
+                                href={waUrl}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="p-2 text-emerald-600 hover:bg-emerald-50 rounded-lg transition-colors"
+                                title="Enviar WhatsApp"
+                              >
+                                <MessageCircle className="w-4 h-4" />
+                              </a>
+
+                              <a
+                                href={mailUrl}
+                                className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+                                title="Enviar E-mail"
+                              >
+                                <Mail className="w-4 h-4" />
+                              </a>
+
+                              <button
+                                onClick={() => {
+                                  setSelectedCandidate(cand);
+                                  setIsDrawerOpen(true);
+                                }}
+                                className="p-2 text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors"
+                                title="Ver Perfil Completo"
+                              >
+                                <FileText className="w-4 h-4" />
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
           </div>
-        )}
-      </div>
+        </div>
+      )}
+
+      {/* TAB CONTENT 2: BANCO DE TALENTOS IA */}
+      {activeTab === 'banco_ia' && (
+        <JobTalentBankAiTab
+          job={job}
+          onCandidateInvited={loadCandidates}
+        />
+      )}
+
+      {/* TAB CONTENT 3: ENTREVISTAS */}
+      {activeTab === 'entrevistas' && (
+        <div className="bg-white rounded-3xl p-6 border border-slate-200 shadow-2xs space-y-5">
+          <div className="flex items-center justify-between border-b border-slate-100 pb-4">
+            <div>
+              <h3 className="text-base font-black text-slate-900">Entrevistas Agendadas para {job.title}</h3>
+              <p className="text-xs text-slate-500">Acompanhe a agenda de entrevistas RH e entrevistas com gestores técnicos.</p>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {candidates.filter(c => c.interview || c.status === 'Entrevista Agendada').length === 0 ? (
+              <div className="col-span-2 p-10 text-center space-y-2 border border-slate-100 rounded-2xl bg-slate-50/50">
+                <Calendar className="w-8 h-8 text-slate-300 mx-auto" />
+                <p className="text-xs font-bold text-slate-600">Nenhuma entrevista agendada ainda para esta vaga.</p>
+                <p className="text-[11px] text-slate-400">Acesse a aba "Candidatos Inscritos" ou "Banco de Talentos IA" para convidar candidatos para entrevista.</p>
+              </div>
+            ) : (
+              candidates.filter(c => c.interview || c.status === 'Entrevista Agendada').map((cand) => (
+                <div key={cand.id} className="p-4 rounded-2xl border border-slate-200 bg-slate-50 space-y-3">
+                  <div className="flex items-center gap-3">
+                    <img src={cand.photo} alt={cand.name} className="w-10 h-10 rounded-xl object-cover" />
+                    <div>
+                      <h4 className="font-extrabold text-xs text-slate-900">{cand.name}</h4>
+                      <span className="text-[10px] text-slate-500 font-medium">{cand.role}</span>
+                    </div>
+                  </div>
+                  {cand.interview && (
+                    <div className="text-xs space-y-1 bg-white p-3 rounded-xl border border-slate-200/60">
+                      <div className="font-bold text-slate-800">
+                        {cand.interview.type} • {cand.interview.date} às {cand.interview.time}
+                      </div>
+                      <div className="text-slate-500 text-[11px]">Entrevistador: {cand.interview.interviewer}</div>
+                    </div>
+                  )}
+                </div>
+              ))
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* TAB CONTENT 4: AVALIAÇÕES */}
+      {activeTab === 'avaliacoes' && (
+        <div className="bg-white rounded-3xl p-6 border border-slate-200 shadow-2xs space-y-5">
+          <div className="flex items-center justify-between border-b border-slate-100 pb-4">
+            <div>
+              <h3 className="text-base font-black text-slate-900">Avaliações de Candidatos — {job.title}</h3>
+              <p className="text-xs text-slate-500">Pareceres técnicos, pontuações de competências e recomendações do time de RH.</p>
+            </div>
+          </div>
+
+          <div className="space-y-3">
+            {candidates.filter(c => c.evaluations && c.evaluations.length > 0).length === 0 ? (
+              <div className="p-10 text-center space-y-2 border border-slate-100 rounded-2xl bg-slate-50/50">
+                <Award className="w-8 h-8 text-slate-300 mx-auto" />
+                <p className="text-xs font-bold text-slate-600">Nenhuma avaliação cadastrada ainda.</p>
+                <p className="text-[11px] text-slate-400">As avaliações técnicas são registradas no perfil de cada candidato.</p>
+              </div>
+            ) : (
+              candidates.filter(c => c.evaluations && c.evaluations.length > 0).map((cand) => (
+                <div key={cand.id} className="p-4 rounded-2xl border border-slate-200 bg-slate-50 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <img src={cand.photo} alt={cand.name} className="w-10 h-10 rounded-xl object-cover" />
+                      <div>
+                        <h4 className="font-extrabold text-xs text-slate-900">{cand.name}</h4>
+                        <span className="text-[10px] text-slate-500">{cand.role}</span>
+                      </div>
+                    </div>
+                    <span className="bg-emerald-100 text-emerald-800 text-[10px] font-black px-2.5 py-0.5 rounded-full">
+                      Match IA: {cand.compatibilityScore}%
+                    </span>
+                  </div>
+
+                  {cand.evaluations?.map((ev) => (
+                    <div key={ev.id} className="bg-white p-3 rounded-xl border border-slate-200 text-xs space-y-1">
+                      <div className="font-extrabold text-slate-800">
+                        Parecer Final: <span className="text-indigo-600">{ev.finalOpinion}</span> (Avaliador: {ev.evaluatedBy})
+                      </div>
+                      <p className="text-slate-600 text-[11px]">{ev.notes}</p>
+                    </div>
+                  ))}
+                </div>
+              ))
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* TAB CONTENT 5: HISTÓRICO */}
+      {activeTab === 'historico' && (
+        <div className="bg-white rounded-3xl p-6 border border-slate-200 shadow-2xs space-y-5">
+          <div className="border-b border-slate-100 pb-4">
+            <h3 className="text-base font-black text-slate-900">Histórico e Linha do Tempo da Vaga</h3>
+            <p className="text-xs text-slate-500">Registro de todas as ações, candidaturas e interações no processo seletivo.</p>
+          </div>
+
+          <div className="relative border-l-2 border-indigo-100 pl-6 space-y-6 ml-2 text-xs">
+            <div className="relative">
+              <span className="absolute -left-[31px] top-0.5 w-4 h-4 rounded-full bg-indigo-600 border-2 border-white" />
+              <div className="font-extrabold text-slate-900">Vaga Criada e Publicada</div>
+              <p className="text-slate-500">Abertura da requisição para {job.title} no departamento de {job.department}.</p>
+              <span className="text-[10px] text-slate-400 font-semibold">{job.createdAt}</span>
+            </div>
+
+            {candidates.map((cand) => (
+              cand.timeline?.map((evt) => (
+                <div key={evt.id} className="relative">
+                  <span className="absolute -left-[31px] top-0.5 w-4 h-4 rounded-full bg-emerald-500 border-2 border-white" />
+                  <div className="font-extrabold text-slate-900">{evt.title} — {cand.name}</div>
+                  <p className="text-slate-600">{evt.description}</p>
+                  <span className="text-[10px] text-slate-400 font-semibold">{evt.date} {evt.by ? `• Por: ${evt.by}` : ''}</span>
+                </div>
+              ))
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* 6. PAINEL LATERAL (Drawer) */}
       <CandidateDrawerPanel
