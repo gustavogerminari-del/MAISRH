@@ -20,10 +20,12 @@ import { AuditLogsView } from './audit-logs';
 import { SubscriptionsView } from './subscriptions';
 import { MasterAdminView } from './master-admin';
 import { MaisRhIaView } from './ai/components/MaisRhIaView';
+import { DepartamentoPessoalView, DPSubTab } from './departamento-pessoal/DepartamentoPessoalView';
 
 import { NewJobModal } from './components/NewJobModal';
 import { NewCandidateModal } from './components/NewCandidateModal';
 import { ScheduleInterviewModal } from './components/ScheduleInterviewModal';
+import { FloatingAiAssistant } from './components/FloatingAiAssistant';
 
 import { 
   INITIAL_JOBS, 
@@ -296,13 +298,26 @@ function MainAppContent() {
 
             {activeTab === 'consultor-rh' && <RHConsultantView />}
 
-            {activeTab === 'ferias-beneficios' && <BenefitsLeavesView />}
+            {/* Departamento Pessoal Master Submenu Routing */}
+            {['departamento-pessoal', 'colaboradores', 'beneficios', 'ferias', 'rescisao', 'relatorios-dp', 'configuracoes-trabalhistas'].includes(activeTab) && (
+              <DepartamentoPessoalView initialSubTab={activeTab as DPSubTab} />
+            )}
 
-            {activeTab === 'documentos' && <DocumentsSignatureView />}
+            {activeTab === 'ponto-digital' && (
+              <DepartamentoPessoalView initialSubTab="ponto-digital" />
+            )}
 
-            {activeTab === 'folha-pagamento' && <PayrollView />}
+            {activeTab === 'folha-pagamento' && (
+              <DepartamentoPessoalView initialSubTab="folha-pagamento" />
+            )}
 
-            {activeTab === 'ponto-digital' && <PontoDigitalView />}
+            {activeTab === 'documentos' && (
+              <DepartamentoPessoalView initialSubTab="documentos" />
+            )}
+
+            {activeTab === 'ferias-beneficios' && (
+              <DepartamentoPessoalView initialSubTab="beneficios" />
+            )}
 
             {activeTab === 'auditoria' && <AuditLogsView />}
 
@@ -336,6 +351,12 @@ function MainAppContent() {
         onSubmit={handleScheduleInterview}
         candidates={candidates}
         jobs={jobs}
+      />
+
+      {/* Assistente IA Flutuante Global */}
+      <FloatingAiAssistant
+        activeTab={activeTab}
+        onNavigateToTab={(tab) => setActiveTab(tab as MainTab)}
       />
     </div>
   );

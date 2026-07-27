@@ -8,9 +8,56 @@ import {
   query, 
   where 
 } from 'firebase/firestore';
-import { db } from './firebase';
+import { db, auth } from './firebase';
 import { ClientTenant, PlatformModule, TenantModulePermissions } from '../master-admin/types/master';
 import { MOCK_TENANTS, MOCK_PLATFORM_MODULES } from '../master-admin/data/mockMasterData';
+
+export enum OperationType {
+  CREATE = 'create',
+  UPDATE = 'update',
+  DELETE = 'delete',
+  LIST = 'list',
+  GET = 'get',
+  WRITE = 'write',
+}
+
+export interface FirestoreErrorInfo {
+  error: string;
+  operationType: OperationType;
+  path: string | null;
+  authInfo: {
+    userId?: string | null;
+    email?: string | null;
+    emailVerified?: boolean | null;
+    isAnonymous?: boolean | null;
+    tenantId?: string | null;
+    providerInfo?: {
+      providerId?: string | null;
+      email?: string | null;
+    }[];
+  };
+}
+
+export function handleFirestoreError(error: unknown, operationType: OperationType, path: string | null) {
+  const errInfo: FirestoreErrorInfo = {
+    error: error instanceof Error ? error.message : String(error),
+    authInfo: {
+      userId: auth.currentUser?.uid,
+      email: auth.currentUser?.email,
+      emailVerified: auth.currentUser?.emailVerified,
+      isAnonymous: auth.currentUser?.isAnonymous,
+      tenantId: auth.currentUser?.tenantId,
+      providerInfo: auth.currentUser?.providerData?.map(provider => ({
+        providerId: provider.providerId,
+        email: provider.email,
+      })) || []
+    },
+    operationType,
+    path
+  };
+  console.error('Firestore Error: ', JSON.stringify(errInfo));
+  return errInfo;
+}
 
 export const COLLECTIONS = {
   EMPRESAS: 'empresas',
@@ -339,7 +386,7 @@ export async function saveUsuarioFirestore(userDoc: UsuarioFirestoreDoc): Promis
     const docRef = doc(db, COLLECTIONS.USUARIOS, userDoc.uid);
     await setDoc(docRef, userDoc, { merge: true });
   } catch (err) {
-    console.error('Erro ao salvar usuário no Firestore:', err);
+    handleFirestoreError(err, OperationType.WRITE, `${COLLECTIONS.USUARIOS}/${userDoc.uid}`);
   }
 }
 
@@ -351,7 +398,7 @@ export async function fetchUsuarioFirestore(uid: string): Promise<UsuarioFiresto
       return snap.data() as UsuarioFirestoreDoc;
     }
   } catch (err) {
-    console.error('Erro ao buscar usuário no Firestore:', err);
+    handleFirestoreError(err, OperationType.GET, `${COLLECTIONS.USUARIOS}/${uid}`);
   }
   return null;
 }

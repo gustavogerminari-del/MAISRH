@@ -10,6 +10,9 @@ import {
   Plus,
   ShieldCheck,
   FileSpreadsheet,
+  CheckCircle2,
+  Sparkles,
+  UserCheck
 } from 'lucide-react';
 import { useAuth } from '../../auth';
 import { MetricCard } from './MetricCard';
@@ -26,7 +29,6 @@ import {
 } from '../data/mockDashboardData';
 import { ProcessAlert } from '../types/dashboard';
 import { Button, Card } from '../../shared';
-import { formatDateBR, formatCountPlural } from '../../core';
 
 export interface MainDashboardViewProps {
   onNavigateToJobs?: () => void;
@@ -63,20 +65,20 @@ export const MainDashboardView: React.FC<MainDashboardViewProps> = ({
   };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 max-w-7xl mx-auto">
       {/* Header Banner */}
-      <div className="bg-white rounded-3xl p-6 border border-slate-200 shadow-2xs flex flex-col md:flex-row md:items-center justify-between gap-4">
+      <div className="bg-white rounded-2xl p-6 border border-[#E5E7EB] shadow-2xs flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div className="space-y-1">
           <div className="flex items-center gap-2">
-            <h2 className="text-xl sm:text-2xl font-black text-slate-900 tracking-tight">
-              Painel Geral de Recrutamento & Seleção
+            <h2 className="text-xl sm:text-2xl font-black text-[#1E293B] tracking-tight">
+              Dashboard Corporativo
             </h2>
-            <span className="bg-indigo-100 text-indigo-800 text-[10px] font-extrabold px-2 py-0.5 rounded-full border border-indigo-200">
-              Corporativo
+            <span className="bg-blue-50 text-[#2563EB] text-[10px] font-extrabold px-2.5 py-0.5 rounded-full border border-blue-200">
+              SaaS MAIS RH
             </span>
           </div>
-          <p className="text-xs text-slate-500 font-medium">
-            Bem-vindo(a), <strong className="text-slate-800">{user?.name}</strong>. Acompanhe os indicadores operacionais e estratégicos em tempo real.
+          <p className="text-xs text-[#64748B] font-medium">
+            Bem-vindo(a), <strong className="text-[#1E293B]">{user?.name}</strong>. Visão geral e limpa dos indicadores de RH.
           </p>
         </div>
 
@@ -87,6 +89,7 @@ export const MainDashboardView: React.FC<MainDashboardViewProps> = ({
             onClick={handleRefresh}
             isLoading={isRefreshing}
             leftIcon={<RefreshCw className={`w-3.5 h-3.5 ${isRefreshing ? 'animate-spin' : ''}`} />}
+            className="border-[#E5E7EB] text-[#1E293B] hover:bg-[#F8FAFC]"
           >
             Atualizar Dados
           </Button>
@@ -97,6 +100,7 @@ export const MainDashboardView: React.FC<MainDashboardViewProps> = ({
               size="sm"
               onClick={onNavigateToReports}
               leftIcon={<FileSpreadsheet className="w-3.5 h-3.5" />}
+              className="bg-[#2563EB] text-white hover:bg-[#1d4ed8]"
             >
               Relatórios
             </Button>
@@ -104,100 +108,125 @@ export const MainDashboardView: React.FC<MainDashboardViewProps> = ({
         </div>
       </div>
 
-      {/* KPI Cards Grid */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      {/* Official 5 KPI Cards Grid */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
+        {/* 1. Vagas Abertas */}
         <MetricCard
           title="Vagas Abertas"
           value={metrics.totalOpenJobs}
-          subtitle="Processos seletivos ativos"
-          icon={<Briefcase className="w-5 h-5" />}
-          accentColor="indigo"
+          subtitle="Processos ativos"
+          icon={<Briefcase className="w-5 h-5 text-[#2563EB]" />}
+          accentColor="blue"
           trend={{ value: '+2 esta semana', isPositive: true }}
           onClick={onNavigateToJobs}
         />
 
+        {/* 2. Candidatos */}
         <MetricCard
-          title="Candidatos Ativos"
+          title="Candidatos"
           value={metrics.activeProcesses}
-          subtitle="Em triagem ou entrevistas"
-          icon={<Users className="w-5 h-5" />}
-          accentColor="purple"
-          trend={{ value: 'Em progresso', neutral: true }}
+          subtitle="Cadastrados no funil"
+          icon={<Users className="w-5 h-5 text-[#2563EB]" />}
+          accentColor="blue"
+          trend={{ value: 'Em análise', neutral: true }}
           onClick={onNavigateToTalentBank}
         />
 
+        {/* 3. Entrevistas */}
         <MetricCard
-          title="Entrevistas Agendadas"
+          title="Entrevistas"
           value={metrics.scheduledInterviews}
-          subtitle="Para esta semana"
-          icon={<Calendar className="w-5 h-5" />}
-          accentColor="emerald"
+          subtitle="Agendadas na semana"
+          icon={<Calendar className="w-5 h-5 text-[#2563EB]" />}
+          accentColor="blue"
           trend={{ value: '3 hoje', isPositive: true }}
           onClick={onNavigateToInterviews}
         />
 
+        {/* 4. Contratações */}
         <MetricCard
-          title="Banco de Talentos"
-          value={metrics.talentBankCandidates}
-          subtitle="Profissionais mapeados"
-          icon={<Award className="w-5 h-5" />}
-          accentColor="amber"
-          trend={{ value: 'Acervo qualificado', neutral: true }}
-          onClick={onNavigateToTalentBank}
+          title="Contratações"
+          value={14}
+          subtitle="Finalizadas este mês"
+          icon={<CheckCircle2 className="w-5 h-5 text-emerald-600" />}
+          accentColor="emerald"
+          trend={{ value: '100% da meta', isPositive: true }}
         />
+
+        {/* 5. Indicadores IA (Gold Premium #B8963E) */}
+        <Card
+          className="p-4 flex flex-col justify-between space-y-3 bg-white border border-[#E5E7EB] hover:border-[#B8963E]/40 transition-all cursor-pointer group shadow-2xs"
+          onClick={onNavigateToReports}
+        >
+          <div className="flex items-start justify-between">
+            <div>
+              <p className="text-[11px] font-black text-[#B8963E] uppercase tracking-wider flex items-center gap-1">
+                <Sparkles className="w-3 h-3" />
+                Indicadores IA
+              </p>
+              <h4 className="text-2xl font-black text-[#1E293B] mt-1 leading-none">
+                94.8%
+              </h4>
+            </div>
+            <div className="w-9 h-9 rounded-xl bg-[#B8963E]/10 border border-[#B8963E]/30 text-[#B8963E] flex items-center justify-center shrink-0">
+              <Award className="w-4 h-4" />
+            </div>
+          </div>
+          <div className="flex items-center justify-between text-xs pt-1 border-t border-[#E5E7EB]">
+            <span className="text-[#64748B] text-[11px]">Aderência Preditiva</span>
+            <span className="bg-[#B8963E]/10 text-[#B8963E] text-[10px] font-bold px-1.5 py-0.2 rounded">
+              Alta Precisão
+            </span>
+          </div>
+        </Card>
       </div>
 
-      {/* Secondary Metrics Bar */}
+      {/* Secondary Performance SLA Cards */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <Card className="p-4 bg-gradient-to-r from-indigo-900 to-slate-900 text-white flex items-center justify-between">
+        <Card className="p-5 bg-white border border-[#E5E7EB] flex items-center justify-between shadow-2xs">
           <div className="space-y-1">
-            <p className="text-[11px] uppercase tracking-wider font-extrabold text-indigo-300">
-              SLA Médio de Fechamento
+            <p className="text-[11px] uppercase tracking-wider font-extrabold text-[#64748B]">
+              SLA Médio de Fechamento de Vagas
             </p>
-            <h4 className="text-2xl font-black">{metrics.slaAvgDays} Dias</h4>
-            <p className="text-[11px] text-slate-300">Meta corporativa: abaixo de 20 dias</p>
+            <h4 className="text-2xl font-black text-[#1E293B]">{metrics.slaAvgDays} Dias</h4>
+            <p className="text-xs text-[#64748B]">Meta corporativa: abaixo de 20 dias</p>
           </div>
-          <div className="w-12 h-12 rounded-2xl bg-white/10 flex items-center justify-center border border-white/20">
-            <Clock className="w-6 h-6 text-indigo-300" />
+          <div className="w-11 h-11 rounded-xl bg-blue-50 text-[#2563EB] flex items-center justify-center border border-blue-100">
+            <Clock className="w-5 h-5" />
           </div>
         </Card>
 
-        <Card className="p-4 bg-gradient-to-r from-emerald-900 to-slate-900 text-white flex items-center justify-between">
+        <Card className="p-5 bg-white border border-[#E5E7EB] flex items-center justify-between shadow-2xs">
           <div className="space-y-1">
-            <p className="text-[11px] uppercase tracking-wider font-extrabold text-emerald-300">
+            <p className="text-[11px] uppercase tracking-wider font-extrabold text-[#64748B]">
               Taxa de Aceite de Proposta
             </p>
-            <h4 className="text-2xl font-black">{metrics.offerAcceptanceRate}%</h4>
-            <p className="text-[11px] text-slate-300">Efetividade na fase final do funil</p>
+            <h4 className="text-2xl font-black text-[#1E293B]">{metrics.offerAcceptanceRate}%</h4>
+            <p className="text-xs text-[#64748B]">Efetividade na contratação de talentos</p>
           </div>
-          <div className="w-12 h-12 rounded-2xl bg-white/10 flex items-center justify-center border border-white/20">
-            <TrendingUp className="w-6 h-6 text-emerald-300" />
+          <div className="w-11 h-11 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center border border-emerald-100">
+            <TrendingUp className="w-5 h-5" />
           </div>
         </Card>
       </div>
 
-      {/* Main Content Layout: Alerts & Funnel */}
+      {/* Main Content Layout: Breakdown & Funnel */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <div className="lg:col-span-2 space-y-6">
-          {/* Department Breakdown */}
           <DepartmentBreakdownCard departments={departments} />
-
-          {/* Responsible Performance */}
           <ResponsibleBreakdownCard responsibles={responsibles} />
         </div>
 
         <div className="space-y-6">
-          {/* Pending Alerts */}
           <PendingAlertsCard
             alerts={alerts}
             onResolveAlert={handleResolveAlert}
             canManageAlerts={canEditBudget || canManageUsers}
           />
-
-          {/* Funnel Overview */}
           <FunnelOverviewCard steps={funnelSteps} />
         </div>
       </div>
     </div>
   );
 };
+

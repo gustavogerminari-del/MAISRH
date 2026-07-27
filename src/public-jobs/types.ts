@@ -24,13 +24,37 @@ export interface PublicJob {
 }
 
 export interface CandidateApplicationPayload {
-  jobId: string;
+  jobId?: string;
   fullName: string;
   email: string;
   phone: string;
-  linkedinUrl?: string;
   cityState: string;
-  resumeFileName: string;
+  interestArea?: string;
+  experienceYears?: number | string;
+  educationLevel?: string;
+  courses?: string;
+  linkedinUrl?: string;
+  resumeFileName?: string;
   coverNote?: string;
   pne?: boolean;
 }
+
+export interface CompanyLeadPayload {
+  companyName: string;
+  contactName: string;
+  email: string;
+  phone: string;
+  companySize: string;
+  selectedPlan?: string;
+  message?: string;
+}
+
+export type PortalSectionTab = 
+  | 'inicio' 
+  | 'vagas' 
+  | 'empresas' 
+  | 'solucoes' 
+  | 'planos' 
+  | 'sobre' 
+  | 'contato';
+

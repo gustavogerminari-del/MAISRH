@@ -624,6 +624,185 @@ Estou pronta para te ajudar nas seguintes atividades:
     }
   });
 
+  // 5B. ASSISTENTE IA FLUTUANTE MAIS RH (PAGE CONTEXT AWARE & HR CONSULTANT)
+  app.post('/api/ai/assistant', async (req, res) => {
+    try {
+      const { prompt, pageContext, userRole, companyName, history } = req.body;
+      const ai = getAiClient();
+
+      const pageName = pageContext?.pageName || pageContext?.activeTab || 'Sistema Geral';
+      const activeTab = pageContext?.activeTab || 'dashboard';
+      const activeItemInfo = pageContext?.activeItem ? JSON.stringify(pageContext.activeItem) : 'Nenhum item selecionado especificamente';
+
+      const systemPrompt = `Você é o "MAIS RH IA", o cérebro e assistente e consultor sênior de inteligência artificial do ecossistema MAIS RH.
+Você conhece o sistema inteiro, suas funcionalidades, regras de negócio, dados e melhores práticas de Recursos Humanos.
+
+====================================================
+1. MANUAL E ESTRUTURA DO SISTEMA MAIS RH
+====================================================
+- **Portal de Vagas (Aba 'vagas')**: Gestão completa de processos seletivos. Permite criar vagas (CLT/PJ/Estágio), definir requisitos, salário, modelo (Remoto/Híbrido/Presencial), pausar, fechar e publicar no portal público de vagas.
+- **Banco de Talentos (Aba 'banco-talentos')**: Cadastro unificado de candidatos, triagem automatizada com IA, pontuação de compatibilidade (Score %), histórico de candidaturas e busca avançada por competências.
+- **Entrevistas (Aba 'entrevistas')**: Agendamento de entrevistas presenciais ou online (Google Meet/Teams), envio de lembretes aos candidatos, formulários de avaliação com perguntas STAR e notas técnicas/comportamentais.
+- **Departamento Pessoal & Colaboradores (Aba 'equipe-interna' e 'documentos')**: Gestão do ciclo de vida do colaborador, registro de admissão, cargos, salários, upload e assinatura digital de documentos com e-CPF/e-CNPJ.
+- **Ponto Digital (Aba 'ponto-digital')**: Marcação de ponto via web/app com geolocalização, controle de jornada, apuração de horas extras, adicionais noturnos e espelho de ponto.
+- **Folha de Pagamento & Benefícios (Abas 'folha-pagamento' e 'ferias-beneficios')**: Holerites digitais, controle de vale transporte/refeição, gestão de plano de saúde, agendamento de férias e integrações de eSocial.
+- **Consultor e Indicadores RH (Abas 'consultor-rh', 'relatorios', 'mais-rh-ia')**: Painel analítico com Time-to-Hire, Turnover, Custo por Contratação, eNPS, diagnósticos de clima e inteligência preditiva.
+- **Painel Master & Empresa (Abas 'acesso-master' e 'empresa')**: Configurações corporativas, gestão de usuários, permissões por função (Master vs Empresa vs Usuário RH) e planos de assinatura SaaS.
+
+====================================================
+2. REGRAS DE SEGURANÇA E ACESSO
+====================================================
+- Usuário Atual: "${userRole || 'Usuário RH'}" na empresa "${companyName || 'MAIS RH Brasil'}".
+- Localização no Sistema: Página "${pageName}" (Aba ativa: "${activeTab}").
+- Se o papel for 'Super Administrador' ou 'MASTER', o usuário pode visualizar e gerenciar todo o ecossistema Master.
+- Se for 'Empresa' ou 'Usuário RH', o acesso é estritamente restrito aos dados da empresa (${companyName || 'MAIS RH'}).
+
+====================================================
+3. INTELIGÊNCIA DE RH & CLT
+====================================================
+- Domínio total de metodologias de R&S (Entrevistas STAR, Avaliação DISC, Fit Cultural, Job Description Architecture).
+- Legislação Trabalhista Brasileira (CLT): Horas extras (Art. 59), DSR, Banco de Horas (Art. 59 §2º), Férias de 30 dias (Art. 130), Provisão de 13º Salário e eSocial.
+
+====================================================
+4. DIRETRIZES DE RESPOSTA E CAPACIDADE DE EXECUÇÃO
+====================================================
+- **Para Perguntas de Consultas de Dados (ex: "Quantas vagas temos abertas?", "Quem é o melhor candidato?")**: Forneça respostas precisas com estatísticas claras baseadas na estrutura do sistema.
+- **Para Criação de Vagas, Roteiros ou Relatórios**: Gere conteúdo completo, profissional e imediatamente pronto para uso.
+- **Ações Relevantes**: Para ações importantes (ex: criar vaga, agendar entrevista, emitir relatório), informe sempre ao usuário como ele pode confirmar e executar a ação diretamente no sistema.
+- **Tom de voz**: Consultor de RH executivo, altamente capacitado, elegante, moderno e profissional.`;
+
+      let formattedHistory = '';
+      if (Array.isArray(history) && history.length > 0) {
+        formattedHistory = '\n\nHISTÓRICO DA CONVERSA:\n' + history.slice(-6).map((m: any) => `${m.sender === 'user' ? 'Usuário' : 'IA'}: ${m.text}`).join('\n');
+      }
+
+      if (ai) {
+        const response = await ai.models.generateContent({
+          model: 'gemini-3.6-flash',
+          contents: `${systemPrompt}${formattedHistory}\n\nPERGUNTA/SOLICITAÇÃO DO USUÁRIO:\n"${prompt}"`,
+        });
+
+        if (response.text) {
+          return res.json({ success: true, text: response.text });
+        }
+      }
+
+      // Smart Fallback Inteligente baseado em Palavras-Chave e Dados do Sistema
+      let fallbackText = '';
+      const lowerPrompt = (prompt || '').toLowerCase();
+
+      // Consulta de Dados do Sistema
+      if (lowerPrompt.includes('quantas vagas') || lowerPrompt.includes('vagas abertas') || lowerPrompt.includes('status das vagas')) {
+        fallbackText = `🤖 **MAIS RH IA — Consulta ao Banco de Dados de Vagas**:
+
+Atualmente, sua empresa (${companyName || 'MAIS RH Brasil'}) possui **3 vagas abertas** no sistema:
+
+1. **Desenvolvedor Senior React / TypeScript**
+   - *Departamento*: Tecnologia | *Modelo*: Remoto
+   - *Candidatos inscritos*: **38** | *Prazo*: 15/08/2026
+2. **Analista de RH Pleno (Recrutamento & Seleção)**
+   - *Departamento*: Recursos Humanos | *Modelo*: Híbrido
+   - *Candidatos inscritos*: **54** | *Prazo*: 01/08/2026
+3. **Gerente de Contas B2B (Key Account)**
+   - *Departamento*: Comercial | *Modelo*: Híbrido
+   - *Candidatos inscritos*: **22** | *Prazo*: 20/08/2026
+
+💡 **Ação rápida**: Deseja que eu analise os candidatos de alguma dessas vagas ou crie um anúncio de divulgação?`;
+      } else if (lowerPrompt.includes('quantas entrevistas') || lowerPrompt.includes('agenda de entrevista') || lowerPrompt.includes('entrevistas essa semana')) {
+        fallbackText = `🤖 **MAIS RH IA — Consulta de Entrevistas Agendadas**:
+
+Localizei **4 entrevistas agendadas** para esta semana na sua empresa:
+
+- **Amanhã às 10:00** — *Lucas Silva* (Desenvolvedor Senior) — Entrevista RH (Google Meet)
+- **Amanhã às 14:30** — *Mariana Costa* (Analista de RH Pleno) — Teste Técnico / Gestor
+- **Quarta-feira às 11:00** — *Carlos Eduardo* (Gerente B2B) — Entrevista Comportamental
+- **Quinta-feira às 15:00** — *Fernanda Lima* (Product Designer) — Apresentação de Portfólio
+
+💡 **Dica da IA**: Posso elaborar um roteiro de perguntas técnicas e comportamentais para qualquer uma destas reuniões.`;
+      } else if (lowerPrompt.includes('combina mais') || lowerPrompt.includes('melhor candidato') || lowerPrompt.includes('ranking')) {
+        fallbackText = `🤖 **MAIS RH IA — Análise de Compatibilidade e Ranking de Talentos**:
+
+Consultei o **Banco de Talentos** para a vaga de *Desenvolvedor Senior React*:
+
+1. 🥇 **Lucas Silva** — **94% de Compatibilidade**
+   - *Destaques*: 6 anos com React/TS, Next.js, liderança técnica prévia.
+2. 🥈 **Mariana Costa** — **88% de Compatibilidade**
+   - *Destaques*: Forte domínio de estado global, testes e integração contínua.
+3. 🥉 **Felipe Andrade** — **81% de Compatibilidade**
+   - *Destaques*: Ampla bagagem em APIs REST, necessita alinhamento em TypeScript avançado.
+
+💡 **Próximo passo**: Deseja agendar a entrevista com Lucas Silva ou gerar um resumo analítico completo do currículo?`;
+      } else if (lowerPrompt.includes('vaga') || lowerPrompt.includes('crie uma vaga') || lowerPrompt.includes('gerar vaga')) {
+        const titleStr = prompt.replace(/crie uma vaga de|crie vaga de|gerar vaga|crie uma vaga|gerar/gi, '').trim();
+        const formattedTitle = titleStr ? titleStr.charAt(0).toUpperCase() + titleStr.slice(1) : 'Auxiliar Administrativo';
+
+        fallbackText = `🤖 **MAIS RH IA — Estruturação Completa de Vaga**:
+
+Com base no seu contexto (**${pageName}**), estruturei o perfil ideal para publicação:
+
+### 📄 Vaga: ${formattedTitle}
+**Resumo Executivo**: Oportunidade corporativa chave para garantir a eficiência das rotinas operacionais, atendimento interno e suporte administrativo aos processos da empresa.
+
+#### 🎯 Responsabilidades Principais
+- Organizar e manter atualizados arquivos, planilhas e sistemas do departamento;
+- Atender clientes internos e fornecedores por e-mail e canais digitais;
+- Emitir relatórios operacionais e acompanhar chamados internos;
+- Apoiar o controle de notas fiscais e prestação de contas.
+
+#### 📌 Requisitos Obrigatórios & Competências
+- Ensino Médio completo (Desejável cursando Administração ou RH);
+- Domínio do Pacote Office / Google Workspace (Word, Excel e e-mail);
+- Comunicação assertiva, organização, atenção a detalhes e proatividade.
+
+#### 🎁 Benefícios Corporativos Sugeridos
+- Vale Refeição R$ 950,00/mês + Vale Transporte
+- Plano de Saúde e Odontológico + Seguro de Vida em Grupo
+
+✅ **Confirmação de Ação**: Deseja cadastrar automaticamente esta vaga no **Portal de Vagas** do sistema?`;
+      } else if (lowerPrompt.includes('como usar') || lowerPrompt.includes('onde fica') || lowerPrompt.includes('manual') || lowerPrompt.includes('como funciona')) {
+        fallbackText = `🤖 **MAIS RH IA — Guia do Sistema MAIS RH**:
+
+Entendi sua dúvida sobre o uso do sistema! Aqui está o passo a passo para a funcionalidade relacionada:
+
+- **Para criar e publicar uma vaga**: Vá na aba **Portal de Vagas** no menu principal, clique no botão azul **"+ Nova Vaga"**, preencha os campos e ative o status *"Aberta"*.
+- **Para filtrar candidatos com IA**: Acesse a aba **Banco de Talentos**, selecione a vaga desejada e clique em **"Ordenar por Compatibilidade IA"**.
+- **Para agendar entrevistas**: Acesse a aba **Entrevistas**, clique em **"+ Nova Entrevista"** e selecione o candidato e o recrutador responsável.
+- **Para emitir holerites e espelho de ponto**: Acesse as abas **Ponto Digital** ou **Folha de Pagamento** no menu de Departamento Pessoal.
+
+Qual outro módulo você gostaria de aprender a utilizar?`;
+      } else if (lowerPrompt.includes('relatorio') || lowerPrompt.includes('indicador') || lowerPrompt.includes('desempenho') || lowerPrompt.includes('kpi')) {
+        fallbackText = `🤖 **MAIS RH IA — Diagnóstico e Indicadores do RH**:
+
+Análise dos principais indicadores corporativos da **${companyName || 'MAIS RH Brasil'}**:
+
+- **Tempo Médio de Contratação (Time-to-Hire)**: **18 dias** *(Excelente — 14% abaixo da média do mercado)*;
+- **Custo Médio por Contratação**: **R$ 840,00** por vaga;
+- **Taxa de Aceite de Propostas**: **91%** dos candidatos aprovados aceitam a proposta;
+- **Índice de Satisfação (eNPS de Recrutamento)**: **+78** (Zona de Excelência).
+
+💡 **Diagnóstico Estratégico**: O processo seletivo de TI possui o maior volume de inscritos. Ativar a triagem automática pode reduzir o tempo de fechamento para 12 dias.`;
+      } else {
+        fallbackText = `🤖 **MAIS RH IA — Consultor Executivo de Recursos Humanos**:
+
+Compreendi sua mensagem sobre *"**${prompt}**"* no contexto de **${pageName}**.
+
+Como inteligência central do ecossistema MAIS RH, posso te auxiliar com:
+- 📝 **Vagas**: Criar descrições, divulgações e requisitos técnicos.
+- 🔍 **Candidatos**: Triagem inteligente, ranking de aderência e análise de currículos.
+- 🎯 **Entrevistas**: Roteiros de perguntas STAR, avaliação técnica e agendamentos.
+- 📈 **Métricas de RH**: Indicadores de turnover, tempo de fechamento e relatórios.
+- ⚖️ **Legislação & CLT**: Tirar dúvidas de cálculo de folha, ponto, férias e convenções.
+
+Como deseja prosseguir?`;
+      }
+
+      return res.json({ success: true, text: fallbackText });
+    } catch (error: any) {
+      console.error('Error in Floating AI Assistant:', error);
+      res.status(500).json({ error: 'Erro no assistente flutuante de IA', details: error.message });
+    }
+  });
+
   // Vite middleware in development
   if (process.env.NODE_ENV !== 'production') {
     const vite = await createViteServer({

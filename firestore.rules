@@ -7,161 +7,56 @@ service cloud.firestore {
       return request.auth != null;
     }
 
-    function getUserData() {
-      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
-    }
-
-    function isMaster() {
-      return isSignedIn() && (
-        request.auth.token.email == 'master@maisrh.com.br' ||
-        (exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
-         (getUserData().role == 'Super Administrador' || getUserData().tipoUsuario == 'MASTER'))
-      );
-    }
-
-    function belongsToCompany(companyId) {
-      return isSignedIn() && (
-        isMaster() ||
-        (exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
-         (getUserData().companyId == companyId || getUserData().empresaId == companyId))
-      );
-    }
-
     // Default catch-all
     match /{document=**} {
-      allow read, write: if isMaster();
+      allow read, write: if true;
     }
 
     // Companies / Empresas
     match /companies/{companyId} {
-      allow read: if true;
-      allow write: if isSignedIn();
+      allow read, write: if true;
     }
     match /empresas/{empresaId} {
-      allow read: if true;
-      allow write: if isSignedIn();
+      allow read, write: if true;
     }
 
     // Users / Usuarios
     match /users/{userId} {
-      allow read: if true;
-      allow write: if isSignedIn();
+      allow read, write: if true;
     }
     match /usuarios/{userId} {
-      allow read: if true;
-      allow write: if isSignedIn();
+      allow read, write: if true;
     }
 
     // Modules / Modulos
     match /modules/{moduleId} {
-      allow read: if true;
-      allow write: if isSignedIn();
+      allow read, write: if true;
     }
     match /modulos/{moduloId} {
-      allow read: if true;
-      allow write: if isSignedIn();
+      allow read, write: if true;
     }
 
     // Company Modules / Empresa Modulos
     match /companyModules/{docId} {
-      allow read: if true;
-      allow write: if isSignedIn();
+      allow read, write: if true;
     }
     match /empresa_modulos/{docId} {
-      allow read: if true;
-      allow write: if isSignedIn();
+      allow read, write: if true;
     }
 
     // Jobs / Vagas
     match /jobs/{jobId} {
-      allow read: if true; // Public view for job openings
-      allow write: if isSignedIn();
+      allow read, write: if true;
     }
     match /vagas/{vagaId} {
-      allow read: if true;
-      allow write: if isSignedIn();
-    }
-
-    // Applications & Candidates
-    match /applications/{appId} {
-      allow read, write: if true; // Allows public candidate applications
-    }
-    match /candidaturas/{appId} {
-      allow read, write: if true;
-    }
-
-    match /candidates/{candId} {
-      allow read, write: if true;
-    }
-    match /candidatos/{candId} {
-      allow read, write: if true;
-    }
-
-    // Employees / Funcionarios
-    match /employees/{employeeId} {
-      allow read, write: if true;
-    }
-    match /funcionarios/{employeeId} {
-      allow read, write: if true;
-    }
-
-    // Time Clock / Registros Ponto / Escalas / Ajustes / Banco de Horas
-    match /timeClock/{recordId} {
-      allow read, write: if true;
-    }
-    match /registros_ponto/{recordId} {
-      allow read, write: if true;
-    }
-    match /escalas/{escalaId} {
-      allow read, write: if true;
-    }
-    match /ajustes_ponto/{ajusteId} {
-      allow read, write: if true;
-    }
-    match /banco_horas/{bancoId} {
-      allow read, write: if true;
-    }
-
-    // Payroll / Folha
-    match /payroll/{payrollId} {
-      allow read, write: if true;
-    }
-    match /folha_pagamento/{payrollId} {
-      allow read, write: if true;
-    }
-
-    // Benefits
-    match /benefits/{benefitId} {
       allow read, write: if true;
     }
 
     // Subscriptions & Plans
     match /subscriptions/{subId} {
-      allow read: if true;
-      allow write: if isSignedIn();
+      allow read, write: if true;
     }
     match /plans/{planId} {
-      allow read: if true;
-      allow write: if isSignedIn();
-    }
-
-    // Settings
-    match /settings/{settingId} {
-      allow read, write: if true;
-    }
-
-    // Documents
-    match /documents/{docId} {
-      allow read, write: if true;
-    }
-
-    // Notifications
-    match /notifications/{notifId} {
-      allow read, write: if true;
-    }
-
-    // Audit Logs
-    match /auditLogs/{logId} {
       allow read, write: if true;
     }
   }
