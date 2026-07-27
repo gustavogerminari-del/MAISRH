@@ -24,6 +24,7 @@ export type ScreenRouteKey =
   | 'consultor-rh'
   | 'ferias-beneficios'
   | 'documentos'
+  | 'folha-pagamento'
   | 'auditoria'
   | 'planos-saas'
   | 'acesso-master'

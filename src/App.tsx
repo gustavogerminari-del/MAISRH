@@ -14,6 +14,7 @@ import { PublicJobsView } from './public-jobs';
 import { RHConsultantView } from './rh-consultant';
 import { BenefitsLeavesView } from './benefits-leaves';
 import { DocumentsSignatureView } from './documents-signature';
+import { PayrollView } from './payroll';
 import { AuditLogsView } from './audit-logs';
 import { SubscriptionsView } from './subscriptions';
 import { MasterAdminView } from './master-admin';
@@ -297,6 +298,8 @@ function MainAppContent() {
             {activeTab === 'ferias-beneficios' && <BenefitsLeavesView />}
 
             {activeTab === 'documentos' && <DocumentsSignatureView />}
+
+            {activeTab === 'folha-pagamento' && <PayrollView />}
 
             {activeTab === 'auditoria' && <AuditLogsView />}
 

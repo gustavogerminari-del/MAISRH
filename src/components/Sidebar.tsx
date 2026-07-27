@@ -16,7 +16,9 @@ import {
   Crown,
   Bot,
   Sparkles,
-  Lock
+  Lock,
+  Calculator,
+  DollarSign
 } from 'lucide-react';
 import { useAuth } from '../auth';
 
@@ -33,6 +35,7 @@ export type MainTab =
   | 'consultor-rh' 
   | 'ferias-beneficios' 
   | 'documentos' 
+  | 'folha-pagamento'
   | 'auditoria' 
   | 'planos-saas' 
   | 'acesso-master' 
@@ -68,6 +71,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   const hasRecrutamento = isModuleActive('recrutamento') || isModuleActive('vagas');
   const hasDp = isModuleActive('dp') || isModuleActive('equipeInterna');
   const hasDocumentos = isModuleActive('documentos') || isModuleActive('documentosAssinatura');
+  const hasFolha = isModuleActive('folha') || isModuleActive('folhaPagamento') || isModuleActive('folha-pagamento') || isMaster;
   const hasBeneficios = isModuleActive('beneficios') || isModuleActive('feriasBeneficios');
   const hasConsultor = isModuleActive('consultorRH');
   const hasRelatorios = isModuleActive('relatoriosAvancados') || isMaster;
@@ -256,6 +260,21 @@ export const Sidebar: React.FC<SidebarProps> = ({
             >
               <FileText className="w-4 h-4 text-emerald-600" />
               <span>Documentos</span>
+            </button>
+          )}
+
+          {/* 💰 Folha de Pagamento (Se contratado) */}
+          {hasFolha && (
+            <button
+              onClick={() => setActiveTab('folha-pagamento')}
+              className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-bold transition-all cursor-pointer ${
+                activeTab === 'folha-pagamento'
+                  ? 'bg-emerald-50 text-emerald-800 shadow-2xs'
+                  : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'
+              }`}
+            >
+              <Calculator className="w-4 h-4 text-emerald-600" />
+              <span>Folha de Pagamento</span>
             </button>
           )}
 

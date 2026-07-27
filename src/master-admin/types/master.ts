@@ -23,6 +23,8 @@ export interface TenantModulePermissions {
   auditoriaLogs: boolean;
   relatoriosAvancados: boolean;
   siteVagasPersonalizado: boolean;
+  folha?: boolean;
+  ponto?: boolean;
 }
 
 export interface TenantBranding {

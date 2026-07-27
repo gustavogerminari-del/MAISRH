@@ -16,6 +16,8 @@ export interface ModuleAccessConfig {
   feriasBeneficios: boolean;
   documentosAssinatura: boolean;
   auditoriaLogs: boolean;
+  folha?: boolean;
+  ponto?: boolean;
 }
 
 export interface ClientSubscription {

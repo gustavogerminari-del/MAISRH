@@ -293,6 +293,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       return true;
     }
 
+    if ((moduleKey === 'folha' || moduleKey === 'folhaPagamento' || moduleKey === 'folha-pagamento') && (activeModules['folha'] || activeModules['folhaPagamento'] || activeModules['folha'] !== false)) {
+      return true;
+    }
+
     return false;
   };
 
