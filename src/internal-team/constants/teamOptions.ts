@@ -103,4 +103,15 @@ export const DEFAULT_PERMISSIONS_BY_PROFILE: Record<RoleProfile, InternalPermiss
     canExportReports: false,
     canManageTeam: false,
   },
+  'Colaborador': {
+    canCreateJobs: false,
+    canEditJobs: false,
+    canCloseJobs: false,
+    canViewSalaries: false,
+    canApproveHires: false,
+    canDeleteCandidates: false,
+    canScheduleInterviews: false,
+    canExportReports: false,
+    canManageTeam: false,
+  },
 };

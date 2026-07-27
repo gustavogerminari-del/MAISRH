@@ -9,7 +9,6 @@ import { InterviewsView } from './components/InterviewsView';
 import { ReportsView } from './components/ReportsView';
 import { CompanyView } from './components/CompanyView';
 import { SettingsView } from './components/SettingsView';
-import { TeamManagementView } from './internal-team';
 import { PublicJobsView } from './public-jobs';
 import { RHConsultantView } from './rh-consultant';
 import { BenefitsLeavesView } from './benefits-leaves';
@@ -21,6 +20,7 @@ import { SubscriptionsView } from './subscriptions';
 import { MasterAdminView } from './master-admin';
 import { MaisRhIaView } from './ai/components/MaisRhIaView';
 import { DepartamentoPessoalView, DPSubTab } from './departamento-pessoal/DepartamentoPessoalView';
+import { PortalColaboradorView } from './departamento-pessoal/components/PortalColaboradorView';
 
 import { NewJobModal } from './components/NewJobModal';
 import { NewCandidateModal } from './components/NewCandidateModal';
@@ -197,6 +197,17 @@ function MainAppContent() {
 
   const departmentNames = departments.map(d => d.name);
 
+  const isColaborador = user?.role === 'Colaborador' || user?.tipoUsuario === 'COLABORADOR';
+
+  if (isColaborador) {
+    return (
+      <div className="min-h-screen bg-slate-50 text-slate-800 flex flex-col font-sans">
+        <ProfileSwitchSelector />
+        <PortalColaboradorView />
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-slate-50 text-slate-800 flex flex-col font-sans antialiased">
       {/* Top Profile Switch Bar */}
@@ -285,7 +296,7 @@ function MainAppContent() {
             )}
 
             {activeTab === 'equipe-interna' && (
-              <TeamManagementView departments={departments as any} />
+              <DepartamentoPessoalView initialSubTab="colaboradores" />
             )}
 
             {activeTab === 'site-vagas' && (

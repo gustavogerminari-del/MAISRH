@@ -579,21 +579,35 @@ Retorne um objeto JSON estritamente no seguinte formato:
   // 5. CHAT IA MAIS RH
   app.post('/api/ai/chat', async (req, res) => {
     try {
-      const { prompt, history } = req.body;
+      const { prompt, history, companyContext } = req.body;
       const ai = getAiClient();
 
       if (ai) {
         const chat = ai.chats.create({
           model: 'gemini-3.6-flash',
           config: {
-            systemInstruction: `Você é a "MAIS RH IA", assistente virtual inteligente especialista em Gestão de Recursos Humanos, Recrutamento & Seleção, Departamento Pessoal e Gestão de Pessoas.
-Você auxilia empresas e recrutadores nas seguintes tarefas:
-1. "Crie uma vaga de vendedor" -> gera descrição atrativa e completa de vagas.
-2. "Analise estes candidatos" -> faz triagem comparativa e destaca pontos fortes/fracos.
-3. "Quais perguntas devo fazer?" -> sugere perguntas comportamentais e técnicas.
-4. Orientações sobre Legislação Trabalhista (CLT), Benefícios, Onboarding e Retenção de Talentos.
+            systemInstruction: `Você é a "MAIS RH IA", assistente virtual inteligente especialista em Gestão de Recursos Humanos, Departamento Pessoal, Ponto Digital, Banco de Horas e Legislação CLT.
+Você responde com precisão a dúvidas de RH e colaboradores sobre:
+1. "Qual a regra de hora extra desta empresa?" -> Explicar adicionais (50% dias úteis, 100% domingos/feriados, 20% noturno, tolerâncias Art. 58 CLT e se a empresa paga em folha ou envia para Banco de Horas).
+2. "Quantas horas estão no banco de horas?" -> Apresentar saldo acumulado total, saldo individual e créditos/débitos.
+3. "Quais colaboradores possuem saldo negativo?" -> Listar colaboradores com saldo de horas negativo (atrasos/saídas antecipadas) e alertar sobre limites de compensação.
+4. "Qual será o impacto das horas extras na folha?" -> Calcular estimativa em R$ do custo de adicionais de horas extras 50%/100% e Adicional Noturno para o fechamento da folha.
+5. "Crie uma vaga...", "Analise candidatos...", "Perguntas de entrevista..." e orientações de eSocial/CLT.
 
-Responda sempre com tom profissional, amigável, objetivo e bem estruturado em markdown em português do Brasil.`
+CONTEXTO DA EMPRESA ATUAL (quando fornecido):
+${JSON.stringify(companyContext || {
+  empresaNome: 'Empresa Cliente MAIS RH',
+  tipoControleJornada: 'Modelo Misto (Banco de Horas + Folha)',
+  jornadaSemanal: '44 horas semanais (5x2)',
+  horaExtraDiaUtil: '50%',
+  horaExtraDomingoFeriado: '100%',
+  adicionalNoturno: '20%',
+  bancoHorasSaldoTotal: '+42 horas e 15 minutos',
+  colaboradoresSaldoNegativo: ['Roberto Andrade (-02:15)'],
+  impactoEstimadoFolha: 'R$ 2.480,00 em adicionais para o período corrente'
+})}
+
+Responda sempre com tom profissional, claro, amigável e estruturado em markdown em português do Brasil.`
           }
         });
 
@@ -606,18 +620,46 @@ Responda sempre com tom profissional, amigável, objetivo e bem estruturado em m
         }
       }
 
-      // Fallback
-      return res.json({
-        success: true,
-        text: `🤖 **MAIS RH IA Assistente**:
+      // Fallback inteligente para perguntas comuns de jornada
+      const promptLower = (prompt || '').toLowerCase();
+      let responseText = '';
+
+      if (promptLower.includes('regra') && (promptLower.includes('hora extra') || promptLower.includes('jornada'))) {
+        responseText = `⏱ **Regras de Hora Extra & Jornada desta Empresa**:
+- **Tipo de Controle**: Modelo Misto (Banco de Horas + Pagamento em Folha).
+- **Jornada Padrão**: 44 horas semanais (Segunda a Sexta, 08:00 às 18:00 com 1h12m de intervalo).
+- **Adicional Dias Úteis**: 50% de acréscimo sobre a hora normal.
+- **Adicional Domingos e Feriados**: 100% de acréscimo.
+- **Adicional Noturno**: 20% (entre 22:00 e 05:00).
+- **Tolerância**: 10 minutos diários (Art. 58 § 1º CLT).
+- **Destino Excedente**: As primeiras 2h diárias/20h mensais vão para o Banco de Horas; o excedente é pago em dinheiro na folha.`;
+      } else if (promptLower.includes('quantas horas') || (promptLower.includes('banco') && promptLower.includes('horas'))) {
+        responseText = `📊 **Saldo Geral do Banco de Horas da Empresa**:
+- **Saldo Total Líquido**: **+42 horas e 15 minutos** acumuladas no período.
+- **Total de Créditos (+HE)**: +68 horas e 30 minutos.
+- **Total de Débitos (-Atrasos)**: -26 horas e 15 minutos.
+- **Prazo de Compensação Vigente**: 6 meses (conforme acordo coletivo individual escrito).`;
+      } else if (promptLower.includes('saldo negativo') || promptLower.includes('negativo')) {
+        responseText = `⚠️ **Colaboradores com Saldo Negativo no Banco de Horas**:
+1. **Roberto Andrade** (Assistente de DP): **-02h 15m** (Atrasos e saídas antecipadas em Julho/2026).
+- *Recomendação*: Agendar compensação de horário ou descontar na folha conforme prazos de fechamento.`;
+      } else if (promptLower.includes('impacto') || promptLower.includes('folha')) {
+        responseText = `💰 **Impacto Financeiro Estimado das Horas Extras na Folha de Pagamento**:
+- **Adicionais de HE 50%**: R$ 1.620,00 (+38,5 horas).
+- **Adicionais de HE 100%**: R$ 860,00 (+12,0 horas).
+- **Total Estimado de Impacto**: **R$ 2.480,00** a serem acrescidos como proventos na folha de Julho/2026.`;
+      } else {
+        responseText = `🤖 **MAIS RH IA Assistente**:
 Recebi sua mensagem sobre "*${prompt}*".
 
-Estou pronta para te ajudar nas seguintes atividades:
-- **Gerar ou Aprimorar Vagas**: Crio descrições completas com responsabilidades e benefícios.
-- **Triagem e Análise de Currículos**: Avalio percentuais de aderência dos candidatos às suas vagas.
-- **Roteiro de Entrevistas**: Posso sugerir perguntas chave baseadas nas exigências do cargo.
-- **Dúvidas de RH**: Posso orientar sobre atração de talentos e gestão de pessoas.`
-      });
+Estou pronta para te ajudar com:
+- ⏱ **Regras de Hora Extra e Jornada**: Detalhamento dos percentuais (50%, 100%, noturno) e modelos de cada empresa.
+- 📊 **Consultas do Banco de Horas**: Saldos acumulados e colaboradores com saldo negativo.
+- 💰 **Impacto Financeiro na Folha**: Previsão de valores de adicionais em R$.
+- 📋 **Gestão de Vagas, Candidatos e Entrevistas**.`;
+      }
+
+      return res.json({ success: true, text: responseText });
     } catch (error: any) {
       console.error('Error in AI Chat:', error);
       res.status(500).json({ error: 'Erro ao processar mensagem do chat', details: error.message });

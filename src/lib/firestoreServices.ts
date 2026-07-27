@@ -101,7 +101,7 @@ export interface UsuarioFirestoreDoc {
   uid: string;
   nome: string;
   email: string;
-  tipoUsuario: 'MASTER' | 'EMPRESA' | 'CANDIDATO' | 'FUNCIONARIO';
+  tipoUsuario: 'MASTER' | 'EMPRESA' | 'CANDIDATO' | 'FUNCIONARIO' | 'COLABORADOR';
   empresaId: string;
   status?: string;
   dataCriacao?: string;

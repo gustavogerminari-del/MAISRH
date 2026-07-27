@@ -15,16 +15,25 @@ export const MASTER_USER: UserProfile = {
 
 const ALL_SCREENS: ScreenRouteKey[] = [
   'dashboard',
+  'ponto-digital',
   'vagas',
   'banco-talentos',
   'entrevistas',
   'relatorios',
   'empresa',
+  'colaboradores',
+  'departamento-pessoal',
+  'beneficios',
+  'ferias',
+  'rescisao',
+  'relatorios-dp',
+  'configuracoes-trabalhistas',
   'equipe-interna',
   'site-vagas',
   'consultor-rh',
   'ferias-beneficios',
   'documentos',
+  'folha-pagamento',
   'auditoria',
   'planos-saas',
   'acesso-master',
@@ -40,6 +49,7 @@ export const SCREEN_PERMISSIONS: Record<RoleProfile, ScreenRouteKey[]> = {
   'Gestor de Seleção': ALL_SCREENS,
   'Recrutador Sênior': ALL_SCREENS,
   'Analista de RH': ALL_SCREENS,
+  'Colaborador': ['portal-colaborador', 'ponto-digital', 'documentos', 'ferias', 'folha-pagamento'],
 };
 
 const ALL_ACTIONS: SystemActionKey[] = [
@@ -64,6 +74,7 @@ export const ACTION_PERMISSIONS: Record<RoleProfile, SystemActionKey[]> = {
   'Gestor de Seleção': ALL_ACTIONS,
   'Recrutador Sênior': ALL_ACTIONS,
   'Analista de RH': ALL_ACTIONS,
+  'Colaborador': [],
 };
 
 /**
@@ -77,6 +88,10 @@ export const DEMO_USERS: UserProfile[] = [
     role: 'Administrador',
     department: 'Diretoria de Gente & Gestão',
     avatar: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=150&auto=format&fit=crop&q=80',
+    tipoUsuario: 'EMPRESA',
+    empresaId: 'emp-001',
+    companyId: 'emp-001',
+    companyName: 'Grupo Alpha Logística S/A'
   },
   {
     id: 'usr-gestor-02',
@@ -85,6 +100,10 @@ export const DEMO_USERS: UserProfile[] = [
     role: 'Gestor de Seleção',
     department: 'Gerência de Atração de Talentos',
     avatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=150&auto=format&fit=crop&q=80',
+    tipoUsuario: 'EMPRESA',
+    empresaId: 'emp-001',
+    companyId: 'emp-001',
+    companyName: 'Grupo Alpha Logística S/A'
   },
   {
     id: 'usr-recrutador-03',
@@ -93,6 +112,10 @@ export const DEMO_USERS: UserProfile[] = [
     role: 'Recrutador Sênior',
     department: 'Recrutamento & Seleção Tech',
     avatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80',
+    tipoUsuario: 'EMPRESA',
+    empresaId: 'emp-001',
+    companyId: 'emp-001',
+    companyName: 'Grupo Alpha Logística S/A'
   },
   {
     id: 'usr-analista-04',
@@ -101,5 +124,23 @@ export const DEMO_USERS: UserProfile[] = [
     role: 'Analista de RH',
     department: 'Operações de RH & Admissão',
     avatar: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=150&auto=format&fit=crop&q=80',
+    tipoUsuario: 'EMPRESA',
+    empresaId: 'emp-001',
+    companyId: 'emp-001',
+    companyName: 'Grupo Alpha Logística S/A'
   },
+  {
+    id: 'usr-colab-05',
+    name: 'Ana Paula Vasconcelos',
+    email: 'ana.vasconcelos@gmail.com',
+    role: 'Colaborador',
+    department: 'Recursos Humanos',
+    avatar: 'https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?w=150&auto=format&fit=crop&q=80',
+    tipoUsuario: 'COLABORADOR',
+    colaboradorId: 'colab-001',
+    empresaId: 'emp-001',
+    companyId: 'emp-001',
+    companyName: 'Grupo Alpha Logística S/A',
+    portalAccessStatus: 'Ativo'
+  }
 ];

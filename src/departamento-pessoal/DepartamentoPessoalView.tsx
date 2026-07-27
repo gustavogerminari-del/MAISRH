@@ -42,6 +42,8 @@ import { CalculoRescisao } from './components/CalculoRescisao';
 import { DocumentsSignatureView } from '../documents-signature/DocumentsSignatureView';
 import { RelatoriosDpView } from './components/RelatoriosDpView';
 import { ConfiguracoesTrabalhistasView } from './components/ConfiguracoesTrabalhistas';
+import { PainelAcessosPortal } from './components/PainelAcessosPortal';
+import { Key } from 'lucide-react';
 
 export type DPSubTab = 
   | 'colaboradores' 
@@ -52,7 +54,8 @@ export type DPSubTab =
   | 'rescisao' 
   | 'documentos' 
   | 'relatorios-dp' 
-  | 'configuracoes-trabalhistas';
+  | 'configuracoes-trabalhistas'
+  | 'acessos-portal';
 
 interface DepartamentoPessoalViewProps {
   initialSubTab?: DPSubTab;
@@ -146,6 +149,7 @@ export const DepartamentoPessoalView: React.FC<DepartamentoPessoalViewProps> = (
     { id: 'rescisao', label: 'Rescisão', icon: LogOut },
     { id: 'documentos', label: 'Documentos & Assinaturas', icon: FileText },
     { id: 'relatorios-dp', label: 'Relatórios DP', icon: BarChart2 },
+    { id: 'acessos-portal', label: 'Acessos ao Portal', icon: Key },
     { id: 'configuracoes-trabalhistas', label: 'Configurações Trabalhistas', icon: Settings },
   ];
 
@@ -237,6 +241,13 @@ export const DepartamentoPessoalView: React.FC<DepartamentoPessoalViewProps> = (
           <ConfiguracoesTrabalhistasView
             config={configTrabalhista}
             onSalvarConfig={handleSalvarConfig}
+          />
+        )}
+
+        {activeSubTab === 'acessos-portal' && (
+          <PainelAcessosPortal
+            colaboradores={colaboradores}
+            onSalvarColaborador={handleSalvarColaborador}
           />
         )}
       </div>

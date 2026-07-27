@@ -33,12 +33,17 @@ export type MainTab =
   | 'entrevistas' 
   | 'relatorios' 
   | 'empresa' 
-  | 'equipe-interna' 
+  | 'colaboradores' 
   | 'site-vagas' 
   | 'consultor-rh' 
   | 'ferias-beneficios' 
+  | 'beneficios'
+  | 'ferias'
+  | 'rescisao'
   | 'documentos' 
   | 'folha-pagamento'
+  | 'relatorios-dp'
+  | 'configuracoes-trabalhistas'
   | 'auditoria' 
   | 'planos-saas' 
   | 'acesso-master' 
@@ -67,7 +72,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
 }) => {
   const { user, isModuleActive } = useAuth();
   const [recruitmentOpen, setRecruitmentOpen] = useState(true);
-  const [dpOpen, setDpOpen] = useState(false);
+  const [dpOpen, setDpOpen] = useState(true);
 
   const isMaster = user?.role === 'Super Administrador' || user?.tipoUsuario === 'MASTER';
 
@@ -243,37 +248,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
             </button>
           </div>
 
-          {/* 4. Pessoas (Quadro de Colaboradores) */}
-          {hasDp && (
-            <button
-              onClick={() => setActiveTab('equipe-interna')}
-              className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-semibold transition-all cursor-pointer ${
-                activeTab === 'equipe-interna'
-                  ? 'bg-[#2563EB] text-white shadow-xs font-bold'
-                  : 'text-[#1E293B] hover:bg-[#F8FAFC] hover:text-[#2563EB]'
-              }`}
-            >
-              <Users className="w-4 h-4 text-[#2563EB]" />
-              <span>Pessoas</span>
-            </button>
-          )}
-
-          {/* 5. Ponto Digital */}
-          {hasPonto && (
-            <button
-              onClick={() => setActiveTab('ponto-digital')}
-              className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-semibold transition-all cursor-pointer ${
-                activeTab === 'ponto-digital'
-                  ? 'bg-[#2563EB] text-white shadow-xs font-bold'
-                  : 'text-[#1E293B] hover:bg-[#F8FAFC] hover:text-[#2563EB]'
-              }`}
-            >
-              <Clock className="w-4 h-4 text-[#2563EB]" />
-              <span>Ponto Digital</span>
-            </button>
-          )}
-
-          {/* 6. Departamento Pessoal */}
+          {/* 4. Colaboradores */}
           <div className="space-y-1 pt-1">
             <button
               onClick={() => setDpOpen(!dpOpen)}
@@ -290,13 +265,13 @@ export const Sidebar: React.FC<SidebarProps> = ({
                   'configuracoes-trabalhistas',
                   'departamento-pessoal'
                 ].includes(activeTab)
-                  ? 'text-[#2563EB] bg-blue-50/50'
+                  ? 'text-[#2563EB] bg-blue-50/50 font-bold'
                   : 'text-[#1E293B] hover:bg-[#F8FAFC]'
               }`}
             >
               <div className="flex items-center gap-3">
-                <Calculator className="w-4 h-4 text-[#2563EB]" />
-                <span>Departamento Pessoal</span>
+                <Users className="w-4 h-4 text-[#2563EB]" />
+                <span>Colaboradores</span>
               </div>
               {dpOpen ? (
                 <ChevronDown className="w-3.5 h-3.5 text-[#64748B]" />
@@ -315,7 +290,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                       : 'text-[#64748B] hover:bg-[#F8FAFC] hover:text-[#1E293B]'
                   }`}
                 >
-                  <span>Colaboradores</span>
+                  <span>Lista de Colaboradores</span>
                 </button>
 
                 <button

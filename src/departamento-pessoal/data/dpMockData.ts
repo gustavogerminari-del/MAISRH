@@ -58,6 +58,16 @@ export const INITIAL_COLABORADORES: ColaboradorCompleto[] = [
       optanteValeTransporte: true
     },
     beneficiosAtivos: ['ben-vt-01', 'ben-vr-01', 'ben-saude-01', 'ben-odonto-01'],
+    acessoColaborador: {
+      loginUsername: 'ana.paula@maisrh.com.br',
+      statusAcesso: 'Ativo',
+      dataUltimoAcesso: '2026-07-27 09:15',
+      senhaCriada: true
+    },
+    historico: [
+      { id: 'h1', data: '2022-03-15', tipo: 'Admissão', descricao: 'Admitida no cargo Analista de RH com salário de R$ 6.200,00', responsavel: 'Luciana Mello' },
+      { id: 'h2', data: '2024-01-10', tipo: 'Promoção', descricao: 'Promovida para Coordenadora de Recursos Humanos com novo salário R$ 8.500,00', responsavel: 'Diretoria de RH' }
+    ],
     createdAt: '2022-03-15',
     updatedAt: '2026-07-01'
   },
@@ -392,6 +402,37 @@ export const DEFAULT_CONFIG_TRABALHISTA: ConfiguracoesTrabalhistas = {
   horarioNoturnoInicio: '22:00',
   horarioNoturnoFim: '05:00',
   aliquotaFgtsPercent: 8,
+  
+  // Regras de Jornada, Banco de Horas e Hora Extra
+  regrasJornada: {
+    tipoControle: 'Modelo misto',
+    jornadaSemanal: '44h',
+    jornadaDiariaHoras: 8.8,
+    escalaPadrao: 'Segunda a sexta',
+    horariosPadrao: {
+      entrada: '08:00',
+      intervaloSaida: '12:00',
+      intervaloRetorno: '13:12',
+      saida: '18:00'
+    },
+    pagaHoraExtra: true,
+    horaExtraDiaUtilPercent: 50,
+    horaExtraDomingoFeriadoPercent: 100,
+    adicionalNoturnoPercent: 20,
+    percentuaisPersonalizados: [
+      { descricao: 'Hora Extra Feriado Nacional Coletivo', percentual: 100 },
+      { descricao: 'Hora Extra Plantão de Prontidão', percentual: 60 }
+    ],
+    ativarBancoHoras: true,
+    prazoCompensacao: '6 meses',
+    limiteSaldoPositivoHoras: 20,
+    limiteSaldoNegativoHoras: 5,
+    formaAprovacao: 'Aprovação do Gestor',
+    modeloMistoRegra: {
+      limiteDiarioBancoHoras: 2,
+      limiteMensalBancoHoras: 20
+    }
+  },
   
   // Tabela INSS 2026 (Oficial Vigorante)
   tabelaInss: [

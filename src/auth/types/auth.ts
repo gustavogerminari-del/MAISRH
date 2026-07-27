@@ -8,9 +8,10 @@ export type RoleProfile =
   | 'Administrador'
   | 'Gestor de Seleção'
   | 'Recrutador Sênior'
-  | 'Analista de RH';
+  | 'Analista de RH'
+  | 'Colaborador';
 
-export type UserType = 'MASTER' | 'EMPRESA' | 'CANDIDATO' | 'FUNCIONARIO';
+export type UserType = 'MASTER' | 'EMPRESA' | 'CANDIDATO' | 'FUNCIONARIO' | 'COLABORADOR';
 
 export type ScreenRouteKey =
   | 'dashboard'
@@ -20,6 +21,13 @@ export type ScreenRouteKey =
   | 'entrevistas'
   | 'relatorios'
   | 'empresa'
+  | 'colaboradores'
+  | 'departamento-pessoal'
+  | 'beneficios'
+  | 'ferias'
+  | 'rescisao'
+  | 'relatorios-dp'
+  | 'configuracoes-trabalhistas'
   | 'equipe-interna'
   | 'site-vagas'
   | 'consultor-rh'
@@ -29,7 +37,8 @@ export type ScreenRouteKey =
   | 'auditoria'
   | 'planos-saas'
   | 'acesso-master'
-  | 'configuracoes';
+  | 'configuracoes'
+  | 'portal-colaborador';
 
 export type SystemActionKey =
   | 'create_job'
@@ -56,6 +65,10 @@ export interface UserProfile {
   companyName?: string;
   tenantId?: string;
   tenantName?: string;
+  colaboradorId?: string;
+  portalAccessStatus?: 'Sem acesso' | 'Convite enviado' | 'Ativo' | 'Bloqueado';
+  mustChangePassword?: boolean;
+  tempPassword?: string;
 }
 
 export interface UserCredentials {
