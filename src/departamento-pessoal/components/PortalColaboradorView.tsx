@@ -309,32 +309,61 @@ export const PortalColaboradorView: React.FC<PortalColaboradorViewProps> = ({
                   </div>
                 </div>
 
-                <div className="space-y-2">
-                  <p className="text-xs font-bold text-slate-800 text-center mb-2">Registrar Batida de Ponto Agora:</p>
-                  <div className="grid grid-cols-2 gap-2">
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between">
+                    <p className="text-xs font-black uppercase tracking-wider text-slate-700">
+                      📱 Registrar Batida de Ponto
+                    </p>
+                    <span className="text-[10px] text-slate-500 font-bold">Toque Único</span>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                    {/* 🟢 Registrar Entrada */}
                     <button
                       onClick={() => handleBaterPonto('Entrada')}
-                      className="p-3 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-black rounded-xl shadow-xs transition-all cursor-pointer flex items-center justify-center gap-1.5"
+                      className="w-full py-3.5 px-4 bg-emerald-600 hover:bg-emerald-700 text-white font-black text-sm rounded-2xl shadow-md hover:shadow-lg active:scale-98 transition-all cursor-pointer flex items-center justify-between min-h-[52px]"
                     >
-                      <CheckCircle2 className="w-4 h-4" /> Entrada (08:00)
+                      <div className="flex items-center gap-2.5">
+                        <span className="w-3.5 h-3.5 rounded-full bg-emerald-300 animate-pulse border-2 border-white shrink-0" />
+                        <span>🟢 Registrar Entrada</span>
+                      </div>
+                      <span className="text-xs font-mono font-bold bg-emerald-700/80 px-2 py-0.5 rounded-lg text-emerald-100">08:00</span>
                     </button>
+
+                    {/* 🟡 Intervalo */}
                     <button
                       onClick={() => handleBaterPonto('Saída Almoço')}
-                      className="p-3 bg-amber-500 hover:bg-amber-600 text-white text-xs font-black rounded-xl shadow-xs transition-all cursor-pointer flex items-center justify-center gap-1.5"
+                      className="w-full py-3.5 px-4 bg-amber-500 hover:bg-amber-600 text-white font-black text-sm rounded-2xl shadow-md hover:shadow-lg active:scale-98 transition-all cursor-pointer flex items-center justify-between min-h-[52px]"
                     >
-                      Intervalo (12:00)
+                      <div className="flex items-center gap-2.5">
+                        <span className="w-3.5 h-3.5 rounded-full bg-amber-200 border-2 border-white shrink-0" />
+                        <span>🟡 Intervalo</span>
+                      </div>
+                      <span className="text-xs font-mono font-bold bg-amber-600/80 px-2 py-0.5 rounded-lg text-amber-100">12:00</span>
                     </button>
+
+                    {/* 🔵 Retorno */}
                     <button
                       onClick={() => handleBaterPonto('Retorno Almoço')}
-                      className="p-3 bg-blue-600 hover:bg-blue-700 text-white text-xs font-black rounded-xl shadow-xs transition-all cursor-pointer flex items-center justify-center gap-1.5"
+                      className="w-full py-3.5 px-4 bg-blue-600 hover:bg-blue-700 text-white font-black text-sm rounded-2xl shadow-md hover:shadow-lg active:scale-98 transition-all cursor-pointer flex items-center justify-between min-h-[52px]"
                     >
-                      Retorno (13:00)
+                      <div className="flex items-center gap-2.5">
+                        <span className="w-3.5 h-3.5 rounded-full bg-blue-200 border-2 border-white shrink-0" />
+                        <span>🔵 Retorno</span>
+                      </div>
+                      <span className="text-xs font-mono font-bold bg-blue-700/80 px-2 py-0.5 rounded-lg text-blue-100">13:00</span>
                     </button>
+
+                    {/* 🔴 Saída */}
                     <button
                       onClick={() => handleBaterPonto('Saída')}
-                      className="p-3 bg-slate-800 hover:bg-slate-900 text-white text-xs font-black rounded-xl shadow-xs transition-all cursor-pointer flex items-center justify-center gap-1.5"
+                      className="w-full py-3.5 px-4 bg-rose-600 hover:bg-rose-700 text-white font-black text-sm rounded-2xl shadow-md hover:shadow-lg active:scale-98 transition-all cursor-pointer flex items-center justify-between min-h-[52px]"
                     >
-                      Saída (17:00)
+                      <div className="flex items-center gap-2.5">
+                        <span className="w-3.5 h-3.5 rounded-full bg-rose-300 border-2 border-white shrink-0" />
+                        <span>🔴 Saída</span>
+                      </div>
+                      <span className="text-xs font-mono font-bold bg-rose-700/80 px-2 py-0.5 rounded-lg text-rose-100">17:00</span>
                     </button>
                   </div>
                 </div>

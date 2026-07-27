@@ -207,8 +207,12 @@ export async function fetchEmpresasFirestore(): Promise<ClientTenant[]> {
       });
       return list;
     }
-  } catch (err) {
-    console.error('Erro ao buscar empresas do Firestore:', err);
+  } catch (err: any) {
+    if (err?.message?.includes('offline') || err?.code === 'unavailable') {
+      console.warn('Firestore offline ao consultar empresas. Utilizando fallback de empresas local.');
+    } else {
+      console.warn('Erro ao buscar empresas do Firestore:', err?.message || err);
+    }
   }
 
   // Fallback local storage or mocks
@@ -292,8 +296,12 @@ export async function fetchModulosFirestore(): Promise<PlatformModule[]> {
       });
       return list;
     }
-  } catch (err) {
-    console.error('Erro ao buscar módulos do Firestore:', err);
+  } catch (err: any) {
+    if (err?.message?.includes('offline') || err?.code === 'unavailable') {
+      console.warn('Firestore offline ao consultar módulos. Utilizando fallback de módulos local.');
+    } else {
+      console.warn('Erro ao buscar módulos do Firestore:', err?.message || err);
+    }
   }
 
   const saved = localStorage.getItem('mais_rh_platform_modules');
@@ -371,8 +379,12 @@ export async function fetchEmpresaModulosFirestore(empresaId: string): Promise<R
         return (empData.rawTenantData?.modules as unknown as Record<string, boolean>) || {};
       }
     }
-  } catch (err) {
-    console.error('Erro ao buscar empresa_modulos no Firestore:', err);
+  } catch (err: any) {
+    if (err?.message?.includes('offline') || err?.code === 'unavailable') {
+      console.warn('Firestore offline ao consultar empresa_modulos. Utilizando permissões locais do Tenant.');
+    } else {
+      console.warn('Informação de empresa_modulos indisponível no Firestore:', err?.message || err);
+    }
   }
 
   return result;

@@ -9,7 +9,8 @@ import {
   CheckCircle2, 
   Sparkles,
   ChevronDown,
-  Crown
+  Crown,
+  Menu
 } from 'lucide-react';
 import { useAuth } from '../auth';
 
@@ -20,6 +21,7 @@ interface NavbarProps {
   openScheduleInterviewModal: () => void;
   openNewJobModal: () => void;
   onOpenMasterPanel?: () => void;
+  onToggleMobileMenu?: () => void;
 }
 
 export const Navbar: React.FC<NavbarProps> = ({
@@ -29,6 +31,7 @@ export const Navbar: React.FC<NavbarProps> = ({
   openScheduleInterviewModal,
   openNewJobModal,
   onOpenMasterPanel,
+  onToggleMobileMenu,
 }) => {
   const { user } = useAuth();
   const [showNotifications, setShowNotifications] = useState(false);
@@ -41,18 +44,28 @@ export const Navbar: React.FC<NavbarProps> = ({
   ];
 
   return (
-    <header className="bg-white border-b border-[#E5E7EB] sticky top-0 z-30 px-4 lg:px-8 py-3 flex items-center justify-between shadow-2xs">
-      {/* Brand & Logo */}
-      <div className="flex items-center gap-3">
+    <header className="bg-white border-b border-[#E5E7EB] sticky top-0 z-30 px-3 sm:px-4 lg:px-8 py-2.5 sm:py-3 flex items-center justify-between shadow-2xs">
+      {/* Left: Mobile Menu Hamburger & Brand Logo */}
+      <div className="flex items-center gap-2.5">
+        {onToggleMobileMenu && (
+          <button
+            onClick={onToggleMobileMenu}
+            className="lg:hidden p-2 text-slate-700 hover:text-blue-600 hover:bg-slate-100 rounded-xl transition-all cursor-pointer border border-slate-200"
+            title="Abrir Menu de Navegação"
+          >
+            <Menu className="w-5 h-5" />
+          </button>
+        )}
+
         <div className="bg-[#2563EB] text-white p-2 rounded-xl font-bold flex items-center justify-center shadow-xs">
           <Building2 className="w-5 h-5" />
         </div>
         <div>
           <div className="flex items-center gap-2">
-            <h1 className="text-xl font-black tracking-tight text-[#1E293B]">
+            <h1 className="text-lg sm:text-xl font-black tracking-tight text-[#1E293B]">
               MAIS<span className="text-[#2563EB]">RH</span>
             </h1>
-            <span className="bg-blue-50 text-[#2563EB] text-[10px] font-extrabold px-2 py-0.5 rounded-md border border-blue-200/80 uppercase">
+            <span className="bg-blue-50 text-[#2563EB] text-[10px] font-extrabold px-2 py-0.5 rounded-md border border-blue-200/80 uppercase hidden sm:inline-block">
               SaaS Corporativo
             </span>
           </div>

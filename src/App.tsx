@@ -64,6 +64,7 @@ function MainAppContent() {
   const [isJobModalOpen, setIsJobModalOpen] = useState(false);
   const [isCandidateModalOpen, setIsCandidateModalOpen] = useState(false);
   const [isInterviewModalOpen, setIsInterviewModalOpen] = useState(false);
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
   // Handlers
   const handleAddJob = (newJobData: Omit<Job, 'id' | 'applicantsCount' | 'createdAt'>) => {
@@ -221,6 +222,7 @@ function MainAppContent() {
         openScheduleInterviewModal={() => setIsInterviewModalOpen(true)}
         openNewJobModal={() => setIsJobModalOpen(true)}
         onOpenMasterPanel={() => setActiveTab('acesso-master')}
+        onToggleMobileMenu={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
       />
 
       {/* Main Layout Container */}
@@ -236,6 +238,8 @@ function MainAppContent() {
             jobsCount={jobs.length}
             candidatesCount={candidates.length}
             interviewsCount={interviews.length}
+            isOpenMobile={isMobileMenuOpen}
+            onCloseMobile={() => setIsMobileMenuOpen(false)}
           />
         )}
 
