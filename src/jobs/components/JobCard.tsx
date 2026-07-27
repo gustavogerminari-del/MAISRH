@@ -19,6 +19,7 @@ import { formatDateBR } from '../../core';
 export interface JobCardProps {
   job: Job;
   onViewDetails: (job: Job) => void;
+  onManageCandidates?: (job: Job) => void;
   onEditJob?: (job: Job) => void;
   onArchiveJob?: (jobId: string) => void;
   canEdit?: boolean;
@@ -28,6 +29,7 @@ export interface JobCardProps {
 export const JobCard: React.FC<JobCardProps> = ({
   job,
   onViewDetails,
+  onManageCandidates,
   onEditJob,
   onArchiveJob,
   canEdit = true,
@@ -124,9 +126,17 @@ export const JobCard: React.FC<JobCardProps> = ({
               variant="outline"
               size="sm"
               onClick={() => onViewDetails(job)}
-              rightIcon={<ChevronRight className="w-3.5 h-3.5" />}
             >
               Detalhes
+            </Button>
+
+            <Button
+              variant="primary"
+              size="sm"
+              onClick={() => onManageCandidates ? onManageCandidates(job) : onViewDetails(job)}
+              rightIcon={<ChevronRight className="w-3.5 h-3.5" />}
+            >
+              Candidatos ({job.applicantsCount})
             </Button>
           </div>
         </div>

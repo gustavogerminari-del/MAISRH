@@ -16,6 +16,7 @@ import { JobCard } from './JobCard';
 import { JobDetailModal } from './JobDetailModal';
 import { JobFormModal } from './JobFormModal';
 import { JobFiltersBar } from './JobFiltersBar';
+import { JobCandidatesManagementView } from './JobCandidatesManagementView';
 import { useAuth } from '../../auth';
 import { Button, Card } from '../../shared';
 import { logger } from '../../core';
@@ -46,9 +47,17 @@ export const JobsManagementView: React.FC<JobsManagementViewProps> = ({
   }, [initialJobsList]);
 
   const [selectedJob, setSelectedJob] = useState<Job | null>(null);
+  const [selectedJobForCandidates, setSelectedJobForCandidates] = useState<Job | null>(null);
   const [isDetailOpen, setIsDetailOpen] = useState(false);
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [editingJob, setEditingJob] = useState<Job | null>(null);
+
+  const handleManageCandidates = (job: Job) => {
+    setSelectedJobForCandidates(job);
+    if (onOpenCandidatesForJob) {
+      onOpenCandidatesForJob(job.id);
+    }
+  };
 
   const [viewMode, setViewMode] = useState<'grid' | 'table'>('grid');
 
@@ -168,6 +177,15 @@ export const JobsManagementView: React.FC<JobsManagementViewProps> = ({
     setIsDetailOpen(true);
   };
 
+  if (selectedJobForCandidates) {
+    return (
+      <JobCandidatesManagementView
+        job={selectedJobForCandidates}
+        onBack={() => setSelectedJobForCandidates(null)}
+      />
+    );
+  }
+
   return (
     <div className="space-y-6">
       {/* Header Banner */}
@@ -249,6 +267,7 @@ export const JobsManagementView: React.FC<JobsManagementViewProps> = ({
               key={job.id}
               job={job}
               onViewDetails={handleViewDetails}
+              onManageCandidates={handleManageCandidates}
               onEditJob={handleOpenEditModal}
               onArchiveJob={handleArchiveJob}
               canEdit={canEdit}
@@ -265,6 +284,7 @@ export const JobsManagementView: React.FC<JobsManagementViewProps> = ({
         onClose={() => setIsDetailOpen(false)}
         onEdit={handleOpenEditModal}
         onStatusChange={handleStatusChange}
+        onManageCandidates={handleManageCandidates}
         canEdit={canEdit}
       />
 

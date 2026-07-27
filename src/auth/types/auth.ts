@@ -14,6 +14,7 @@ export type UserType = 'MASTER' | 'EMPRESA' | 'CANDIDATO' | 'FUNCIONARIO';
 
 export type ScreenRouteKey =
   | 'dashboard'
+  | 'ponto-digital'
   | 'vagas'
   | 'banco-talentos'
   | 'entrevistas'

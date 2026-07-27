@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   ShieldAlert, 
   Search, 
@@ -17,13 +17,29 @@ import {
 } from 'lucide-react';
 import { AuditLogEntry, AuditSeverity } from './types';
 import { MOCK_AUDIT_LOGS } from './mockData';
+import { AuditService } from '../services/AuditService';
 
 export const AuditLogsView: React.FC = () => {
   const [logs, setLogs] = useState<AuditLogEntry[]>(MOCK_AUDIT_LOGS);
+  const [loading, setLoading] = useState<boolean>(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedSeverity, setSelectedSeverity] = useState<string>('Todas');
   const [selectedModule, setSelectedModule] = useState<string>('Todos');
   const [selectedLogDetail, setSelectedLogDetail] = useState<AuditLogEntry | null>(null);
+
+  useEffect(() => {
+    let isMounted = true;
+    AuditService.list().then(data => {
+      if (isMounted && data && data.length > 0) {
+        setLogs(data);
+      }
+      setLoading(false);
+    }).catch(err => {
+      console.warn('Erro ao carregar audit logs:', err);
+      setLoading(false);
+    });
+    return () => { isMounted = false; };
+  }, []);
 
   const filteredLogs = logs.filter(log => {
     const matchesSearch = log.userName.toLowerCase().includes(searchTerm.toLowerCase()) ||

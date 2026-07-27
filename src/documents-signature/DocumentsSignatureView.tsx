@@ -19,9 +19,11 @@ import {
 } from 'lucide-react';
 import { HRDocument, DocumentCategory } from './types';
 import { MOCK_DOCUMENTS } from './mockData';
+import { DocumentService } from '../services/DocumentService';
 
 export const DocumentsSignatureView: React.FC = () => {
   const [documents, setDocuments] = useState<HRDocument[]>(MOCK_DOCUMENTS);
+  const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<string>('Todas');
   const [selectedDocForSigning, setSelectedDocForSigning] = useState<HRDocument | null>(null);
@@ -34,38 +36,59 @@ export const DocumentsSignatureView: React.FC = () => {
   const [newEntityType, setNewEntityType] = useState<'Colaborador' | 'Candidato' | 'Vaga' | 'Empresa'>('Colaborador');
   const [fileObj, setFileObj] = useState<File | null>(null);
 
-  // Digital Signature Simulator
-  const handleSimulateDigitalSignature = (docId: string) => {
-    setDocuments(documents.map(d => {
-      if (d.id === docId) {
-        return {
-          ...d,
-          signatureStatus: 'Assinado Digitalmente',
-          signers: d.signers.map(s => ({
-            ...s,
-            hasSigned: true,
-            signedAt: new Date().toISOString().replace('T', ' ').substring(0, 16)
-          }))
-        };
+  React.useEffect(() => {
+    let isMounted = true;
+    DocumentService.list().then(data => {
+      if (isMounted) {
+        if (data && data.length > 0) setDocuments(data);
+        setLoading(false);
       }
-      return d;
-    }));
+    }).catch(err => {
+      console.warn('Erro ao carregar documentos do Firestore:', err);
+      if (isMounted) setLoading(false);
+    });
+    return () => { isMounted = false; };
+  }, []);
+
+  // Digital Signature Simulator
+  const handleSimulateDigitalSignature = async (docId: string) => {
+    const targetDoc = documents.find(d => d.id === docId);
+    if (targetDoc) {
+      const updatedSigners = targetDoc.signers.map(s => ({
+        ...s,
+        hasSigned: true,
+        signedAt: new Date().toISOString().replace('T', ' ').substring(0, 16)
+      }));
+      await DocumentService.update(docId, {
+        signatureStatus: 'Assinado Digitalmente',
+        signers: updatedSigners
+      });
+
+      setDocuments(documents.map(d => {
+        if (d.id === docId) {
+          return {
+            ...d,
+            signatureStatus: 'Assinado Digitalmente',
+            signers: updatedSigners
+          };
+        }
+        return d;
+      }));
+    }
     setSelectedDocForSigning(null);
   };
 
-  const handleUploadSubmit = (e: React.FormEvent) => {
+  const handleUploadSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newTitle || !newEntityName) return;
 
-    const newDoc: HRDocument = {
-      id: `doc-${Date.now()}`,
+    const newDocData: Partial<HRDocument> = {
       title: newTitle,
       fileName: fileObj ? fileObj.name : 'documento_novo.pdf',
       fileSize: fileObj ? `${(fileObj.size / (1024 * 1024)).toFixed(1)} MB` : '1.1 MB',
       category: newCategory,
       linkedEntityName: newEntityName,
       linkedType: newEntityType,
-      uploadedAt: new Date().toISOString().split('T')[0],
       signatureStatus: 'Pendente de Assinatura',
       signers: [
         { name: newEntityName, email: 'usuario@dominio.com.br', role: 'Colaborador', hasSigned: false }
@@ -73,7 +96,9 @@ export const DocumentsSignatureView: React.FC = () => {
       accessPermissions: { canView: true, canSign: true, canDownload: true, canDelete: true }
     };
 
-    setDocuments([newDoc, ...documents]);
+    const savedDoc = await DocumentService.create(newDocData);
+
+    setDocuments([savedDoc, ...documents]);
     setShowUploadModal(false);
     setNewTitle('');
     setNewEntityName('');

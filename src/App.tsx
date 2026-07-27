@@ -15,6 +15,7 @@ import { RHConsultantView } from './rh-consultant';
 import { BenefitsLeavesView } from './benefits-leaves';
 import { DocumentsSignatureView } from './documents-signature';
 import { PayrollView } from './payroll';
+import { PontoDigitalView } from './ponto-digital';
 import { AuditLogsView } from './audit-logs';
 import { SubscriptionsView } from './subscriptions';
 import { MasterAdminView } from './master-admin';
@@ -301,6 +302,8 @@ function MainAppContent() {
 
             {activeTab === 'folha-pagamento' && <PayrollView />}
 
+            {activeTab === 'ponto-digital' && <PontoDigitalView />}
+
             {activeTab === 'auditoria' && <AuditLogsView />}
 
             {activeTab === 'planos-saas' && <SubscriptionsView />}
@@ -338,10 +341,31 @@ function MainAppContent() {
   );
 }
 
+import { 
+  CompanyProvider, 
+  PermissionProvider, 
+  ModuleProvider, 
+  SubscriptionProvider, 
+  NotificationProvider, 
+  SettingsProvider 
+} from './contexts';
+
 export default function App() {
   return (
     <AuthProvider>
-      <MainAppContent />
+      <CompanyProvider>
+        <PermissionProvider>
+          <ModuleProvider>
+            <SubscriptionProvider>
+              <NotificationProvider>
+                <SettingsProvider>
+                  <MainAppContent />
+                </SettingsProvider>
+              </NotificationProvider>
+            </SubscriptionProvider>
+          </ModuleProvider>
+        </PermissionProvider>
+      </CompanyProvider>
     </AuthProvider>
   );
 }

@@ -11,19 +11,34 @@ import {
   Sliders
 } from 'lucide-react';
 import { ClientSubscription, BillingInvoice, PlanTier, ModuleAccessConfig } from './types';
-import { MOCK_INVOICES } from './mockData';
-import { getSubscriptions, addSubscription, saveSubscriptionsToStorage } from './subscriptionsStore';
+import { MOCK_INVOICES, MOCK_SUBSCRIPTIONS } from './mockData';
 import { saveTenant, updateTenantModule } from '../master-admin/masterTenantsStore';
-import { saveEmpresaModuloFirestore } from '../lib/firestoreServices';
+import { SubscriptionService } from '../services/SubscriptionService';
+import { ModuleService } from '../services/ModuleService';
 
 export const SubscriptionsView: React.FC = () => {
-  const [subscriptions, setSubscriptions] = useState<ClientSubscription[]>(() => getSubscriptions());
+  const [subscriptions, setSubscriptions] = useState<ClientSubscription[]>(MOCK_SUBSCRIPTIONS);
   const [invoices] = useState<BillingInvoice[]>(MOCK_INVOICES);
+  const [loading, setLoading] = useState(true);
   const [showNewSubModal, setShowNewSubModal] = useState(false);
   const [newCompanyName, setNewCompanyName] = useState('');
   const [newCnpj, setNewCnpj] = useState('');
   const [newPlanTier, setNewPlanTier] = useState<PlanTier>('Professional');
   const [newMrrValue, setNewMrrValue] = useState(1200);
+
+  React.useEffect(() => {
+    let isMounted = true;
+    SubscriptionService.list().then(subs => {
+      if (isMounted) {
+        if (subs && subs.length > 0) setSubscriptions(subs);
+        setLoading(false);
+      }
+    }).catch(err => {
+      console.warn('Erro ao carregar assinaturas:', err);
+      if (isMounted) setLoading(false);
+    });
+    return () => { isMounted = false; };
+  }, []);
 
   // Calculate MRR & ARR
   const totalMRR = subscriptions.reduce((acc, s) => acc + s.mrrValue, 0);
@@ -36,47 +51,46 @@ export const SubscriptionsView: React.FC = () => {
   });
 
   // Toggle Module Permission
-  const handleToggleModule = (subId: string, moduleKey: keyof ModuleAccessConfig) => {
+  const handleToggleModule = async (subId: string, moduleKey: keyof ModuleAccessConfig) => {
     const targetSub = subscriptions.find(s => s.id === subId);
     if (!targetSub) return;
 
     const nextState = !targetSub.modulesEnabled[moduleKey];
 
-    const nextSubs = subscriptions.map(s => {
+    const updatedModules = {
+      ...targetSub.modulesEnabled,
+      [moduleKey]: nextState
+    };
+
+    await SubscriptionService.update(subId, {
+      modulesEnabled: updatedModules
+    });
+
+    const empresaId = subId.startsWith('sub-') ? `t-${subId.replace('sub-', '')}` : subId;
+    await ModuleService.setCompanyModule(empresaId, moduleKey as string, nextState);
+    updateTenantModule(empresaId, moduleKey as string, nextState);
+
+    setSubscriptions(subscriptions.map(s => {
       if (s.id === subId) {
         return {
           ...s,
-          modulesEnabled: {
-            ...s.modulesEnabled,
-            [moduleKey]: nextState
-          }
+          modulesEnabled: updatedModules
         };
       }
       return s;
-    });
-
-    saveSubscriptionsToStorage(nextSubs);
-    setSubscriptions(nextSubs);
-
-    // Sync Firestore & Tenant Store
-    const empresaId = subId.startsWith('sub-') ? `t-${subId.replace('sub-', '')}` : subId;
-    saveEmpresaModuloFirestore(empresaId, moduleKey as string, nextState).catch(console.error);
-    updateTenantModule(empresaId, moduleKey as string, nextState);
+    }));
   };
 
-  const handleCreateSub = (e: React.FormEvent) => {
+  const handleCreateSub = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newCompanyName) return;
 
-    const newSub: ClientSubscription = {
-      id: `sub-${Date.now()}`,
+    const newSubData: Partial<ClientSubscription> = {
       companyName: newCompanyName,
       cnpj: newCnpj || '00.000.000/0001-00',
       planTier: newPlanTier,
       mrrValue: newMrrValue,
       billingCycle: 'Mensal',
-      contractStart: new Date().toISOString().split('T')[0],
-      contractExpiration: new Date(Date.now() + 365*24*60*60*1000).toISOString().split('T')[0],
       paymentStatus: 'Em Dia / Ativo',
       modulesEnabled: {
         vagas: true,
@@ -89,13 +103,11 @@ export const SubscriptionsView: React.FC = () => {
         auditoriaLogs: newPlanTier === 'Enterprise'
       },
       userLimit: newPlanTier === 'Enterprise' ? 50 : 10,
-      activeUsersCount: 1,
-      lastPaymentDate: new Date().toISOString().split('T')[0],
-      nextRenewalDate: new Date(Date.now() + 30*24*60*60*1000).toISOString().split('T')[0]
+      activeUsersCount: 1
     };
 
-    const updatedSubs = addSubscription(newSub);
-    setSubscriptions(updatedSubs);
+    const newSub = await SubscriptionService.create(newSubData);
+    setSubscriptions([...subscriptions, newSub]);
 
     // Sync with Master Admin Tenant store and Firestore
     const newTenantId = `t-${Date.now()}`;

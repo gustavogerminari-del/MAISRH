@@ -1,60 +1,303 @@
 {
   "entities": {
-    "empresas": {
-      "title": "Empresas Clientes",
-      "description": "Cadastro de empresas clientes no MAIS RH",
-      "type": "object",
-      "properties": {
-        "empresaId": { "type": "string" },
-        "nomeEmpresa": { "type": "string" },
-        "CNPJ": { "type": "string" },
-        "email": { "type": "string" },
-        "plano": { "type": "string" },
-        "status": { "type": "string" },
-        "dataCriacao": { "type": "string" }
-      },
-      "required": ["empresaId", "nomeEmpresa"]
-    },
-    "modulos": {
-      "title": "Módulos de Plataforma",
-      "description": "Módulos disponíveis no SaaS",
-      "type": "object",
-      "properties": {
-        "moduloId": { "type": "string" },
-        "nome": { "type": "string" },
-        "codigo": { "type": "string" },
-        "descricao": { "type": "string" },
-        "ativo": { "type": "boolean" }
-      },
-      "required": ["moduloId", "nome", "codigo"]
-    },
-    "empresa_modulos": {
-      "title": "Relacionamento Empresa X Módulo",
-      "description": "Associação de módulos liberados para empresas",
+    "companies": {
+      "title": "Empresas",
+      "description": "Cadastro de empresas clientes no SaaS Multiempresa MAIS RH",
       "type": "object",
       "properties": {
         "id": { "type": "string" },
-        "empresaId": { "type": "string" },
-        "moduloId": { "type": "string" },
-        "ativo": { "type": "boolean" },
-        "dataLiberacao": { "type": "string" }
+        "name": { "type": "string" },
+        "cnpj": { "type": "string" },
+        "status": { "type": "string" },
+        "planId": { "type": "string" },
+        "enabledModules": { "type": "object" },
+        "createdAt": { "type": "string" },
+        "updatedAt": { "type": "string" },
+        "ownerUser": { "type": "string" }
       },
-      "required": ["empresaId", "moduloId", "ativo"]
+      "required": ["id", "name"]
     },
-    "usuarios": {
+    "users": {
       "title": "Usuários",
-      "description": "Perfis dos usuários no Firestore",
+      "description": "Perfis de usuários do sistema com atribuição de empresa e funções",
       "type": "object",
       "properties": {
         "uid": { "type": "string" },
-        "nome": { "type": "string" },
-        "email": { "type": "string" },
-        "tipoUsuario": { "type": "string" },
-        "empresaId": { "type": "string" },
+        "companyId": { "type": "string" },
+        "role": { "type": "string" },
+        "permissions": { "type": "array" },
         "status": { "type": "string" },
-        "dataCriacao": { "type": "string" }
+        "email": { "type": "string" },
+        "displayName": { "type": "string" },
+        "createdAt": { "type": "string" },
+        "updatedAt": { "type": "string" }
       },
-      "required": ["uid", "email", "tipoUsuario"]
+      "required": ["uid", "email"]
+    },
+    "modules": {
+      "title": "Módulos de Plataforma",
+      "description": "Catálogo global de módulos contratáveis do SaaS MAIS RH",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "key": { "type": "string" },
+        "description": { "type": "string" },
+        "status": { "type": "string" }
+      },
+      "required": ["id", "key", "name"]
+    },
+    "companyModules": {
+      "title": "Módulos por Empresa",
+      "description": "Vinculação de módulos ativos por empresa cliente",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "companyId": { "type": "string" },
+        "moduleId": { "type": "string" },
+        "active": { "type": "boolean" },
+        "enabledAt": { "type": "string" }
+      },
+      "required": ["companyId", "moduleId", "active"]
+    },
+    "jobs": {
+      "title": "Vagas de Emprego",
+      "description": "Processos seletivos e posições abertas por empresa",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "companyId": { "type": "string" },
+        "title": { "type": "string" },
+        "description": { "type": "string" },
+        "status": { "type": "string" },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["id", "companyId", "title"]
+    },
+    "applications": {
+      "title": "Candidaturais",
+      "description": "Candidaturas de talentos às vagas",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "companyId": { "type": "string" },
+        "jobId": { "type": "string" },
+        "candidateId": { "type": "string" },
+        "stage": { "type": "string" },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["id", "companyId", "jobId", "candidateId"]
+    },
+    "candidates": {
+      "title": "Banco de Talentos",
+      "description": "Candidatos e currículos cadastrados",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "companyId": { "type": "string" },
+        "name": { "type": "string" },
+        "email": { "type": "string" },
+        "cpf": { "type": "string" },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["id", "name", "email"]
+    },
+    "employees": {
+      "title": "Funcionários",
+      "description": "Quadro de funcionários internos por empresa",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "companyId": { "type": "string" },
+        "name": { "type": "string" },
+        "cpf": { "type": "string" },
+        "position": { "type": "string" },
+        "department": { "type": "string" },
+        "email": { "type": "string" },
+        "phone": { "type": "string" },
+        "escalaId": { "type": "string" },
+        "gestorId": { "type": "string" },
+        "status": { "type": "string" }
+      },
+      "required": ["id", "companyId", "name"]
+    },
+    "timeClock": {
+      "title": "Ponto Digital",
+      "description": "Registros de ponto, escalas, ajustes e banco de horas da empresa",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "companyId": { "type": "string" },
+        "employeeId": { "type": "string" },
+        "date": { "type": "string" },
+        "entryTime": { "type": "string" },
+        "intervalStart": { "type": "string" },
+        "intervalEnd": { "type": "string" },
+        "exitTime": { "type": "string" },
+        "latitude": { "type": "number" },
+        "longitude": { "type": "number" },
+        "device": { "type": "string" },
+        "photoUrl": { "type": "string" },
+        "status": { "type": "string" }
+      },
+      "required": ["id", "companyId", "employeeId", "date"]
+    },
+    "payroll": {
+      "title": "Folha de Pagamento",
+      "description": "Holerites, proventos, descontos e tributos trabalhistas",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "companyId": { "type": "string" },
+        "employeeId": { "type": "string" },
+        "period": { "type": "string" },
+        "grossSalary": { "type": "number" },
+        "netSalary": { "type": "number" },
+        "status": { "type": "string" }
+      },
+      "required": ["id", "companyId", "employeeId", "period"]
+    },
+    "benefits": {
+      "title": "Benefícios e Férias",
+      "description": "Gestão de VT, VR, plano de saúde e concessão de férias",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "companyId": { "type": "string" },
+        "employeeId": { "type": "string" },
+        "type": { "type": "string" },
+        "status": { "type": "string" }
+      },
+      "required": ["id", "companyId", "type"]
+    },
+    "subscriptions": {
+      "title": "Assinaturas SaaS",
+      "description": "Contratos e assinaturas ativas das empresas clientes",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "companyId": { "type": "string" },
+        "planId": { "type": "string" },
+        "status": { "type": "string" },
+        "billingCycle": { "type": "string" }
+      },
+      "required": ["id", "companyId", "planId"]
+    },
+    "plans": {
+      "title": "Planos SaaS",
+      "description": "Planos comerciais oferecidos na plataforma",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "price": { "type": "number" },
+        "modules": { "type": "array" }
+      },
+      "required": ["id", "name", "price"]
+    },
+    "documents": {
+      "title": "Gestão de Documentos",
+      "description": "Documentos corporativos e assinaturas eletrônicas",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "companyId": { "type": "string" },
+        "title": { "type": "string" },
+        "status": { "type": "string" }
+      },
+      "required": ["id", "companyId", "title"]
+    },
+    "notifications": {
+      "title": "Notificações",
+      "description": "Notificações do sistema para usuários",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "companyId": { "type": "string" },
+        "userId": { "type": "string" },
+        "message": { "type": "string" },
+        "read": { "type": "boolean" }
+      },
+      "required": ["id", "message"]
+    },
+    "auditLogs": {
+      "title": "Logs de Auditoria",
+      "description": "Rastreabilidade de ações administrativas e transações",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "companyId": { "type": "string" },
+        "userId": { "type": "string" },
+        "action": { "type": "string" },
+        "timestamp": { "type": "string" }
+      },
+      "required": ["id", "action", "timestamp"]
+    }
+  },
+  "firestore": {
+    "companies/{companyId}": {
+      "schema": { "$ref": "#/entities/companies" },
+      "description": "Empresas clientes cadastradas"
+    },
+    "users/{userId}": {
+      "schema": { "$ref": "#/entities/users" },
+      "description": "Perfis de usuários"
+    },
+    "modules/{moduleId}": {
+      "schema": { "$ref": "#/entities/modules" },
+      "description": "Catálogo de módulos da plataforma"
+    },
+    "companyModules/{docId}": {
+      "schema": { "$ref": "#/entities/companyModules" },
+      "description": "Permissões de módulos ativados por empresa"
+    },
+    "jobs/{jobId}": {
+      "schema": { "$ref": "#/entities/jobs" },
+      "description": "Vagas por empresa"
+    },
+    "applications/{appId}": {
+      "schema": { "$ref": "#/entities/applications" },
+      "description": "Candidaturas às vagas"
+    },
+    "candidates/{candidateId}": {
+      "schema": { "$ref": "#/entities/candidates" },
+      "description": "Banco de talentos"
+    },
+    "employees/{employeeId}": {
+      "schema": { "$ref": "#/entities/employees" },
+      "description": "Funcionários por empresa"
+    },
+    "timeClock/{recordId}": {
+      "schema": { "$ref": "#/entities/timeClock" },
+      "description": "Registros de ponto digital e histórico"
+    },
+    "payroll/{payrollId}": {
+      "schema": { "$ref": "#/entities/payroll" },
+      "description": "Folhas de pagamento"
+    },
+    "benefits/{benefitId}": {
+      "schema": { "$ref": "#/entities/benefits" },
+      "description": "Benefícios e férias"
+    },
+    "subscriptions/{subId}": {
+      "schema": { "$ref": "#/entities/subscriptions" },
+      "description": "Assinaturas ativas"
+    },
+    "plans/{planId}": {
+      "schema": { "$ref": "#/entities/plans" },
+      "description": "Planos disponíveis"
+    },
+    "documents/{docId}": {
+      "schema": { "$ref": "#/entities/documents" },
+      "description": "Documentos e assinaturas"
+    },
+    "notifications/{notifId}": {
+      "schema": { "$ref": "#/entities/notifications" },
+      "description": "Notificações do sistema"
+    },
+    "auditLogs/{logId}": {
+      "schema": { "$ref": "#/entities/auditLogs" },
+      "description": "Logs de auditoria"
     }
   }
 }

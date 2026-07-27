@@ -19,12 +19,14 @@ import {
 } from 'lucide-react';
 import { LeaveRequest, EmployeeLeaveBalance, BenefitItem } from './types';
 import { MOCK_LEAVE_REQUESTS, MOCK_LEAVE_BALANCES, MOCK_BENEFITS } from './mockData';
+import { BenefitService } from '../services/BenefitService';
 
 export const BenefitsLeavesView: React.FC = () => {
   const [activeTab, setActiveTab] = useState<'solicitacoes' | 'saldos' | 'beneficios'>('solicitacoes');
   const [leaveRequests, setLeaveRequests] = useState<LeaveRequest[]>(MOCK_LEAVE_REQUESTS);
   const [balances, setBalances] = useState<EmployeeLeaveBalance[]>(MOCK_LEAVE_BALANCES);
   const [benefits, setBenefits] = useState<BenefitItem[]>(MOCK_BENEFITS);
+  const [loading, setLoading] = useState(true);
 
   // New Leave Request Modal State
   const [showNewRequestModal, setShowNewRequestModal] = useState(false);
@@ -34,6 +36,24 @@ export const BenefitsLeavesView: React.FC = () => {
   const [reqStartDate, setReqStartDate] = useState('');
   const [reqEndDate, setReqEndDate] = useState('');
   const [reqNotes, setReqNotes] = useState('');
+
+  React.useEffect(() => {
+    let isMounted = true;
+    Promise.all([
+      BenefitService.listLeaveRequests(),
+      BenefitService.list()
+    ]).then(([leaves, bens]) => {
+      if (isMounted) {
+        if (leaves && leaves.length > 0) setLeaveRequests(leaves);
+        if (bens && bens.length > 0) setBenefits(bens);
+        setLoading(false);
+      }
+    }).catch(err => {
+      console.warn('Erro ao carregar dados de benefícios e férias:', err);
+      if (isMounted) setLoading(false);
+    });
+    return () => { isMounted = false; };
+  }, []);
 
   // Handle Approve / Reject
   const handleApprove = (id: string) => {
@@ -45,7 +65,7 @@ export const BenefitsLeavesView: React.FC = () => {
   };
 
   // Handle New Request Submit
-  const handleCreateRequest = (e: React.FormEvent) => {
+  const handleCreateRequest = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!reqEmployeeName || !reqStartDate || !reqEndDate) return;
 
@@ -54,21 +74,19 @@ export const BenefitsLeavesView: React.FC = () => {
     const diffTime = Math.abs(end.getTime() - start.getTime());
     const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1;
 
-    const newReq: LeaveRequest = {
-      id: `req-${Date.now()}`,
-      employeeId: `emp-${Date.now()}`,
+    const newReqData: Partial<LeaveRequest> = {
       employeeName: reqEmployeeName,
       department: reqDepartment,
       type: reqType,
       startDate: reqStartDate,
       endDate: reqEndDate,
       totalDays: diffDays,
-      status: 'Pendente de Aprovação',
-      requestedAt: new Date().toISOString().split('T')[0],
       notes: reqNotes
     };
 
-    setLeaveRequests([newReq, ...leaveRequests]);
+    const savedReq = await BenefitService.createLeaveRequest(newReqData);
+
+    setLeaveRequests([savedReq, ...leaveRequests]);
     setShowNewRequestModal(false);
     setReqEmployeeName('');
     setReqNotes('');

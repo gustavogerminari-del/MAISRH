@@ -25,6 +25,7 @@ export interface JobDetailModalProps {
   onClose: () => void;
   onEdit?: (job: Job) => void;
   onStatusChange?: (jobId: string, newStatus: JobStatus) => void;
+  onManageCandidates?: (job: Job) => void;
   canEdit?: boolean;
 }
 
@@ -34,6 +35,7 @@ export const JobDetailModal: React.FC<JobDetailModalProps> = ({
   onClose,
   onEdit,
   onStatusChange,
+  onManageCandidates,
   canEdit = true,
 }) => {
   if (!isOpen || !job) return null;
@@ -178,6 +180,20 @@ export const JobDetailModal: React.FC<JobDetailModalProps> = ({
           )}
 
           <div className="flex items-center gap-2 ml-auto">
+            {onManageCandidates && (
+              <Button
+                variant="primary"
+                size="sm"
+                onClick={() => {
+                  onClose();
+                  onManageCandidates(job);
+                }}
+                leftIcon={<Users className="w-3.5 h-3.5" />}
+              >
+                Gerenciar Candidatos
+              </Button>
+            )}
+
             {canEdit && onEdit && (
               <Button
                 variant="outline"
