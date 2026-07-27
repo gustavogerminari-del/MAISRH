@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import {
   X,
   MapPin,
@@ -14,11 +14,13 @@ import {
   Edit3,
   Clock,
   UserCheck,
+  Sparkles,
 } from 'lucide-react';
 import { Candidate } from '../types/candidate';
 import { Job } from '../../jobs';
 import { CandidateClassificationBadge, CandidateStatusBadge } from './CandidateClassificationBadge';
 import { Button } from '../../shared';
+import { CandidateScreeningModal } from '../../ai/components/CandidateScreeningModal';
 
 export interface CandidateDetailModalProps {
   candidate: Candidate | null;
@@ -39,6 +41,8 @@ export const CandidateDetailModal: React.FC<CandidateDetailModalProps> = ({
   onAssignToJob,
   canEdit = true,
 }) => {
+  const [showScreening, setShowScreening] = useState(false);
+
   if (!isOpen || !candidate) return null;
 
   const currentJob = jobs.find((j) => j.id === candidate.currentJobId);
@@ -271,24 +275,49 @@ export const CandidateDetailModal: React.FC<CandidateDetailModalProps> = ({
 
         {/* Footer Actions */}
         <div className="pt-3 border-t border-slate-100 flex items-center justify-between gap-3">
-          {canEdit && onEdit && (
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => {
-                onClose();
-                onEdit(candidate);
-              }}
-              leftIcon={<Edit3 className="w-3.5 h-3.5" />}
-            >
-              Editar Perfil
-            </Button>
-          )}
+          <button
+            onClick={() => setShowScreening(true)}
+            className="flex items-center gap-1.5 px-3.5 py-2 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white font-black text-xs rounded-xl shadow-xs transition-all cursor-pointer"
+          >
+            <Sparkles className="w-3.5 h-3.5 text-amber-300" />
+            <span>Triagem IA & Score</span>
+          </button>
 
-          <Button variant="primary" size="sm" onClick={onClose} className="ml-auto">
-            Fechar
-          </Button>
+          <div className="flex items-center gap-2">
+            {canEdit && onEdit && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  onClose();
+                  onEdit(candidate);
+                }}
+                leftIcon={<Edit3 className="w-3.5 h-3.5" />}
+              >
+                Editar Perfil
+              </Button>
+            )}
+
+            <Button variant="primary" size="sm" onClick={onClose}>
+              Fechar
+            </Button>
+          </div>
         </div>
+
+        <CandidateScreeningModal
+          isOpen={showScreening}
+          onClose={() => setShowScreening(false)}
+          candidate={{
+            id: candidate.id,
+            name: candidate.name,
+            role: candidate.role,
+            skills: candidate.skills,
+            experience: candidate.experienceSummary,
+            summary: candidate.experienceSummary,
+            appliedJobId: candidate.currentJobId,
+            appliedJobTitle: currentJob?.title
+          }}
+        />
       </div>
     </div>
   );

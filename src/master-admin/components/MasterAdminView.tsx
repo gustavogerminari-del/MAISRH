@@ -81,6 +81,9 @@ import { MasterTenantModal } from './MasterTenantModal';
 import { MasterAnnouncementsModal } from './MasterAnnouncementsModal';
 import { MasterBackupModal } from './MasterBackupModal';
 import { MasterEditPlanModal } from './MasterEditPlanModal';
+import { MasterCreateModuleModal } from './MasterCreateModuleModal';
+import { getTenants, saveTenant, toggleTenantStatus, deleteTenant } from '../masterTenantsStore';
+import { getPlatformModules, savePlatformModule, savePlatformModulesToStorage } from '../masterModulesStore';
 
 export type MasterNavigationSection = 
   | 'dashboard'
@@ -99,11 +102,11 @@ export const MasterAdminView: React.FC = () => {
   const [activeSection, setActiveSection] = useState<MasterNavigationSection>('dashboard');
 
   // Core Data States
-  const [tenants, setTenants] = useState<ClientTenant[]>(MOCK_TENANTS);
+  const [tenants, setTenants] = useState<ClientTenant[]>(() => getTenants());
   const [announcements, setAnnouncements] = useState<SystemAnnouncement[]>(MOCK_ANNOUNCEMENTS);
   const [backups, setBackups] = useState<BackupRecord[]>(MOCK_BACKUPS);
   const [plans, setPlans] = useState<SaaSPlan[]>(MOCK_SAAS_PLANS);
-  const [modules, setModules] = useState<PlatformModule[]>(MOCK_PLATFORM_MODULES);
+  const [modules, setModules] = useState<PlatformModule[]>(() => getPlatformModules());
   const [visualConfig, setVisualConfig] = useState<PlatformVisualConfig>(MOCK_VISUAL_CONFIG);
   const [aiPrompts, setAiPrompts] = useState<AIPromptTemplate[]>(MOCK_AI_PROMPTS);
   const [aiLogs] = useState<AIUsageLog[]>(MOCK_AI_LOGS);
@@ -119,7 +122,9 @@ export const MasterAdminView: React.FC = () => {
   // Modals
   const [selectedTenantForEdit, setSelectedTenantForEdit] = useState<ClientTenant | null>(null);
   const [selectedPlanForEdit, setSelectedPlanForEdit] = useState<SaaSPlan | null>(null);
+  const [selectedModuleForEdit, setSelectedModuleForEdit] = useState<PlatformModule | null>(null);
   const [showCreateTenantModal, setShowCreateTenantModal] = useState(false);
+  const [showCreateModuleModal, setShowCreateModuleModal] = useState(false);
   const [showAnnouncementsModal, setShowAnnouncementsModal] = useState(false);
   const [showBackupModal, setShowBackupModal] = useState(false);
 
@@ -142,24 +147,36 @@ export const MasterAdminView: React.FC = () => {
     setSelectedPlanForEdit(null);
   };
 
+  const handleSaveModule = (moduleData: PlatformModule) => {
+    const updated = savePlatformModule(moduleData);
+    setModules(updated);
+    setShowCreateModuleModal(false);
+    setSelectedModuleForEdit(null);
+  };
+
   const handleSaveTenant = (tenantData: Partial<ClientTenant>) => {
-    const exists = tenants.find(t => t.id === tenantData.id);
-    if (exists) {
-      setTenants(tenants.map(t => t.id === tenantData.id ? { ...t, ...tenantData } as ClientTenant : t));
-    } else {
-      setTenants([tenantData as ClientTenant, ...tenants]);
-    }
+    const updated = saveTenant(tenantData);
+    setTenants(updated);
     setSelectedTenantForEdit(null);
     setShowCreateTenantModal(false);
   };
 
   const handleToggleStatus = (tenantId: string, currentStatus: string) => {
-    const nextStatus = currentStatus === 'Ativo' ? 'Suspenso' : 'Ativo';
-    setTenants(tenants.map(t => t.id === tenantId ? { ...t, status: nextStatus as any } : t));
+    const updated = toggleTenantStatus(tenantId, currentStatus);
+    setTenants(updated);
+  };
+
+  const handleDeleteTenant = (tenantId: string) => {
+    if (confirm('Tem certeza que deseja excluir esta empresa do sistema? Essa ação é irreversível.')) {
+      const updated = deleteTenant(tenantId);
+      setTenants(updated);
+    }
   };
 
   const handleToggleModuleGlobal = (moduleId: string) => {
-    setModules(modules.map(m => m.id === moduleId ? { ...m, status: m.status === 'Ativo' ? 'Inativo' : 'Ativo' } : m));
+    const nextModules = modules.map(m => m.id === moduleId ? { ...m, status: m.status === 'Ativo' ? 'Inativo' : 'Ativo' } : m);
+    savePlatformModulesToStorage(nextModules);
+    setModules(nextModules);
   };
 
   const handleTogglePrompt = (promptId: string) => {
@@ -207,16 +224,16 @@ export const MasterAdminView: React.FC = () => {
   });
 
   const menuItems = [
-    { id: 'dashboard', label: 'Dashboard Geral', icon: LayoutGrid },
-    { id: 'empresas', label: 'Empresas Clientes', icon: Building2 },
-    { id: 'planos', label: 'Planos & SaaS', icon: CreditCard },
-    { id: 'modulos', label: 'Gerenciador de Módulos', icon: Sliders },
-    { id: 'construtor', label: 'Construtor Visual', icon: Palette },
+    { id: 'dashboard', label: 'Dashboard Master', icon: LayoutGrid },
+    { id: 'empresas', label: 'Empresas cadastradas', icon: Building2 },
+    { id: 'usuarios', label: 'Usuários', icon: Users },
+    { id: 'planos', label: 'Planos', icon: CreditCard },
+    { id: 'modulos', label: 'Módulos', icon: Sliders },
+    { id: 'relatorios', label: 'Relatórios', icon: BarChart3 },
+    { id: 'seguranca', label: 'Configurações', icon: Settings },
     { id: 'ia', label: 'Inteligência Artificial', icon: Bot },
-    { id: 'parceiros', label: 'Parceiros', icon: Handshake },
-    { id: 'usuarios', label: 'Usuários e Permissões', icon: Users },
-    { id: 'relatorios', label: 'Relatórios da Plataforma', icon: BarChart3 },
-    { id: 'seguranca', label: 'Segurança', icon: ShieldCheck },
+    { id: 'construtor', label: 'Construtor Visual', icon: Palette },
+    { id: 'parceiros', label: 'Parceiros & Vantagens', icon: Handshake },
   ];
 
   return (
@@ -834,8 +851,11 @@ export const MasterAdminView: React.FC = () => {
                 </div>
 
                 <button 
-                  onClick={() => alert('Formulário de criação de novo módulo na plataforma')}
-                  className="px-4 py-2 bg-amber-500 hover:bg-amber-400 text-slate-950 font-black text-xs rounded-xl transition-all cursor-pointer flex items-center gap-2"
+                  onClick={() => {
+                    setSelectedModuleForEdit(null);
+                    setShowCreateModuleModal(true);
+                  }}
+                  className="px-4 py-2 bg-amber-500 hover:bg-amber-400 text-slate-950 font-black text-xs rounded-xl transition-all cursor-pointer flex items-center gap-2 shadow-md hover:shadow-amber-500/20"
                 >
                   <Plus className="w-4 h-4" /> Criar Novo Módulo
                 </button>
@@ -843,19 +863,33 @@ export const MasterAdminView: React.FC = () => {
 
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                 {modules.map((m) => (
-                  <div key={m.id} className="p-5 rounded-2xl bg-slate-900 border border-slate-800 space-y-3 flex flex-col justify-between">
+                  <div key={m.id} className="p-5 rounded-2xl bg-slate-900 border border-slate-800 space-y-3 flex flex-col justify-between hover:border-slate-700 transition-all">
                     <div className="space-y-2">
                       <div className="flex items-center justify-between">
                         <span className="px-2.5 py-0.5 rounded-full bg-indigo-500/20 text-indigo-300 text-[10px] font-bold">
                           {m.category}
                         </span>
-                        <span className={`px-2 py-0.5 rounded-md text-[10px] font-extrabold ${
-                          m.status === 'Ativo' ? 'bg-emerald-500/20 text-emerald-300' : 'bg-amber-500/20 text-amber-300'
-                        }`}>
-                          {m.status}
-                        </span>
+                        <div className="flex items-center gap-1.5">
+                          <span className={`px-2 py-0.5 rounded-md text-[10px] font-extrabold ${
+                            m.status === 'Ativo' ? 'bg-emerald-500/20 text-emerald-300' : 'bg-amber-500/20 text-amber-300'
+                          }`}>
+                            {m.status}
+                          </span>
+                          <button
+                            onClick={() => {
+                              setSelectedModuleForEdit(m);
+                              setShowCreateModuleModal(true);
+                            }}
+                            className="p-1 text-slate-400 hover:text-amber-300 hover:bg-slate-800 rounded-lg cursor-pointer transition-colors"
+                            title="Editar Módulo"
+                          >
+                            <Edit3 className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
                       </div>
-                      <h3 className="text-sm font-black text-white">{m.name}</h3>
+                      <h3 className="text-sm font-black text-white flex items-center gap-2">
+                        {m.name}
+                      </h3>
                       <p className="text-xs text-slate-400">{m.description}</p>
                       <p className="text-[11px] text-amber-300 font-semibold pt-1">
                         Ativo em {m.activeTenantsCount} empresas clientes
@@ -1274,6 +1308,16 @@ export const MasterAdminView: React.FC = () => {
           onSave={handleSavePlan}
         />
       )}
+
+      <MasterCreateModuleModal
+        isOpen={showCreateModuleModal}
+        initialModule={selectedModuleForEdit}
+        onClose={() => {
+          setShowCreateModuleModal(false);
+          setSelectedModuleForEdit(null);
+        }}
+        onSave={handleSaveModule}
+      />
 
     </div>
   );

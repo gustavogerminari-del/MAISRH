@@ -46,6 +46,10 @@ export interface UserProfile {
   role: RoleProfile;
   department: string;
   avatar: string;
+  companyId?: string;
+  companyName?: string;
+  tenantId?: string;
+  tenantName?: string;
 }
 
 export interface UserCredentials {

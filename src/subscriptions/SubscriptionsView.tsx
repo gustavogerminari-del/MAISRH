@@ -18,10 +18,12 @@ import {
   FileText
 } from 'lucide-react';
 import { ClientSubscription, BillingInvoice, PlanTier, ModuleAccessConfig } from './types';
-import { MOCK_SUBSCRIPTIONS, MOCK_INVOICES } from './mockData';
+import { MOCK_INVOICES } from './mockData';
+import { getSubscriptions, addSubscription, saveSubscriptionsToStorage } from './subscriptionsStore';
+import { saveTenant } from '../master-admin/masterTenantsStore';
 
 export const SubscriptionsView: React.FC = () => {
-  const [subscriptions, setSubscriptions] = useState<ClientSubscription[]>(MOCK_SUBSCRIPTIONS);
+  const [subscriptions, setSubscriptions] = useState<ClientSubscription[]>(() => getSubscriptions());
   const [invoices, setInvoices] = useState<BillingInvoice[]>(MOCK_INVOICES);
   const [selectedSubForEdit, setSelectedSubForEdit] = useState<ClientSubscription | null>(null);
 
@@ -44,7 +46,7 @@ export const SubscriptionsView: React.FC = () => {
 
   // Toggle Module Permission
   const handleToggleModule = (subId: string, moduleKey: keyof ModuleAccessConfig) => {
-    setSubscriptions(subscriptions.map(s => {
+    const nextSubs = subscriptions.map(s => {
       if (s.id === subId) {
         return {
           ...s,
@@ -55,7 +57,9 @@ export const SubscriptionsView: React.FC = () => {
         };
       }
       return s;
-    }));
+    });
+    saveSubscriptionsToStorage(nextSubs);
+    setSubscriptions(nextSubs);
   };
 
   const handleCreateSub = (e: React.FormEvent) => {
@@ -88,7 +92,61 @@ export const SubscriptionsView: React.FC = () => {
       nextRenewalDate: new Date(Date.now() + 30*24*60*60*1000).toISOString().split('T')[0]
     };
 
-    setSubscriptions([newSub, ...subscriptions]);
+    const updatedSubs = addSubscription(newSub);
+    setSubscriptions(updatedSubs);
+
+    // Sync with Master Admin Tenant store
+    saveTenant({
+      id: `t-${Date.now()}`,
+      code: newCompanyName.substring(0, 5).toUpperCase().replace(/\s/g, ''),
+      companyName: newCompanyName,
+      tradeName: newCompanyName,
+      cnpj: newCnpj || '00.000.000/0001-00',
+      ownerName: 'Administrador ' + newCompanyName,
+      ownerEmail: `contato@${newCompanyName.toLowerCase().replace(/\s/g, '')}.com.br`,
+      ownerPhone: '(11) 99999-9999',
+      status: 'Ativo',
+      maxUsers: newSub.userLimit,
+      maxActiveJobs: 20,
+      modules: {
+        vagas: true,
+        bancoTalentos: true,
+        entrevistas: true,
+        equipeInterna: true,
+        consultorRH: newSub.modulesEnabled.consultoriaRH,
+        feriasBeneficios: true,
+        documentosAssinatura: true,
+        auditoriaLogs: newSub.modulesEnabled.auditoriaLogs,
+        relatoriosAvancados: true,
+        siteVagasPersonalizado: true
+      },
+      branding: {
+        primaryColor: '#2563EB',
+        companyDisplayName: newCompanyName
+      },
+      metrics: {
+        activeUsersCount: 1,
+        totalJobsCreated: 0,
+        totalTalentsStored: 0,
+        totalDocumentsSigned: 0,
+        storageUsedMB: 10,
+        lastLoginAt: 'Hoje'
+      },
+      contract: {
+        id: `ctr-${Date.now()}`,
+        contractNumber: `CTR-${new Date().getFullYear()}-${Math.floor(1000 + Math.random() * 9000)}`,
+        planName: newPlanTier as any,
+        monthlyFee: newMrrValue,
+        billingCycle: 'Mensal',
+        startDate: newSub.contractStart,
+        expirationDate: newSub.contractExpiration,
+        paymentMethod: 'Pix',
+        autoRenew: true
+      },
+      createdAt: new Date().toISOString().split('T')[0],
+      notes: 'Cadastrada através do painel de Assinaturas & Módulos'
+    });
+
     setShowNewSubModal(false);
     setNewCompanyName('');
     setNewCnpj('');

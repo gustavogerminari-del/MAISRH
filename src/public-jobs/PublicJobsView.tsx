@@ -60,29 +60,52 @@ export const PublicJobsView: React.FC<PublicJobsViewProps> = ({
   const [coverNote, setCoverNote] = useState('');
   const [resumeFile, setResumeFile] = useState<File | null>(null);
 
-  // Combine prop jobs with mock jobs if needed
+  // Combine prop jobs with mock jobs so all active & published jobs appear automatically
   const activeJobsList: PublicJob[] = React.useMemo(() => {
-    if (jobs && jobs.length > 0) {
-      return jobs
-        .filter(j => j.status === 'Aberta' || !j.status)
-        .map(j => ({
+    const customJobsMapped: PublicJob[] = (jobs || [])
+      .filter(j => 
+        j.status === 'ativa' || 
+        j.status === 'Aberta' || 
+        j.publicada === true || 
+        (!j.status && j.isArchived !== true)
+      )
+      .map(j => {
+        const title = j.title || j.titulo || 'Vaga em Aberto';
+        const description = j.description || j.descricao || 'Oportunidade de carreira no portal.';
+        const companyName = j.nomeEmpresa || 'MAIS RH Brasil';
+        const empresaId = j.empresaId || 'emp-001';
+        const location = j.location || (j.cidade ? `${j.cidade} - ${j.estado || 'SP'}` : 'São Paulo - SP');
+        const workMode = j.locationType || 'Híbrido';
+        const contractType = j.type || j.tipoContrato || 'CLT';
+        const salaryRange = j.salaryRange || j.salario || 'A combinar';
+        const requirements = (j.requirements && j.requirements.length > 0) ? j.requirements : (j.requisitos || ['Ensino Superior Completo', 'Boa comunicação']);
+        const benefits = (j.benefits && j.benefits.length > 0) ? j.benefits : (j.beneficios || ['Vale Refeição R$ 1.000/mês', 'Plano de Saúde', 'Seguro de Vida', 'Auxílio Home Office']);
+        const publishedAt = j.createdAt || j.dataCriacao || new Date().toISOString().split('T')[0];
+
+        return {
           id: j.id,
+          empresaId,
           code: j.id.substring(0, 8).toUpperCase(),
-          title: j.title,
-          companyName: 'MAIS RH Brasil',
-          department: j.department,
-          location: j.location,
-          workMode: j.locationType || 'Híbrido',
-          contractType: j.type || 'CLT',
-          salaryRange: j.salaryRange || 'R$ 5.000 - R$ 7.500',
-          description: j.description || 'Oportunidade integrante do time MAIS RH.',
-          requirements: j.requirements || ['Superior Completo', 'Experiência prévia na área'],
-          benefits: ['Vale Refeição R$ 1.000/mês', 'Plano de Saúde', 'Seguro de Vida', 'Auxílio Home Office'],
-          publishedAt: j.createdAt || new Date().toISOString().split('T')[0],
-          featured: j.applicantsCount > 3
-        }));
-    }
-    return MOCK_PUBLIC_JOBS;
+          title,
+          companyName,
+          department: j.department || 'Geral',
+          location,
+          workMode,
+          contractType,
+          salaryRange,
+          description,
+          requirements,
+          benefits,
+          publishedAt,
+          featured: (j.applicantsCount || 0) > 2
+        };
+      });
+
+    // Merge mock jobs that are not already in customJobsMapped (avoiding duplication)
+    const customIds = new Set(customJobsMapped.map(cj => cj.id));
+    const extraMockJobs = MOCK_PUBLIC_JOBS.filter(mj => !customIds.has(mj.id));
+
+    return [...customJobsMapped, ...extraMockJobs];
   }, [jobs]);
 
   // Extract Departments & Cities dynamically

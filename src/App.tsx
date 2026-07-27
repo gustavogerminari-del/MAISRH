@@ -17,6 +17,7 @@ import { DocumentsSignatureView } from './documents-signature';
 import { AuditLogsView } from './audit-logs';
 import { SubscriptionsView } from './subscriptions';
 import { MasterAdminView } from './master-admin';
+import { MaisRhIaView } from './ai/components/MaisRhIaView';
 
 import { NewJobModal } from './components/NewJobModal';
 import { NewCandidateModal } from './components/NewCandidateModal';
@@ -62,11 +63,40 @@ function MainAppContent() {
 
   // Handlers
   const handleAddJob = (newJobData: Omit<Job, 'id' | 'applicantsCount' | 'createdAt'>) => {
+    const empresaId = user?.companyId || user?.tenantId || user?.id || 'emp-001';
+    const nomeEmpresa = user?.companyName || user?.tenantName || 'MAIS RH Brasil';
+    const parts = (newJobData.location || 'São Paulo - SP').split('-');
+    const cidade = parts[0]?.trim() || 'São Paulo';
+    const estado = parts[1]?.trim() || 'SP';
+    const nowIsoDate = new Date().toISOString().split('T')[0];
+
     const newJob: Job = {
       ...newJobData,
       id: `vaga-${Date.now()}`,
+      empresaId,
+      nomeEmpresa,
+      titulo: newJobData.title,
+      title: newJobData.title,
+      descricao: newJobData.description,
+      description: newJobData.description,
+      requisitos: newJobData.requirements || [],
+      requirements: newJobData.requirements || [],
+      cidade,
+      estado,
+      location: newJobData.location || `${cidade} - ${estado}`,
+      salario: newJobData.salaryRange || 'R$ 8.000 - R$ 12.000',
+      salaryRange: newJobData.salaryRange || 'R$ 8.000 - R$ 12.000',
+      tipoContrato: newJobData.type || 'CLT',
+      type: newJobData.type || 'CLT',
+      beneficios: ['Vale Refeição R$ 1.000/mês', 'Plano de Saúde', 'Seguro de Vida', 'Auxílio Home Office'],
+      benefits: ['Vale Refeição R$ 1.000/mês', 'Plano de Saúde', 'Seguro de Vida', 'Auxílio Home Office'],
+      quantidadeVagas: newJobData.openings || 1,
+      openings: newJobData.openings || 1,
+      dataCriacao: nowIsoDate,
+      createdAt: nowIsoDate,
+      status: 'ativa',
+      publicada: true,
       applicantsCount: 0,
-      createdAt: new Date().toISOString().split('T')[0],
     };
     setJobs(prev => [newJob, ...prev]);
   };
@@ -212,6 +242,8 @@ function MainAppContent() {
               />
             )}
 
+            {activeTab === 'mais-rh-ia' && <MaisRhIaView />}
+
             {activeTab === 'vagas' && (
               <JobsView
                 jobs={jobs}
@@ -220,6 +252,7 @@ function MainAppContent() {
                 openNewJobModal={() => setIsJobModalOpen(true)}
                 onMoveCandidateStage={handleMoveCandidateStage}
                 searchTerm={searchTerm}
+                onUpdateJobs={setJobs}
               />
             )}
 

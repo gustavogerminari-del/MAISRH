@@ -33,20 +33,37 @@ export interface Candidate {
 
 export interface Job {
   id: string;
+  empresaId?: string;
+  nomeEmpresa?: string;
+  titulo?: string;
   title: string;
-  department: string;
+  descricao?: string;
+  description: string;
+  requisitos?: string[];
+  requirements: string[];
+  cidade?: string;
+  estado?: string;
   location: string;
   locationType: JobLocationType;
-  type: JobType;
-  status: JobStatus;
+  salario?: string;
   salaryRange: string;
+  tipoContrato?: JobType;
+  type: JobType;
+  beneficios?: string[];
+  benefits?: string[];
+  quantidadeVagas?: number;
   openings: number;
   applicantsCount: number;
+  dataCriacao?: string;
   createdAt: string;
   deadline: string;
-  description: string;
-  requirements: string[];
+  status: JobStatus | 'ativa';
+  publicada?: boolean;
+  department: string;
   recruiterName: string;
+  recruiterId?: string;
+  managerName?: string;
+  isArchived?: boolean;
 }
 
 export interface Interview {

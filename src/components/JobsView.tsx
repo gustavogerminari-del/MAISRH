@@ -9,8 +9,9 @@ interface JobsViewProps {
   openNewJobModal: () => void;
   onMoveCandidateStage: (candidateId: string, newStageId: StageId) => void;
   searchTerm: string;
+  onUpdateJobs?: (updatedJobs: Job[]) => void;
 }
 
-export const JobsView: React.FC<JobsViewProps> = ({ jobs }) => {
-  return <JobsManagementView initialJobsList={jobs} />;
+export const JobsView: React.FC<JobsViewProps> = ({ jobs, onUpdateJobs }) => {
+  return <JobsManagementView initialJobsList={jobs} onUpdateJobs={onUpdateJobs} />;
 };

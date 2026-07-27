@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { X, Plus, Trash2, Briefcase, ShieldAlert, CheckCircle2 } from 'lucide-react';
+import { X, Plus, Trash2, Briefcase, ShieldAlert, CheckCircle2, Sparkles, Wand2 } from 'lucide-react';
 import { Job, JobStatus, JobType, JobLocationType } from '../types/job';
 import {
   JOB_STATUS_OPTIONS,
@@ -10,6 +10,7 @@ import {
 } from '../constants/jobOptions';
 import { useAuth } from '../../auth';
 import { Button, Input, Select } from '../../shared';
+import { JobGeneratorModal } from '../../ai/components/JobGeneratorModal';
 
 export interface JobFormModalProps {
   isOpen: boolean;
@@ -24,7 +25,7 @@ export const JobFormModal: React.FC<JobFormModalProps> = ({
   onSaveJob,
   initialJob,
 }) => {
-  const { hasActionAccess } = useAuth();
+  const { user, hasActionAccess } = useAuth();
 
   const canCreate = hasActionAccess('create_job');
   const canEdit = hasActionAccess('edit_job');
@@ -37,7 +38,7 @@ export const JobFormModal: React.FC<JobFormModalProps> = ({
   const [location, setLocation] = useState('São Paulo - SP');
   const [locationType, setLocationType] = useState<JobLocationType>('Híbrido');
   const [type, setType] = useState<JobType>('CLT');
-  const [status, setStatus] = useState<JobStatus>('Aberta');
+  const [status, setStatus] = useState<JobStatus | 'ativa'>('ativa');
   const [salaryRange, setSalaryRange] = useState('R$ 8.000 - R$ 12.000');
   const [openings, setOpenings] = useState<number>(1);
   const [deadline, setDeadline] = useState('2026-08-30');
@@ -48,30 +49,31 @@ export const JobFormModal: React.FC<JobFormModalProps> = ({
   const [requirements, setRequirements] = useState<string[]>([]);
   const [newRequirementText, setNewRequirementText] = useState('');
   const [error, setError] = useState('');
+  const [showAiModal, setShowAiModal] = useState(false);
 
   useEffect(() => {
     if (initialJob) {
-      setTitle(initialJob.title);
-      setDepartment(initialJob.department);
-      setLocation(initialJob.location);
-      setLocationType(initialJob.locationType);
-      setType(initialJob.type);
-      setStatus(initialJob.status);
-      setSalaryRange(initialJob.salaryRange);
-      setOpenings(initialJob.openings);
-      setDeadline(initialJob.deadline);
-      setDescription(initialJob.description);
-      setRecruiterName(initialJob.recruiterName);
+      setTitle(initialJob.title || initialJob.titulo || '');
+      setDepartment(initialJob.department || 'Tecnologia & Engenharia');
+      setLocation(initialJob.location || `${initialJob.cidade || 'São Paulo'} - ${initialJob.estado || 'SP'}`);
+      setLocationType(initialJob.locationType || 'Híbrido');
+      setType(initialJob.type || initialJob.tipoContrato || 'CLT');
+      setStatus(initialJob.status || 'ativa');
+      setSalaryRange(initialJob.salaryRange || initialJob.salario || 'R$ 8.000 - R$ 12.000');
+      setOpenings(initialJob.openings || initialJob.quantidadeVagas || 1);
+      setDeadline(initialJob.deadline || '2026-08-30');
+      setDescription(initialJob.description || initialJob.descricao || '');
+      setRecruiterName(initialJob.recruiterName || CORPORATE_RECRUITERS[0].name);
       setManagerName(initialJob.managerName || 'Luciana Mello');
       setCenterCostCode(initialJob.budget?.centerCostCode || 'CC-RH-101');
-      setRequirements(initialJob.requirements || []);
+      setRequirements(initialJob.requirements || initialJob.requisitos || []);
     } else {
       setTitle('');
       setDepartment(CORPORATE_DEPARTMENTS[0]);
       setLocation('São Paulo - SP');
       setLocationType('Híbrido');
       setType('CLT');
-      setStatus('Aberta');
+      setStatus('ativa');
       setSalaryRange('R$ 8.000 - R$ 12.000');
       setOpenings(1);
       setDeadline('2026-08-30');
@@ -114,19 +116,41 @@ export const JobFormModal: React.FC<JobFormModalProps> = ({
       return;
     }
 
+    const empresaId = user?.companyId || user?.tenantId || user?.id || 'emp-001';
+    const nomeEmpresa = user?.companyName || user?.tenantName || 'MAIS RH Brasil';
+    const parts = location.split('-');
+    const cidade = parts[0]?.trim() || location;
+    const estado = parts[1]?.trim() || 'SP';
+    const nowIsoDate = new Date().toISOString().split('T')[0];
+
     onSaveJob(
       {
-        title,
-        department,
+        empresaId,
+        nomeEmpresa,
+        titulo: title.trim(),
+        title: title.trim(),
+        descricao: description.trim(),
+        description: description.trim(),
+        requisitos: requirements,
+        requirements,
+        cidade,
+        estado,
         location,
         locationType,
-        type,
-        status,
+        salario: salaryRange,
         salaryRange,
+        tipoContrato: type,
+        type,
+        beneficios: ['Vale Refeição R$ 1.000/mês', 'Plano de Saúde', 'Seguro de Vida', 'Auxílio Home Office'],
+        benefits: ['Vale Refeição R$ 1.000/mês', 'Plano de Saúde', 'Seguro de Vida', 'Auxílio Home Office'],
+        quantidadeVagas: Number(openings) || 1,
         openings: Number(openings) || 1,
+        dataCriacao: nowIsoDate,
+        createdAt: nowIsoDate,
         deadline,
-        description,
-        requirements,
+        status: status === 'Arquivada' || status === 'Fechada' ? status : 'ativa',
+        publicada: true, // Publicada automaticamente no Portal Público
+        department,
         recruiterName,
         managerName,
         budget: {
@@ -173,6 +197,27 @@ export const JobFormModal: React.FC<JobFormModalProps> = ({
           </div>
         ) : (
           <form onSubmit={handleSubmit} className="space-y-4">
+            {/* 🤖 Banner Gerador com MAIS RH IA */}
+            <div className="p-3.5 bg-gradient-to-r from-emerald-900 to-slate-900 text-white rounded-2xl flex items-center justify-between gap-3 shadow-md">
+              <div className="flex items-center gap-2.5">
+                <div className="p-2 bg-emerald-500/20 rounded-xl border border-emerald-500/30">
+                  <Wand2 className="w-4 h-4 text-amber-300" />
+                </div>
+                <div>
+                  <h4 className="text-xs font-black text-white">Criar Vaga com MAIS RH IA</h4>
+                  <p className="text-[11px] text-emerald-200">Preencha título, descrição e requisitos automaticamente com IA.</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowAiModal(true)}
+                className="px-3.5 py-1.5 bg-emerald-500 hover:bg-emerald-600 text-slate-950 font-black text-xs rounded-xl shadow-xs transition-all cursor-pointer whitespace-nowrap flex items-center gap-1.5"
+              >
+                <Sparkles className="w-3.5 h-3.5" />
+                <span>Gerar com IA</span>
+              </button>
+            </div>
+
             {error && (
               <div className="p-3 bg-rose-50 border border-rose-200 text-rose-700 text-xs rounded-xl font-semibold">
                 {error}
@@ -332,6 +377,18 @@ export const JobFormModal: React.FC<JobFormModalProps> = ({
             </div>
           </form>
         )}
+
+        <JobGeneratorModal
+          isOpen={showAiModal}
+          onClose={() => setShowAiModal(false)}
+          onApplyGeneratedJob={(aiJob) => {
+            setTitle(aiJob.title || title);
+            setDescription(aiJob.summary || description);
+            if (aiJob.requirements && aiJob.requirements.length > 0) {
+              setRequirements(aiJob.requirements);
+            }
+          }}
+        />
       </div>
     </div>
   );

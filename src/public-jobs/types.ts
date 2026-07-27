@@ -5,6 +5,7 @@
 
 export interface PublicJob {
   id: string;
+  empresaId?: string;
   code: string;
   title: string;
   companyName: string;

@@ -23,11 +23,13 @@ import { logger } from '../../core';
 export interface JobsManagementViewProps {
   initialJobsList?: Job[];
   onOpenCandidatesForJob?: (jobId: string) => void;
+  onUpdateJobs?: (updatedJobs: Job[]) => void;
 }
 
 export const JobsManagementView: React.FC<JobsManagementViewProps> = ({
   initialJobsList,
   onOpenCandidatesForJob,
+  onUpdateJobs,
 }) => {
   const { user, hasActionAccess } = useAuth();
 
@@ -36,6 +38,13 @@ export const JobsManagementView: React.FC<JobsManagementViewProps> = ({
   const canClose = hasActionAccess('close_job');
 
   const [jobs, setJobs] = useState<Job[]>(initialJobsList || INITIAL_JOBS_DATA);
+
+  React.useEffect(() => {
+    if (initialJobsList && initialJobsList.length > 0) {
+      setJobs(initialJobsList);
+    }
+  }, [initialJobsList]);
+
   const [selectedJob, setSelectedJob] = useState<Job | null>(null);
   const [isDetailOpen, setIsDetailOpen] = useState(false);
   const [isFormOpen, setIsFormOpen] = useState(false);
@@ -107,33 +116,35 @@ export const JobsManagementView: React.FC<JobsManagementViewProps> = ({
     jobData: Omit<Job, 'id' | 'applicantsCount' | 'createdAt'>,
     existingId?: string
   ) => {
+    let updatedList: Job[] = [];
     if (existingId) {
-      setJobs((prev) =>
-        prev.map((j) =>
-          j.id === existingId
-            ? { ...j, ...jobData }
-            : j
-        )
-      );
+      updatedList = jobs.map((j) => (j.id === existingId ? { ...j, ...jobData } : j));
+      setJobs(updatedList);
       logger.info(`Vaga atualizada: ${existingId}`, 'JobsManagement');
     } else {
       const newJob: Job = {
         ...jobData,
-        id: `job-${Date.now()}`,
+        id: `vaga-${Date.now()}`,
         applicantsCount: 0,
         createdAt: new Date().toISOString().split('T')[0],
       };
-      setJobs((prev) => [newJob, ...prev]);
+      updatedList = [newJob, ...jobs];
+      setJobs(updatedList);
       logger.info(`Nova vaga criada: ${newJob.title}`, 'JobsManagement');
+    }
+    if (onUpdateJobs) {
+      onUpdateJobs(updatedList);
     }
   };
 
   const handleStatusChange = (jobId: string, newStatus: JobStatus) => {
-    setJobs((prev) =>
-      prev.map((j) => (j.id === jobId ? { ...j, status: newStatus } : j))
-    );
+    const updatedList = jobs.map((j) => (j.id === jobId ? { ...j, status: newStatus } : j));
+    setJobs(updatedList);
     if (selectedJob?.id === jobId) {
       setSelectedJob((prev) => (prev ? { ...prev, status: newStatus } : null));
+    }
+    if (onUpdateJobs) {
+      onUpdateJobs(updatedList);
     }
     logger.info(`Status da vaga ${jobId} alterado para ${newStatus}`, 'JobsManagement');
   };
