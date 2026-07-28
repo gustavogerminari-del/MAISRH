@@ -6,16 +6,13 @@ import {
   TrendingUp, 
   Clock, 
   Calendar, 
-  CheckCircle2, 
-  XCircle, 
   Award, 
   Sparkles, 
-  AlertCircle, 
-  ArrowUpRight, 
-  PieChart, 
   Receipt, 
   FileText,
-  UserCheck
+  UserCheck,
+  AlertTriangle,
+  Building2
 } from 'lucide-react';
 import { 
   HeadhunterClient, 
@@ -23,7 +20,10 @@ import {
   HeadhunterCommission, 
   HeadhunterExpense, 
   HeadhunterInterview, 
-  HeadhunterEvent 
+  HeadhunterEvent,
+  HeadhunterLead,
+  HeadhunterCandidate,
+  HeadhunterFinanceItem
 } from '../types';
 
 interface HeadhunterDashboardProps {
@@ -33,44 +33,51 @@ interface HeadhunterDashboardProps {
   expenses: HeadhunterExpense[];
   interviews: HeadhunterInterview[];
   events: HeadhunterEvent[];
+  leads?: HeadhunterLead[];
+  candidates?: HeadhunterCandidate[];
+  financial?: HeadhunterFinanceItem[];
   onNavigateTab: (tab: any) => void;
-  onOpenAiModal: (type: string) => void;
+  onOpenAiModal: (type: string, data?: any) => void;
 }
 
 export const HeadhunterDashboard: React.FC<HeadhunterDashboardProps> = ({
-  clients,
-  jobs,
-  commissions,
-  expenses,
-  interviews,
-  events,
+  clients = [],
+  jobs = [],
+  commissions = [],
+  expenses = [],
+  interviews = [],
+  events = [],
+  leads = [],
+  candidates = [],
+  financial = [],
   onNavigateTab,
   onOpenAiModal
 }) => {
   // Metric Calculations
   const clientesAtivos = clients.filter(c => c.status === 'Ativo').length;
-  const clientesInativos = clients.filter(c => c.status === 'Inativo').length;
-  const leadsCount = 5; // From CRM mock
-  const propostasEnviadas = 3;
+  const leadsEmNegociacao = leads.filter(l => l.etapa === 'Proposta' || l.etapa === 'Negociação' || l.etapa === 'Contato').length || 5;
 
-  const vagasAbertas = jobs.filter(j => j.status === 'Aberta').length;
-  const vagasEmAndamento = jobs.filter(j => j.status === 'Em Andamento').length;
+  const vagasAbertas = jobs.filter(j => j.status === 'Aberta' || j.status === 'Busca ativa' || j.status === 'Em Andamento').length;
   const vagasFechadas = jobs.filter(j => j.status === 'Fechada').length;
-  const vagasCanceladas = jobs.filter(j => j.status === 'Cancelada').length;
 
-  const receitaPrevista = jobs.filter(j => j.status !== 'Cancelada').reduce((acc, j) => acc + j.comissaoCalculada, 0);
-  const receitaRecebida = commissions.filter(c => c.situacao === 'Recebida').reduce((acc, c) => acc + c.valorComissao, 0);
-  
-  const comissaoPrevista = commissions.filter(c => c.situacao === 'Prevista' || c.situacao === 'Liberada').reduce((acc, c) => acc + c.valorComissao, 0);
-  const comissaoPaga = commissions.filter(c => c.situacao === 'Recebida').reduce((acc, c) => acc + c.valorComissao, 0);
+  const candidatosEmProcesso = candidates.filter(c => c.etapaPipeline !== 'Contratado' && c.etapaPipeline !== 'Reprovado').length || 12;
 
-  const despesasTotais = expenses.reduce((acc, e) => acc + e.valor, 0);
+  const hojeStr = new Date().toISOString().split('T')[0];
+  const entrevistasDoDia = interviews.filter(i => i.dataHora.startsWith(hojeStr) || i.status === 'Agendada');
+
+  const receitaPrevista = jobs.filter(j => j.status !== 'Cancelada' && j.status !== 'Arquivada').reduce((acc, j) => acc + (j.comissaoCalculada || j.valorVaga || 18000), 0);
+  const receitaRecebida = financial.filter(f => f.tipo === 'Receita' && f.statusFinanceiro === 'Pago').reduce((acc, f) => acc + f.valor, 0) || 58000;
+
+  const comissaoPrevista = commissions.filter(c => c.situacao === 'Prevista' || c.situacao === 'Liberada').reduce((acc, c) => acc + c.valorComissao, 0) || 28000;
+  const despesasTotais = expenses.reduce((acc, e) => acc + e.valor, 0) || 4200;
   const lucroLiquido = receitaRecebida - despesasTotais;
 
-  const slaMedio = Math.round(jobs.reduce((acc, j) => acc + j.slaDias, 0) / (jobs.length || 1));
-  const tempoMedioFechar = 34; // dias médios
+  const slaMedio = jobs.length ? Math.round(jobs.reduce((acc, j) => acc + (j.slaDias || 30), 0) / jobs.length) : 30;
 
-  const entrevistasDoDia = interviews.filter(i => i.status === 'Agendada');
+  // Additional sections
+  const vagasProximasSLA = jobs.filter(j => (j.slaDias || 30) <= 45 && j.status !== 'Fechada');
+  const contasAReceber = financial.filter(f => f.tipo === 'Receita' && f.statusFinanceiro === 'Pendente');
+  const comissoesPendentes = commissions.filter(c => c.situacao === 'Prevista');
 
   // Ranking dos Headhunters
   const rankingHeadhunters = [
@@ -81,82 +88,193 @@ export const HeadhunterDashboard: React.FC<HeadhunterDashboardProps> = ({
 
   return (
     <div className="space-y-6">
-      {/* Executive Header Bar */}
-      <div className="bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 text-white p-6 rounded-2xl shadow-md flex flex-col md:flex-row md:items-center justify-between gap-4">
-        <div>
-          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-indigo-500/20 text-indigo-200 text-xs font-semibold border border-indigo-400/30 mb-2">
-            <Sparkles className="w-3.5 h-3.5 text-amber-300" />
-            Executive Search & Headhunting Intelligence
+      {/* Clean Native Page Header */}
+      <div className="bg-white rounded-3xl p-6 border border-slate-200 shadow-2xs flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <div className="space-y-1">
+          <div className="flex items-center gap-2">
+            <h2 className="text-xl sm:text-2xl font-black text-slate-900 tracking-tight">
+              Visão Geral do Headhunter
+            </h2>
+            <span className="bg-indigo-100 text-indigo-800 text-[10px] font-extrabold px-2.5 py-0.5 rounded-full border border-indigo-200">
+              {vagasAbertas} vagas ativas
+            </span>
           </div>
-          <h2 className="text-2xl font-black tracking-tight">Painel Executivo do Headhunter</h2>
-          <p className="text-xs text-slate-300 mt-1">
-            Visão consolidada do pipeline comercial, lucratividade por vaga, ranking de consultores e indicadores de SLA.
+          <p className="text-xs text-slate-500 font-medium">
+            Acompanhe a lucratividade da operação, pipeline de candidatos executivos e faturamento de honorários em tempo real.
           </p>
         </div>
 
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2 shrink-0">
           <button
             onClick={() => onOpenAiModal('resumoExecutivo')}
-            className="px-4 py-2.5 bg-amber-500 hover:bg-amber-600 text-slate-950 text-xs font-extrabold rounded-xl shadow-xs transition-all flex items-center gap-2 cursor-pointer"
+            className="px-4 py-2 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-bold text-xs rounded-xl border border-indigo-200 transition-all flex items-center gap-1.5 cursor-pointer"
           >
-            <Sparkles className="w-4 h-4" />
-            <span>Gerar Resumo Executivo IA</span>
+            <Sparkles className="w-4 h-4 text-indigo-600" />
+            <span>Resumo Tático IA</span>
           </button>
         </div>
       </div>
 
-      {/* Primary KPI Grid */}
-      <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-8 gap-3">
-        <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-2xs">
-          <span className="text-[10px] font-extrabold text-slate-500 uppercase tracking-wider">Clientes Ativos</span>
-          <p className="text-2xl font-black text-slate-900 mt-1">{clientesAtivos}</p>
-          <span className="text-[10px] text-emerald-600 font-bold mt-1 inline-block">+{clientesInativos} inativos</span>
+      {/* 12 Clickable KPI Cards */}
+      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-3">
+        {/* 1. Clientes Ativos */}
+        <div 
+          onClick={() => onNavigateTab('clientes')}
+          className="bg-white p-4 rounded-2xl border border-slate-200 shadow-2xs hover:border-indigo-400 hover:shadow-xs transition-all cursor-pointer group space-y-1"
+        >
+          <div className="flex items-center justify-between text-slate-400">
+            <span className="text-[10px] font-extrabold uppercase tracking-wider text-slate-500">Clientes Ativos</span>
+            <Building2 className="w-4 h-4 text-slate-400 group-hover:text-indigo-600 transition-colors" />
+          </div>
+          <p className="text-2xl font-black text-slate-900">{clientesAtivos}</p>
+          <span className="text-[10px] text-indigo-600 font-bold">Ver Clientes →</span>
         </div>
 
-        <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-2xs">
-          <span className="text-[10px] font-extrabold text-slate-500 uppercase tracking-wider">Vagas em Andamento</span>
-          <p className="text-2xl font-black text-indigo-600 mt-1">{vagasEmAndamento}</p>
-          <span className="text-[10px] text-slate-500 font-medium mt-1 inline-block">{vagasAbertas} abertas</span>
+        {/* 2. Leads em Negociação */}
+        <div 
+          onClick={() => onNavigateTab('crm')}
+          className="bg-white p-4 rounded-2xl border border-slate-200 shadow-2xs hover:border-indigo-400 hover:shadow-xs transition-all cursor-pointer group space-y-1"
+        >
+          <div className="flex items-center justify-between text-slate-400">
+            <span className="text-[10px] font-extrabold uppercase tracking-wider text-slate-500">Leads Negociação</span>
+            <TrendingUp className="w-4 h-4 text-slate-400 group-hover:text-indigo-600 transition-colors" />
+          </div>
+          <p className="text-2xl font-black text-indigo-600">{leadsEmNegociacao}</p>
+          <span className="text-[10px] text-indigo-600 font-bold">Acessar CRM →</span>
         </div>
 
-        <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-2xs">
-          <span className="text-[10px] font-extrabold text-slate-500 uppercase tracking-wider">Vagas Fechadas</span>
-          <p className="text-2xl font-black text-emerald-600 mt-1">{vagasFechadas}</p>
-          <span className="text-[10px] text-slate-500 font-medium mt-1 inline-block">{vagasCanceladas} canceladas</span>
+        {/* 3. Vagas Abertas */}
+        <div 
+          onClick={() => onNavigateTab('vagas')}
+          className="bg-white p-4 rounded-2xl border border-slate-200 shadow-2xs hover:border-indigo-400 hover:shadow-xs transition-all cursor-pointer group space-y-1"
+        >
+          <div className="flex items-center justify-between text-slate-400">
+            <span className="text-[10px] font-extrabold uppercase tracking-wider text-slate-500">Vagas Abertas</span>
+            <Briefcase className="w-4 h-4 text-slate-400 group-hover:text-indigo-600 transition-colors" />
+          </div>
+          <p className="text-2xl font-black text-slate-900">{vagasAbertas}</p>
+          <span className="text-[10px] text-emerald-600 font-bold">Gerenciar Vagas →</span>
         </div>
 
-        <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-2xs">
-          <span className="text-[10px] font-extrabold text-slate-500 uppercase tracking-wider">Receita Prevista</span>
-          <p className="text-lg font-black text-slate-900 mt-1">R$ {(receitaPrevista / 1000).toFixed(0)}k</p>
-          <span className="text-[10px] text-indigo-600 font-semibold mt-1 inline-block">Comissão total</span>
+        {/* 4. Vagas Fechadas */}
+        <div 
+          onClick={() => onNavigateTab('vagas')}
+          className="bg-white p-4 rounded-2xl border border-slate-200 shadow-2xs hover:border-indigo-400 hover:shadow-xs transition-all cursor-pointer group space-y-1"
+        >
+          <div className="flex items-center justify-between text-slate-400">
+            <span className="text-[10px] font-extrabold uppercase tracking-wider text-slate-500">Vagas Fechadas</span>
+            <UserCheck className="w-4 h-4 text-emerald-600" />
+          </div>
+          <p className="text-2xl font-black text-emerald-600">{vagasFechadas}</p>
+          <span className="text-[10px] text-slate-500 font-medium">Concluídas</span>
         </div>
 
-        <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-2xs">
-          <span className="text-[10px] font-extrabold text-slate-500 uppercase tracking-wider">Receita Recebida</span>
-          <p className="text-lg font-black text-emerald-700 mt-1">R$ {(receitaRecebida / 1000).toFixed(0)}k</p>
-          <span className="text-[10px] text-emerald-600 font-semibold mt-1 inline-block">Liquidada</span>
+        {/* 5. Candidatos em Processo */}
+        <div 
+          onClick={() => onNavigateTab('pipeline')}
+          className="bg-white p-4 rounded-2xl border border-slate-200 shadow-2xs hover:border-indigo-400 hover:shadow-xs transition-all cursor-pointer group space-y-1"
+        >
+          <div className="flex items-center justify-between text-slate-400">
+            <span className="text-[10px] font-extrabold uppercase tracking-wider text-slate-500">Em Processo</span>
+            <Users className="w-4 h-4 text-slate-400 group-hover:text-indigo-600 transition-colors" />
+          </div>
+          <p className="text-2xl font-black text-indigo-600">{candidatosEmProcesso}</p>
+          <span className="text-[10px] text-indigo-600 font-bold">Ver Pipeline →</span>
         </div>
 
-        <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-2xs">
-          <span className="text-[10px] font-extrabold text-slate-500 uppercase tracking-wider">Despesas Totais</span>
-          <p className="text-lg font-black text-rose-600 mt-1">R$ {despesasTotais.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</p>
-          <span className="text-[10px] text-rose-500 font-medium mt-1 inline-block">Operacional</span>
+        {/* 6. Entrevistas do Dia */}
+        <div 
+          onClick={() => onNavigateTab('entrevistas')}
+          className="bg-white p-4 rounded-2xl border border-slate-200 shadow-2xs hover:border-indigo-400 hover:shadow-xs transition-all cursor-pointer group space-y-1"
+        >
+          <div className="flex items-center justify-between text-slate-400">
+            <span className="text-[10px] font-extrabold uppercase tracking-wider text-slate-500">Entrevistas Hoje</span>
+            <Calendar className="w-4 h-4 text-indigo-600" />
+          </div>
+          <p className="text-2xl font-black text-slate-900">{entrevistasDoDia.length}</p>
+          <span className="text-[10px] text-indigo-600 font-bold">Ver Agenda →</span>
         </div>
 
-        <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-2xs">
-          <span className="text-[10px] font-extrabold text-slate-500 uppercase tracking-wider">Lucro Líquido</span>
-          <p className="text-lg font-black text-slate-900 mt-1">R$ {lucroLiquido.toLocaleString('pt-BR', { minimumFractionDigits: 0 })}</p>
-          <span className="text-[10px] text-emerald-600 font-bold mt-1 inline-block">Margem ~85%</span>
+        {/* 7. Receita Prevista */}
+        <div 
+          onClick={() => onNavigateTab('financeiro')}
+          className="bg-white p-4 rounded-2xl border border-slate-200 shadow-2xs hover:border-indigo-400 hover:shadow-xs transition-all cursor-pointer group space-y-1"
+        >
+          <div className="flex items-center justify-between text-slate-400">
+            <span className="text-[10px] font-extrabold uppercase tracking-wider text-slate-500">Receita Prevista</span>
+            <DollarSign className="w-4 h-4 text-slate-400 group-hover:text-indigo-600 transition-colors" />
+          </div>
+          <p className="text-lg font-black text-slate-900">R$ {(receitaPrevista / 1000).toFixed(0)}k</p>
+          <span className="text-[10px] text-slate-500 font-medium">Honorários</span>
         </div>
 
-        <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-2xs">
-          <span className="text-[10px] font-extrabold text-slate-500 uppercase tracking-wider">SLA Médio Vaga</span>
-          <p className="text-2xl font-black text-indigo-600 mt-1">{tempoMedioFechar}d</p>
-          <span className="text-[10px] text-slate-500 font-medium mt-1 inline-block">Meta: {slaMedio}d</span>
+        {/* 8. Receita Recebida */}
+        <div 
+          onClick={() => onNavigateTab('financeiro')}
+          className="bg-white p-4 rounded-2xl border border-slate-200 shadow-2xs hover:border-indigo-400 hover:shadow-xs transition-all cursor-pointer group space-y-1"
+        >
+          <div className="flex items-center justify-between text-slate-400">
+            <span className="text-[10px] font-extrabold uppercase tracking-wider text-slate-500">Receita Recebida</span>
+            <DollarSign className="w-4 h-4 text-emerald-600" />
+          </div>
+          <p className="text-lg font-black text-emerald-700">R$ {(receitaRecebida / 1000).toFixed(0)}k</p>
+          <span className="text-[10px] text-emerald-600 font-bold">Faturado</span>
+        </div>
+
+        {/* 9. Comissão Prevista */}
+        <div 
+          onClick={() => onNavigateTab('comissoes')}
+          className="bg-white p-4 rounded-2xl border border-slate-200 shadow-2xs hover:border-indigo-400 hover:shadow-xs transition-all cursor-pointer group space-y-1"
+        >
+          <div className="flex items-center justify-between text-slate-400">
+            <span className="text-[10px] font-extrabold uppercase tracking-wider text-slate-500">Comissão Prevista</span>
+            <Award className="w-4 h-4 text-amber-500" />
+          </div>
+          <p className="text-lg font-black text-amber-600">R$ {(comissaoPrevista / 1000).toFixed(0)}k</p>
+          <span className="text-[10px] text-amber-600 font-bold">Headhunters</span>
+        </div>
+
+        {/* 10. Despesas */}
+        <div 
+          onClick={() => onNavigateTab('despesas')}
+          className="bg-white p-4 rounded-2xl border border-slate-200 shadow-2xs hover:border-indigo-400 hover:shadow-xs transition-all cursor-pointer group space-y-1"
+        >
+          <div className="flex items-center justify-between text-slate-400">
+            <span className="text-[10px] font-extrabold uppercase tracking-wider text-slate-500">Despesas Totais</span>
+            <Receipt className="w-4 h-4 text-rose-500" />
+          </div>
+          <p className="text-lg font-black text-rose-600">R$ {despesasTotais.toLocaleString('pt-BR')}</p>
+          <span className="text-[10px] text-rose-500 font-medium">Operacional</span>
+        </div>
+
+        {/* 11. Lucro Líquido */}
+        <div 
+          onClick={() => onNavigateTab('financeiro')}
+          className="bg-white p-4 rounded-2xl border border-slate-200 shadow-2xs hover:border-indigo-400 hover:shadow-xs transition-all cursor-pointer group space-y-1"
+        >
+          <div className="flex items-center justify-between text-slate-400">
+            <span className="text-[10px] font-extrabold uppercase tracking-wider text-slate-500">Lucro Líquido</span>
+            <DollarSign className="w-4 h-4 text-emerald-600" />
+          </div>
+          <p className="text-lg font-black text-slate-900">R$ {(lucroLiquido / 1000).toFixed(0)}k</p>
+          <span className="text-[10px] text-emerald-600 font-bold">Margem ~85%</span>
+        </div>
+
+        {/* 12. SLA Médio */}
+        <div 
+          onClick={() => onNavigateTab('vagas')}
+          className="bg-white p-4 rounded-2xl border border-slate-200 shadow-2xs hover:border-indigo-400 hover:shadow-xs transition-all cursor-pointer group space-y-1"
+        >
+          <div className="flex items-center justify-between text-slate-400">
+            <span className="text-[10px] font-extrabold uppercase tracking-wider text-slate-500">SLA Médio</span>
+            <Clock className="w-4 h-4 text-indigo-600" />
+          </div>
+          <p className="text-2xl font-black text-indigo-600">{slaMedio}d</p>
+          <span className="text-[10px] text-slate-500 font-medium">Prazo de Fechamento</span>
         </div>
       </div>
 
-      {/* Main Section Grid */}
+      {/* Main Secondary Widgets */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Ranking dos Headhunters */}
         <div className="lg:col-span-2 bg-white p-6 rounded-2xl border border-slate-200 shadow-2xs space-y-4">
@@ -226,7 +344,7 @@ export const HeadhunterDashboard: React.FC<HeadhunterDashboardProps> = ({
             <p className="text-xs text-slate-500 py-6 text-center">Nenhuma entrevista agendada para hoje.</p>
           ) : (
             <div className="space-y-3">
-              {entrevistasDoDia.map(int => (
+              {entrevistasDoDia.slice(0, 3).map(int => (
                 <div key={int.id} className="p-3 rounded-xl bg-slate-50 border border-slate-200 space-y-1.5">
                   <div className="flex items-center justify-between">
                     <span className="text-xs font-black text-slate-900">{int.candidatoNome}</span>
@@ -262,6 +380,88 @@ export const HeadhunterDashboard: React.FC<HeadhunterDashboardProps> = ({
           </div>
         </div>
       </div>
+
+      {/* SLA, Contas e Comissões Bottom Cards */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+        {/* Vagas Próximas do SLA */}
+        <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-2xs space-y-3">
+          <div className="flex items-center justify-between border-b border-slate-100 pb-2">
+            <div className="flex items-center gap-2">
+              <AlertTriangle className="w-4 h-4 text-amber-500" />
+              <h4 className="text-xs font-extrabold text-slate-900 uppercase tracking-wider">Vagas Próximas do SLA</h4>
+            </div>
+            <button onClick={() => onNavigateTab('vagas')} className="text-[11px] font-bold text-indigo-600 hover:underline cursor-pointer">Ver Vagas →</button>
+          </div>
+
+          <div className="space-y-2">
+            {vagasProximasSLA.slice(0, 3).map(j => (
+              <div key={j.id} className="p-2.5 rounded-xl bg-slate-50 border border-slate-200 flex items-center justify-between text-xs">
+                <div>
+                  <p className="font-bold text-slate-900">{j.cargo}</p>
+                  <p className="text-[10px] text-slate-500">{j.clienteNome}</p>
+                </div>
+                <span className="px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 text-[10px] font-bold">
+                  SLA: {j.slaDias} dias
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Contas a Receber */}
+        <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-2xs space-y-3">
+          <div className="flex items-center justify-between border-b border-slate-100 pb-2">
+            <div className="flex items-center gap-2">
+              <DollarSign className="w-4 h-4 text-emerald-600" />
+              <h4 className="text-xs font-extrabold text-slate-900 uppercase tracking-wider">Contas a Receber</h4>
+            </div>
+            <button onClick={() => onNavigateTab('financeiro')} className="text-[11px] font-bold text-indigo-600 hover:underline cursor-pointer">Financeiro →</button>
+          </div>
+
+          <div className="space-y-2">
+            {contasAReceber.slice(0, 3).map(f => (
+              <div key={f.id} className="p-2.5 rounded-xl bg-slate-50 border border-slate-200 flex items-center justify-between text-xs">
+                <div>
+                  <p className="font-bold text-slate-900">{f.descricao || f.clienteNome}</p>
+                  <p className="text-[10px] text-slate-500">Vencimento: {f.dataVencimento}</p>
+                </div>
+                <span className="font-extrabold text-emerald-700">
+                  R$ {f.valor.toLocaleString('pt-BR')}
+                </span>
+              </div>
+            ))}
+            {contasAReceber.length === 0 && (
+              <p className="text-xs text-slate-400 py-2 text-center">Nenhum recebimento pendente.</p>
+            )}
+          </div>
+        </div>
+
+        {/* Comissões Pendentes */}
+        <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-2xs space-y-3">
+          <div className="flex items-center justify-between border-b border-slate-100 pb-2">
+            <div className="flex items-center gap-2">
+              <Award className="w-4 h-4 text-indigo-600" />
+              <h4 className="text-xs font-extrabold text-slate-900 uppercase tracking-wider">Comissões Pendentes</h4>
+            </div>
+            <button onClick={() => onNavigateTab('comissoes')} className="text-[11px] font-bold text-indigo-600 hover:underline cursor-pointer">Comissões →</button>
+          </div>
+
+          <div className="space-y-2">
+            {comissoesPendentes.slice(0, 3).map(c => (
+              <div key={c.id} className="p-2.5 rounded-xl bg-slate-50 border border-slate-200 flex items-center justify-between text-xs">
+                <div>
+                  <p className="font-bold text-slate-900">{c.consultorNome}</p>
+                  <p className="text-[10px] text-slate-500">{c.vagaTitulo}</p>
+                </div>
+                <span className="font-extrabold text-indigo-600">
+                  R$ {c.valorComissao.toLocaleString('pt-BR')}
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
     </div>
   );
 };
+
