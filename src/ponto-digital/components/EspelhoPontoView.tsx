@@ -1,6 +1,8 @@
 import React, { useState } from 'react';
-import { FileText, Download, Filter, Printer, CheckCircle2, Clock, Calendar } from 'lucide-react';
+import { FileText, Download, Filter, Printer, CheckCircle2, Clock, Calendar, Sparkles } from 'lucide-react';
 import { RegistroPontoDoc, FuncionarioPontoInfo } from '../types/ponto';
+import { ContextualAiModal } from '../../ai/components/ContextualAiModal';
+import { timeTrackingAiService } from '../../ai/services/aiService';
 
 interface EspelhoPontoViewProps {
   registros: RegistroPontoDoc[];
@@ -13,6 +15,7 @@ export const EspelhoPontoView: React.FC<EspelhoPontoViewProps> = ({
 }) => {
   const [selectedFuncId, setSelectedFuncId] = useState<string>(funcionarios[0]?.id || 'func-01');
   const [mesAno, setMesAno] = useState<string>('2026-07');
+  const [showAiModal, setShowAiModal] = useState(false);
 
   const selectedFunc = funcionarios.find(f => f.id === selectedFuncId) || funcionarios[0];
   const userRegistros = registros.filter(r => r.funcionarioId === selectedFuncId || !r.funcionarioId);
@@ -59,6 +62,13 @@ export const EspelhoPontoView: React.FC<EspelhoPontoViewProps> = ({
         </div>
 
         <div className="flex items-center gap-2">
+          <button
+            onClick={() => setShowAiModal(true)}
+            className="bg-indigo-600 hover:bg-indigo-700 text-white font-bold px-3.5 py-2 rounded-xl text-xs transition-all shadow-sm flex items-center gap-1.5 cursor-pointer"
+          >
+            <Sparkles className="w-3.5 h-3.5 text-amber-300" />
+            <span>Ver Inconsistências com IA</span>
+          </button>
           <button
             onClick={handleExportPDF}
             className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-3.5 py-2 rounded-xl text-xs transition-all shadow-sm flex items-center gap-1.5 cursor-pointer"
@@ -151,6 +161,15 @@ export const EspelhoPontoView: React.FC<EspelhoPontoViewProps> = ({
           </tbody>
         </table>
       </div>
+
+      <ContextualAiModal
+        isOpen={showAiModal}
+        onClose={() => setShowAiModal(false)}
+        title={`Análise de Inconsistências de Ponto — ${selectedFunc?.nome || 'Colaborador'}`}
+        subtitle={`Verificação automatizada de atrasos, horas extras e inconformidades no mês de ${mesAno}`}
+        onExecute={() => timeTrackingAiService.detectInconsistencies({ records: userRegistros })}
+        confirmText="Anotar Inconsistências"
+      />
     </div>
   );
 };

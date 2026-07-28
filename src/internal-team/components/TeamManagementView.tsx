@@ -20,7 +20,8 @@ import {
   Building2, 
   CheckCircle2, 
   AlertTriangle,
-  RotateCcw
+  RotateCcw,
+  Sparkles
 } from 'lucide-react';
 import { useAuth } from '../../auth';
 import { Department } from '../../organization';
@@ -33,6 +34,8 @@ import { TeamMemberModal } from './TeamMemberModal';
 import { TeamMemberMetricsModal } from './TeamMemberMetricsModal';
 import { ReassignJobsModal } from './ReassignJobsModal';
 import { TeamPerformanceOverview } from './TeamPerformanceOverview';
+import { ContextualAiModal } from '../../ai/components/ContextualAiModal';
+import { employeeAiService } from '../../ai/services/aiService';
 
 interface TeamManagementViewProps {
   departments?: Department[];
@@ -59,6 +62,7 @@ export const TeamManagementView: React.FC<TeamManagementViewProps> = ({
   // Modais
   const [isMemberModalOpen, setIsMemberModalOpen] = useState(false);
   const [editingMember, setEditingMember] = useState<InternalTeamMember | null>(null);
+  const [showAiModal, setShowAiModal] = useState(false);
 
   const [isMetricsModalOpen, setIsMetricsModalOpen] = useState(false);
   const [selectedMetricsMember, setSelectedMetricsMember] = useState<InternalTeamMember | null>(null);
@@ -202,6 +206,14 @@ export const TeamManagementView: React.FC<TeamManagementViewProps> = ({
           </div>
 
           <div className="flex items-center gap-3 flex-wrap">
+            <button
+              onClick={() => setShowAiModal(true)}
+              className="px-3.5 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold text-xs rounded-xl transition-all shadow-xs flex items-center gap-2 cursor-pointer"
+            >
+              <Sparkles className="w-4 h-4 text-amber-300" />
+              <span>Sugerir PDI com IA</span>
+            </button>
+
             {/* Quick Action Button for Reassignment */}
             <button
               onClick={() => {
@@ -527,6 +539,14 @@ export const TeamManagementView: React.FC<TeamManagementViewProps> = ({
         onConfirmReassign={handleConfirmReassign}
       />
 
+      <ContextualAiModal
+        isOpen={showAiModal}
+        onClose={() => setShowAiModal(false)}
+        title="Geração Inteligente de PDI & Plano de Desenvolvimento"
+        subtitle="Sugestão de metas, competências e trilha de treinamento para a equipe interna"
+        onExecute={() => employeeAiService.suggestDevelopmentPlan({ employee: members[0] || { name: 'Colaborador' } })}
+        confirmText="Anotar PDI"
+      />
     </div>
   );
 };

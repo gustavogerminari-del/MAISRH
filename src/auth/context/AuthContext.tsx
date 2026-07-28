@@ -38,7 +38,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [user, setUser] = useState<UserProfile | null>(null);
   const [sessionToken, setSessionToken] = useState<SessionToken | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(true);
-  const [activeModules, setActiveModules] = useState<Record<string, boolean>>({});
+  const [activeModules, setActiveModules] = useState<Record<string, boolean>>({
+    recrutamento: true,
+    vagas: true,
+    bancoTalentos: true,
+    entrevistas: true,
+  });
 
   // Trigger seeding of Firestore collections on load
   useEffect(() => {
@@ -52,26 +57,28 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       return;
     }
 
+    const defaultModules: Record<string, boolean> = {
+      recrutamento: true,
+      vagas: true,
+      bancoTalentos: true,
+      entrevistas: true,
+      dp: true,
+      equipeInterna: true,
+      ponto: true,
+      folha: true,
+      beneficios: true,
+      feriasBeneficios: true,
+      consultorRH: true,
+      documentosAssinatura: true,
+      auditoriaLogs: true,
+      relatoriosAvancados: true,
+      siteVagasPersonalizado: true,
+      desempenho: true
+    };
+
     // Super Admin / MASTER has all modules enabled by default
     if (user.role === 'Super Administrador' || user.tipoUsuario === 'MASTER') {
-      setActiveModules({
-        recrutamento: true,
-        vagas: true,
-        bancoTalentos: true,
-        entrevistas: true,
-        dp: true,
-        equipeInterna: true,
-        ponto: true,
-        folha: true,
-        beneficios: true,
-        feriasBeneficios: true,
-        consultorRH: true,
-        documentosAssinatura: true,
-        auditoriaLogs: true,
-        relatoriosAvancados: true,
-        siteVagasPersonalizado: true,
-        desempenho: true
-      });
+      setActiveModules(defaultModules);
       return;
     }
 
@@ -89,11 +96,19 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
 
     // 2. Fallback to Local Tenant Store
-    const tenants = getTenants();
-    const currentTenant = tenants.find(t => t.id === empresaId) || tenants[0];
-    if (currentTenant && currentTenant.modules) {
-      setActiveModules(currentTenant.modules as any);
+    try {
+      const tenants = getTenants();
+      const currentTenant = tenants.find(t => t.id === empresaId) || tenants[0];
+      if (currentTenant && currentTenant.modules && Object.keys(currentTenant.modules).length > 0) {
+        setActiveModules(currentTenant.modules as any);
+        return;
+      }
+    } catch (err) {
+      console.warn('Erro ao carregar tenant do armazenamento local:', err);
     }
+
+    // 3. Fallback se Firestore não retornar, empresa não existir localmente ou modules estiver vazio
+    setActiveModules(defaultModules);
   };
 
   useEffect(() => {
@@ -272,14 +287,35 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       return true;
     }
 
+    // Regra especial de fallback para módulos de recrutamento
+    const recruitmentModules = [
+      'recrutamento',
+      'vagas',
+      'bancoTalentos',
+      'entrevistas'
+    ];
+
+    if (recruitmentModules.includes(moduleKey)) {
+      const possuiConfiguracao =
+        Object.prototype.hasOwnProperty.call(activeModules, 'recrutamento') ||
+        Object.prototype.hasOwnProperty.call(activeModules, 'vagas') ||
+        Object.prototype.hasOwnProperty.call(activeModules, 'bancoTalentos') ||
+        Object.prototype.hasOwnProperty.call(activeModules, 'entrevistas');
+
+      if (!possuiConfiguracao) {
+        return true;
+      }
+
+      return (
+        activeModules.recrutamento === true ||
+        activeModules.vagas === true ||
+        activeModules.bancoTalentos === true ||
+        activeModules.entrevistas === true
+      );
+    }
+
     // Direct match in activeModules
     if (activeModules[moduleKey] === true) return true;
-
-    // Aliases
-    if ((moduleKey === 'recrutamento' || moduleKey === 'vagas' || moduleKey === 'bancoTalentos' || moduleKey === 'entrevistas') &&
-        (activeModules['recrutamento'] || activeModules['vagas'] || activeModules['bancoTalentos'])) {
-      return true;
-    }
 
     if ((moduleKey === 'dp' || moduleKey === 'equipeInterna') && (activeModules['dp'] || activeModules['equipeInterna'])) {
       return true;

@@ -20,6 +20,8 @@ import {
 import { LeaveRequest, EmployeeLeaveBalance, BenefitItem } from './types';
 import { MOCK_LEAVE_REQUESTS, MOCK_LEAVE_BALANCES, MOCK_BENEFITS } from './mockData';
 import { BenefitService } from '../services/BenefitService';
+import { ContextualAiModal } from '../ai/components/ContextualAiModal';
+import { vacationAiService, benefitsAiService } from '../ai/services/aiService';
 
 export const BenefitsLeavesView: React.FC = () => {
   const [activeTab, setActiveTab] = useState<'solicitacoes' | 'saldos' | 'beneficios'>('solicitacoes');
@@ -27,6 +29,14 @@ export const BenefitsLeavesView: React.FC = () => {
   const [balances, setBalances] = useState<EmployeeLeaveBalance[]>(MOCK_LEAVE_BALANCES);
   const [benefits, setBenefits] = useState<BenefitItem[]>(MOCK_BENEFITS);
   const [loading, setLoading] = useState(true);
+
+  // AI Modal states
+  const [aiModalConfig, setAiModalConfig] = useState<{
+    isOpen: boolean;
+    title: string;
+    subtitle: string;
+    onExecute: () => Promise<any>;
+  }>({ isOpen: false, title: '', subtitle: '', onExecute: async () => ({}) });
 
   // New Leave Request Modal State
   const [showNewRequestModal, setShowNewRequestModal] = useState(false);
@@ -141,38 +151,75 @@ export const BenefitsLeavesView: React.FC = () => {
         </div>
       )}
 
-      {/* Tabs */}
-      <div className="flex items-center gap-2 border-b border-slate-200 pb-2">
-        <button
-          onClick={() => setActiveTab('solicitacoes')}
-          className={`px-4 py-2 rounded-xl text-xs font-bold transition-all ${
-            activeTab === 'solicitacoes'
-              ? 'bg-indigo-600 text-white shadow-2xs'
-              : 'bg-white text-slate-600 hover:bg-slate-100'
-          }`}
-        >
-          Solicitações & Aprovações ({leaveRequests.length})
-        </button>
-        <button
-          onClick={() => setActiveTab('saldos')}
-          className={`px-4 py-2 rounded-xl text-xs font-bold transition-all ${
-            activeTab === 'saldos'
-              ? 'bg-indigo-600 text-white shadow-2xs'
-              : 'bg-white text-slate-600 hover:bg-slate-100'
-          }`}
-        >
-          Saldos & Períodos Aquisitivos
-        </button>
-        <button
-          onClick={() => setActiveTab('beneficios')}
-          className={`px-4 py-2 rounded-xl text-xs font-bold transition-all ${
-            activeTab === 'beneficios'
-              ? 'bg-indigo-600 text-white shadow-2xs'
-              : 'bg-white text-slate-600 hover:bg-slate-100'
-          }`}
-        >
-          Catálogo de Benefícios ({benefits.length})
-        </button>
+      {/* Tabs & AI Actions */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-200 pb-2">
+        <div className="flex items-center gap-2 overflow-x-auto">
+          <button
+            onClick={() => setActiveTab('solicitacoes')}
+            className={`px-4 py-2 rounded-xl text-xs font-bold transition-all ${
+              activeTab === 'solicitacoes'
+                ? 'bg-indigo-600 text-white shadow-2xs'
+                : 'bg-white text-slate-600 hover:bg-slate-100'
+            }`}
+          >
+            Solicitações & Aprovações ({leaveRequests.length})
+          </button>
+          <button
+            onClick={() => setActiveTab('saldos')}
+            className={`px-4 py-2 rounded-xl text-xs font-bold transition-all ${
+              activeTab === 'saldos'
+                ? 'bg-indigo-600 text-white shadow-2xs'
+                : 'bg-white text-slate-600 hover:bg-slate-100'
+            }`}
+          >
+            Saldos & Períodos Aquisitivos
+          </button>
+          <button
+            onClick={() => setActiveTab('beneficios')}
+            className={`px-4 py-2 rounded-xl text-xs font-bold transition-all ${
+              activeTab === 'beneficios'
+                ? 'bg-indigo-600 text-white shadow-2xs'
+                : 'bg-white text-slate-600 hover:bg-slate-100'
+            }`}
+          >
+            Catálogo de Benefícios ({benefits.length})
+          </button>
+        </div>
+
+        {/* Action button by active tab */}
+        {activeTab === 'saldos' && (
+          <button
+            onClick={() =>
+              setAiModalConfig({
+                isOpen: true,
+                title: 'Alertar Férias Vencidas com IA',
+                subtitle: 'Verificação inteligente de férias a vencer nos próximos 60 dias conforme a CLT',
+                onExecute: () => vacationAiService.alertExpiredVacations({ employees: balances }),
+              })
+            }
+            className="px-3.5 py-1.5 bg-amber-500 hover:bg-amber-600 text-slate-950 font-bold text-xs rounded-xl shadow-xs transition-all flex items-center gap-1.5 shrink-0 cursor-pointer"
+          >
+            <Sparkles className="w-3.5 h-3.5" />
+            <span>Alertar Vencimentos com IA</span>
+          </button>
+        )}
+
+        {activeTab === 'beneficios' && (
+          <button
+            onClick={() =>
+              setAiModalConfig({
+                isOpen: true,
+                title: 'Análise & Sugestão de Benefícios com IA',
+                subtitle: 'Identificação de oportunidades, conformidade e elegibilidade do plano corporativo',
+                onExecute: () => benefitsAiService.suggestBenefits({ companySize: 120, segment: 'Tecnologia & Serviços' }),
+              })
+            }
+            className="px-3.5 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs rounded-xl shadow-xs transition-all flex items-center gap-1.5 shrink-0 cursor-pointer"
+          >
+            <Sparkles className="w-3.5 h-3.5 text-amber-300" />
+            <span>Sugerir Benefícios com IA</span>
+          </button>
+        )}
       </div>
 
       {/* TAB 1: SOLICITAÇÕES & APROVAÇÕES */}
@@ -451,6 +498,14 @@ export const BenefitsLeavesView: React.FC = () => {
           </div>
         </div>
       )}
+
+      <ContextualAiModal
+        isOpen={aiModalConfig.isOpen}
+        onClose={() => setAiModalConfig(prev => ({ ...prev, isOpen: false }))}
+        title={aiModalConfig.title}
+        subtitle={aiModalConfig.subtitle}
+        onExecute={aiModalConfig.onExecute}
+      />
     </div>
   );
 };

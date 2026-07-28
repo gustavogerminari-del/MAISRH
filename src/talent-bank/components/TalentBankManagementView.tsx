@@ -8,6 +8,7 @@ import {
   Lock,
   Search,
   UserCheck,
+  Sparkles,
 } from 'lucide-react';
 import { Candidate, CandidateFilterParams } from '../types/candidate';
 import { INITIAL_CANDIDATES_DATA } from '../data/mockCandidatesData';
@@ -19,6 +20,8 @@ import { Job, INITIAL_JOBS_DATA } from '../../jobs';
 import { useAuth } from '../../auth';
 import { Button, Card } from '../../shared';
 import { logger } from '../../core';
+import { ContextualAiModal } from '../../ai/components/ContextualAiModal';
+import { talentBankAiService } from '../../ai/services/aiService';
 
 export interface TalentBankManagementViewProps {
   initialCandidatesList?: Candidate[];
@@ -48,6 +51,7 @@ export const TalentBankManagementView: React.FC<TalentBankManagementViewProps> =
   const [isDetailOpen, setIsDetailOpen] = useState(false);
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [editingCandidate, setEditingCandidate] = useState<Candidate | null>(null);
+  const [showAiModal, setShowAiModal] = useState(false);
 
   const [filters, setFilters] = useState<CandidateFilterParams>({
     searchTerm: searchTermExternal || '',
@@ -204,15 +208,23 @@ export const TalentBankManagementView: React.FC<TalentBankManagementViewProps> =
           </p>
         </div>
 
-        <Button
-          variant="primary"
-          size="sm"
-          onClick={handleOpenCreateModal}
-          leftIcon={<Plus className="w-4 h-4" />}
-          className="shrink-0"
-        >
-          Cadastrar Talento
-        </Button>
+        <div className="flex items-center gap-2 shrink-0">
+          <button
+            onClick={() => setShowAiModal(true)}
+            className="px-3.5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs rounded-xl shadow-xs transition-all flex items-center gap-1.5 cursor-pointer"
+          >
+            <Sparkles className="w-4 h-4 text-amber-300" />
+            <span>Match de Talentos com IA</span>
+          </button>
+          <Button
+            variant="primary"
+            size="sm"
+            onClick={handleOpenCreateModal}
+            leftIcon={<Plus className="w-4 h-4" />}
+          >
+            Cadastrar Talento
+          </Button>
+        </div>
       </div>
 
       {/* Top Stat Summary Grid */}
@@ -309,6 +321,15 @@ export const TalentBankManagementView: React.FC<TalentBankManagementViewProps> =
         onClose={() => setIsFormOpen(false)}
         onSaveCandidate={handleSaveCandidate}
         initialCandidate={editingCandidate}
+      />
+
+      <ContextualAiModal
+        isOpen={showAiModal}
+        onClose={() => setShowAiModal(false)}
+        title="Análise Inteligente de Compatibilidade e Ranking de Talentos"
+        subtitle="Cruzamento automatizado entre o banco de talentos e as posições em aberto no sistema"
+        onExecute={() => talentBankAiService.findMatchingCandidates({ job: jobs[0], candidates })}
+        confirmText="Anotar Compatibilidade"
       />
     </div>
   );

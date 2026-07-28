@@ -12,9 +12,12 @@ import {
   User, 
   X,
   FileCheck,
-  ShieldAlert
+  ShieldAlert,
+  Sparkles
 } from 'lucide-react';
 import { CalculoRescisorio, ColaboradorCompleto, TipoRescisao } from '../types/dp';
+import { ContextualAiModal } from '../../ai/components/ContextualAiModal';
+import { dpAiService } from '../../ai/services/aiService';
 
 interface CalculoRescisaoProps {
   rescisoes: CalculoRescisorio[];
@@ -31,6 +34,7 @@ export const CalculoRescisao: React.FC<CalculoRescisaoProps> = ({
 }) => {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [selectedRescisao, setSelectedRescisao] = useState<CalculoRescisorio | null>(rescisoes[0] || null);
+  const [showAiModal, setShowAiModal] = useState(false);
 
   // Form State for new simulation
   const [selectedColabId, setSelectedColabId] = useState(colaboradores[0]?.id || '');
@@ -138,13 +142,22 @@ export const CalculoRescisao: React.FC<CalculoRescisaoProps> = ({
           </p>
         </div>
 
-        <button
-          onClick={() => setIsModalOpen(true)}
-          className="flex items-center gap-2 px-4 py-2.5 bg-[#2563EB] hover:bg-blue-700 text-white text-xs font-bold rounded-xl transition-all shadow-sm cursor-pointer"
-        >
-          <Plus className="w-4 h-4" />
-          <span>Simular Nova Rescisão</span>
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => setShowAiModal(true)}
+            className="flex items-center gap-1.5 px-3.5 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-xl transition-all shadow-xs cursor-pointer"
+          >
+            <Sparkles className="w-4 h-4 text-amber-300" />
+            <span>Conferir Pendências com IA</span>
+          </button>
+          <button
+            onClick={() => setIsModalOpen(true)}
+            className="flex items-center gap-2 px-4 py-2.5 bg-[#2563EB] hover:bg-blue-700 text-white text-xs font-bold rounded-xl transition-all shadow-sm cursor-pointer"
+          >
+            <Plus className="w-4 h-4" />
+            <span>Simular Nova Rescisão</span>
+          </button>
+        </div>
       </div>
 
       {/* Main Content Split: List vs Detailed TRCT Breakdown */}
@@ -372,6 +385,15 @@ export const CalculoRescisao: React.FC<CalculoRescisaoProps> = ({
           </div>
         </div>
       )}
+
+      <ContextualAiModal
+        isOpen={showAiModal}
+        onClose={() => setShowAiModal(false)}
+        title="Análise Inteligente de Pendências e Documentos de Rescisão"
+        subtitle="Verificação automatizada do processo rescisório e verbas trabalhistas (Sujeito a validação do profissional de RH)"
+        onExecute={() => dpAiService.checkTerminationData({ employeeName: selectedRescisao?.colaboradorNome || 'Colaborador', details: selectedRescisao })}
+        confirmText="Anotar Análise"
+      />
     </div>
   );
 };

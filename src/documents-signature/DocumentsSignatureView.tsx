@@ -20,6 +20,8 @@ import {
 import { HRDocument, DocumentCategory } from './types';
 import { MOCK_DOCUMENTS } from './mockData';
 import { DocumentService } from '../services/DocumentService';
+import { ContextualAiModal } from '../ai/components/ContextualAiModal';
+import { documentsAiService } from '../ai/services/aiService';
 
 export const DocumentsSignatureView: React.FC = () => {
   const [documents, setDocuments] = useState<HRDocument[]>(MOCK_DOCUMENTS);
@@ -27,6 +29,7 @@ export const DocumentsSignatureView: React.FC = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<string>('Todas');
   const [selectedDocForSigning, setSelectedDocForSigning] = useState<HRDocument | null>(null);
+  const [showAiModal, setShowAiModal] = useState(false);
   
   // New Document Upload Modal State
   const [showUploadModal, setShowUploadModal] = useState(false);
@@ -127,13 +130,22 @@ export const DocumentsSignatureView: React.FC = () => {
           </p>
         </div>
 
-        <button
-          onClick={() => setShowUploadModal(true)}
-          className="inline-flex items-center gap-2 px-4 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-xl shadow-md transition-all self-start sm:self-center"
-        >
-          <FilePlus className="w-4 h-4" />
-          Novo Documento / Contrato
-        </button>
+        <div className="flex items-center gap-2 self-start sm:self-center">
+          <button
+            onClick={() => setShowAiModal(true)}
+            className="inline-flex items-center gap-2 px-3.5 py-2.5 bg-amber-500 hover:bg-amber-600 text-slate-950 text-xs font-bold rounded-xl shadow-xs transition-all cursor-pointer"
+          >
+            <Sparkles className="w-4 h-4" />
+            <span>Identificar Vencimentos com IA</span>
+          </button>
+          <button
+            onClick={() => setShowUploadModal(true)}
+            className="inline-flex items-center gap-2 px-4 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-xl shadow-md transition-all cursor-pointer"
+          >
+            <FilePlus className="w-4 h-4" />
+            <span>Novo Documento / Contrato</span>
+          </button>
+        </div>
       </div>
 
       {/* Filters Bar */}
@@ -386,6 +398,15 @@ export const DocumentsSignatureView: React.FC = () => {
           </div>
         </div>
       )}
+
+      <ContextualAiModal
+        isOpen={showAiModal}
+        onClose={() => setShowAiModal(false)}
+        title="Análise de Vencimentos & Conformidade de Documentos"
+        subtitle="Verificação automatizada de prazos de validade, NDAs e contratos do repositório"
+        onExecute={() => documentsAiService.identifyExpiration({ documents })}
+        confirmText="Anotar Prazos"
+      />
     </div>
   );
 };

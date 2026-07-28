@@ -10,7 +10,7 @@ import { ReportsView } from './components/ReportsView';
 import { CompanyView } from './components/CompanyView';
 import { SettingsView } from './components/SettingsView';
 import { PublicJobsView } from './public-jobs';
-import { RHConsultantView } from './rh-consultant';
+import { HeadhunterView } from './headhunter/HeadhunterView';
 import { BenefitsLeavesView } from './benefits-leaves';
 import { DocumentsSignatureView } from './documents-signature';
 import { PayrollView } from './payroll';
@@ -311,7 +311,7 @@ function MainAppContent() {
               />
             )}
 
-            {activeTab === 'consultor-rh' && <RHConsultantView />}
+            {(activeTab === 'headhunter' || activeTab === 'consultor-rh') && <HeadhunterView />}
 
             {/* Departamento Pessoal Master Submenu Routing */}
             {['departamento-pessoal', 'colaboradores', 'beneficios', 'ferias', 'rescisao', 'relatorios-dp', 'configuracoes-trabalhistas'].includes(activeTab) && (

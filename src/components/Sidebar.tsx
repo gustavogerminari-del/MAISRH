@@ -36,7 +36,8 @@ export type MainTab =
   | 'empresa' 
   | 'colaboradores' 
   | 'site-vagas' 
-  | 'consultor-rh' 
+  | 'consultor-rh'
+  | 'headhunter'
   | 'ferias-beneficios' 
   | 'beneficios'
   | 'ferias'
@@ -280,6 +281,21 @@ export const Sidebar: React.FC<SidebarProps> = ({
                 }`}>
                   IA
                 </span>
+              </button>
+            </div>
+
+            {/* Headhunter Module */}
+            <div className="pt-1">
+              <button
+                onClick={() => handleSelectTab('headhunter')}
+                className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer min-h-[44px] ${
+                  activeTab === 'headhunter' || activeTab === 'consultor-rh'
+                    ? 'bg-indigo-600 text-white shadow-xs font-extrabold'
+                    : 'text-[#1E293B] hover:bg-[#F8FAFC] hover:text-[#2563EB]'
+                }`}
+              >
+                <Award className={`w-4 h-4 ${activeTab === 'headhunter' || activeTab === 'consultor-rh' ? 'text-white' : 'text-indigo-600'}`} />
+                <span>Headhunter</span>
               </button>
             </div>
 
