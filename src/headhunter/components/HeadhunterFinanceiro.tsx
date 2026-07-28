@@ -113,6 +113,9 @@ export const HeadhunterFinanceiro: React.FC<HeadhunterFinanceiroProps> = ({
   const [garantias, setGarantias] = useState<HeadhunterGarantia[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('Todos');
+  const [filterClient, setFilterClient] = useState('');
+  const [filterVaga, setFilterVaga] = useState('');
+  const [filterCandidato, setFilterCandidato] = useState('');
 
   // Modals state
   const [showReceitaModal, setShowReceitaModal] = useState(false);
@@ -671,23 +674,70 @@ export const HeadhunterFinanceiro: React.FC<HeadhunterFinanceiroProps> = ({
       {/* TAB 2: RECEITAS */}
       {activeTab === 'receitas' && (
         <div className="bg-white rounded-2xl border border-slate-200 shadow-2xs overflow-hidden space-y-4 p-4">
-          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 border-b border-slate-100 pb-3">
+          <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3 border-b border-slate-100 pb-3">
             <h3 className="text-sm font-extrabold text-slate-900">Lançamentos de Receita & Faturamento</h3>
-            <div className="flex items-center gap-2">
+            <button
+              onClick={() => setShowReceitaModal(true)}
+              className="px-3.5 py-2 bg-indigo-600 text-white font-bold text-xs rounded-xl cursor-pointer hover:bg-indigo-700 flex items-center gap-1.5 self-start lg:self-auto"
+            >
+              <Plus className="w-4 h-4" />
+              <span>Lançar Nova Receita</span>
+            </button>
+          </div>
+
+          {/* Filter Bar */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2.5 bg-slate-50 p-3 rounded-xl border border-slate-200/80 text-xs">
+            <div>
+              <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Filtrar Cliente</label>
+              <select
+                value={filterClient}
+                onChange={e => setFilterClient(e.target.value)}
+                className="w-full p-2 bg-white border border-slate-200 rounded-lg text-xs font-bold text-slate-800"
+              >
+                <option value="">Todos os Clientes</option>
+                {Array.from(new Set(receitas.map(r => r.clienteNome))).map((c, i) => (
+                  <option key={i} value={c}>{c}</option>
+                ))}
+              </select>
+            </div>
+
+            <div>
+              <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Filtrar Vaga</label>
+              <select
+                value={filterVaga}
+                onChange={e => setFilterVaga(e.target.value)}
+                className="w-full p-2 bg-white border border-slate-200 rounded-lg text-xs font-bold text-slate-800"
+              >
+                <option value="">Todas as Vagas</option>
+                {Array.from(new Set(receitas.map(r => r.vagaTitulo).filter(Boolean))).map((v, i) => (
+                  <option key={i} value={v}>{v}</option>
+                ))}
+              </select>
+            </div>
+
+            <div>
+              <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Filtrar Candidato</label>
+              <select
+                value={filterCandidato}
+                onChange={e => setFilterCandidato(e.target.value)}
+                className="w-full p-2 bg-white border border-slate-200 rounded-lg text-xs font-bold text-slate-800"
+              >
+                <option value="">Todos os Candidatos</option>
+                {Array.from(new Set(receitas.map(r => r.candidatoNome).filter(Boolean))).map((cand, i) => (
+                  <option key={i} value={cand}>{cand}</option>
+                ))}
+              </select>
+            </div>
+
+            <div>
+              <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Busca Textual</label>
               <input
                 type="text"
-                placeholder="Buscar cliente, vaga ou NF..."
+                placeholder="Buscar cliente, vaga, NF..."
                 value={searchTerm}
                 onChange={e => setSearchTerm(e.target.value)}
-                className="p-2 text-xs border border-slate-200 rounded-xl bg-slate-50 w-60"
+                className="w-full p-2 text-xs border border-slate-200 rounded-lg bg-white"
               />
-              <button
-                onClick={() => setShowReceitaModal(true)}
-                className="px-3 py-1.5 bg-indigo-600 text-white font-bold text-xs rounded-xl cursor-pointer hover:bg-indigo-700 flex items-center gap-1"
-              >
-                <Plus className="w-3.5 h-3.5" />
-                <span>Nova Receita</span>
-              </button>
             </div>
           </div>
 
@@ -706,12 +756,17 @@ export const HeadhunterFinanceiro: React.FC<HeadhunterFinanceiroProps> = ({
               </thead>
               <tbody className="divide-y divide-slate-100 text-xs">
                 {receitas
-                  .filter(r => 
-                    r.clienteNome.toLowerCase().includes(searchTerm.toLowerCase()) || 
-                    (r.vagaTitulo || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
-                    (r.candidatoNome || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
-                    (r.numeroNotaFiscal || '').toLowerCase().includes(searchTerm.toLowerCase())
-                  )
+                  .filter(r => {
+                    const matchesSearch = 
+                      r.clienteNome.toLowerCase().includes(searchTerm.toLowerCase()) || 
+                      (r.vagaTitulo || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+                      (r.candidatoNome || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+                      (r.numeroNotaFiscal || '').toLowerCase().includes(searchTerm.toLowerCase());
+                    const matchesClient = !filterClient || r.clienteNome === filterClient;
+                    const matchesVaga = !filterVaga || r.vagaTitulo === filterVaga;
+                    const matchesCandidato = !filterCandidato || r.candidatoNome === filterCandidato;
+                    return matchesSearch && matchesClient && matchesVaga && matchesCandidato;
+                  })
                   .map(r => (
                     <tr key={r.id} className="hover:bg-slate-50 transition-colors">
                       <td className="p-3">

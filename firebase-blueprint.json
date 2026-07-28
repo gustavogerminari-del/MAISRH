@@ -232,6 +232,189 @@
         "timestamp": { "type": "string" }
       },
       "required": ["id", "action", "timestamp"]
+    },
+    "colaboradores": {
+      "title": "Colaboradores DP",
+      "description": "Cadastro único e centralizado do colaborador com dados pessoais, contratuais e financeiros",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "empresaId": { "type": "string" },
+        "contratoTrabalhoId": { "type": "string" },
+        "nomeCompleto": { "type": "string" },
+        "candidatoId": { "type": "string" },
+        "contratacaoId": { "type": "string" },
+        "pessoais": { "type": "object" },
+        "profissionais": { "type": "object" },
+        "trabalhistas": { "type": "object" },
+        "acessoColaborador": { "type": "object" },
+        "createdAt": { "type": "string" },
+        "updatedAt": { "type": "string" }
+      },
+      "required": ["id", "empresaId", "nomeCompleto"]
+    },
+    "contratos_trabalho": {
+      "title": "Contratos de Trabalho",
+      "description": "Vínculos empregatícios dos colaboradores com cargos e regras salariais",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "empresaId": { "type": "string" },
+        "colaboradorId": { "type": "string" },
+        "tipoContrato": { "type": "string" },
+        "salarioBase": { "type": "number" },
+        "dataAdmissao": { "type": "string" }
+      },
+      "required": ["id", "empresaId", "colaboradorId"]
+    },
+    "jornadas": {
+      "title": "Regras de Jornada",
+      "description": "Configurações de jornada e escalas de trabalho",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "empresaId": { "type": "string" },
+        "colaboradorId": { "type": "string" },
+        "descricao": { "type": "string" }
+      },
+      "required": ["id", "empresaId"]
+    },
+    "marcacoes_ponto": {
+      "title": "Marcações de Ponto",
+      "description": "Registros de batida de ponto diários",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "empresaId": { "type": "string" },
+        "colaboradorId": { "type": "string" },
+        "data": { "type": "string" }
+      },
+      "required": ["id", "empresaId", "colaboradorId", "data"]
+    },
+    "ajustes_ponto": {
+      "title": "Ajustes de Ponto",
+      "description": "Solicitações de abono e retificação de marcadores de ponto",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "empresaId": { "type": "string" },
+        "colaboradorId": { "type": "string" },
+        "status": { "type": "string" }
+      },
+      "required": ["id", "empresaId", "colaboradorId"]
+    },
+    "banco_horas": {
+      "title": "Banco de Horas",
+      "description": "Saldo e extrato de compensação de jornada",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "empresaId": { "type": "string" },
+        "colaboradorId": { "type": "string" },
+        "saldoMinutos": { "type": "number" }
+      },
+      "required": ["id", "empresaId", "colaboradorId"]
+    },
+    "beneficios_colaboradores": {
+      "title": "Benefícios dos Colaboradores",
+      "description": "Vínculo e controle de benefícios por colaborador",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "empresaId": { "type": "string" },
+        "colaboradorId": { "type": "string" },
+        "tipo": { "type": "string" },
+        "status": { "type": "string" }
+      },
+      "required": ["id", "empresaId", "colaboradorId", "tipo"]
+    },
+    "ferias": {
+      "title": "Férias de Colaboradores",
+      "description": "Controle aquisitivo, concessivo e gozo de férias",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "empresaId": { "type": "string" },
+        "colaboradorId": { "type": "string" },
+        "status": { "type": "string" }
+      },
+      "required": ["id", "empresaId", "colaboradorId"]
+    },
+    "afastamentos": {
+      "title": "Afastamentos de Saúde e Licenças",
+      "description": "Atestados, licenças e afastamento INSS/CAT",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "empresaId": { "type": "string" },
+        "colaboradorId": { "type": "string" },
+        "tipo": { "type": "string" },
+        "status": { "type": "string" }
+      },
+      "required": ["id", "empresaId", "colaboradorId", "tipo"]
+    },
+    "documentos_colaboradores": {
+      "title": "Documentos do Colaborador",
+      "description": "Arquivos pessoais, admissionais e holerites",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "empresaId": { "type": "string" },
+        "colaboradorId": { "type": "string" },
+        "categoria": { "type": "string" },
+        "status": { "type": "string" }
+      },
+      "required": ["id", "empresaId", "colaboradorId", "categoria"]
+    },
+    "folhas_pagamento": {
+      "title": "Folhas de Pagamento",
+      "description": "Processamento da folha e holerites mensais",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "empresaId": { "type": "string" },
+        "colaboradorId": { "type": "string" },
+        "mesAno": { "type": "string" }
+      },
+      "required": ["id", "empresaId", "colaboradorId"]
+    },
+    "rescisoes": {
+      "title": "Rescisões Contratuais",
+      "description": "Cálculos e homologações de desligamento",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "empresaId": { "type": "string" },
+        "colaboradorId": { "type": "string" },
+        "status": { "type": "string" }
+      },
+      "required": ["id", "empresaId", "colaboradorId"]
+    },
+    "historico_colaborador": {
+      "title": "Linha do Tempo e Histórico do Colaborador",
+      "description": "Audit trail unificado de eventos do colaborador",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "empresaId": { "type": "string" },
+        "colaboradorId": { "type": "string" },
+        "moduloOrigem": { "type": "string" },
+        "tipoEvento": { "type": "string" },
+        "descricao": { "type": "string" }
+      },
+      "required": ["id", "empresaId", "colaboradorId", "tipoEvento"]
+    },
+    "solicitacoes_admissao": {
+      "title": "Solicitações de Admissão",
+      "description": "Processamento de contratação e checklists de admissão",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "empresaId": { "type": "string" },
+        "candidatoId": { "type": "string" },
+        "status": { "type": "string" }
+      },
+      "required": ["id", "empresaId"]
     }
   },
   "firestore": {

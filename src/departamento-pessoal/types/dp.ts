@@ -236,3 +236,87 @@ export interface ConfiguracoesTrabalhistas {
   tabelaInss: { ate: number; aliquota: number; deducao: number }[];
   tabelaIrrf: { ate: number; aliquota: number; deducao: number; deducaoDependente: number }[];
 }
+
+export interface AfastamentoColaborador {
+  id: string;
+  empresaId: string;
+  colaboradorId: string;
+  colaboradorNome: string;
+  tipo: 'Atestado médico' | 'Auxílio-doença' | 'Acidente de trabalho' | 'Licença-maternidade' | 'Licença-paternidade' | 'Afastamento pelo INSS' | 'CAT' | 'Falta justificada' | 'Outros';
+  dataInicio: string;
+  dataFim: string;
+  diasAfastado: number;
+  cid?: string;
+  medicoResponsavel?: string;
+  crmMedico?: string;
+  anexoUrl?: string;
+  observacoes?: string;
+  status: 'Ativo' | 'Concluído' | 'Cancelado';
+  createdAt?: string;
+}
+
+export interface DocumentoColaborador {
+  id: string;
+  empresaId: string;
+  colaboradorId: string;
+  colaboradorNome?: string;
+  categoria: 'Pessoais' | 'Contratuais' | 'Admissionais' | 'Férias' | 'Afastamentos' | 'Advertências' | 'Suspensões' | 'Saúde ocupacional' | 'Rescisão' | 'Holerites' | 'Outros';
+  tipoDocumento: string;
+  nomeArquivo: string;
+  arquivoUrl?: string;
+  dataEmissao?: string;
+  dataValidade?: string;
+  status: 'Válido' | 'Vencido' | 'Próximo ao Vencimento' | 'Pendente';
+  criadoPor?: string;
+  criadoEm: string;
+}
+
+export interface AjustePontoColaborador {
+  id: string;
+  empresaId: string;
+  colaboradorId: string;
+  colaboradorNome: string;
+  data: string;
+  motivo: string;
+  marcacoesOriginais: string[];
+  marcacoesNovas: string[];
+  comprovanteUrl?: string;
+  status: 'Pendente' | 'Aprovado' | 'Recusado' | 'Cancelado';
+  aprovadoPor?: string;
+  dataAprovacao?: string;
+  createdAt: string;
+}
+
+export interface HistoricoEventoColaborador {
+  id: string;
+  empresaId: string;
+  colaboradorId: string;
+  moduloOrigem: 'Colaboradores' | 'Admissões' | 'Jornada' | 'Benefícios' | 'Férias' | 'Afastamentos' | 'Documentos' | 'Folha' | 'Rescisões';
+  tipoEvento: string;
+  descricao: string;
+  valorAnterior?: string;
+  valorNovo?: string;
+  usuarioId?: string;
+  usuarioNome?: string;
+  dataHora: string;
+}
+
+export interface AdmissaoPending {
+  id: string;
+  empresaId: string;
+  candidatoId?: string;
+  contratacaoId?: string;
+  nomeCompleto: string;
+  email: string;
+  telefone?: string;
+  cpf?: string;
+  cargo: string;
+  departamento?: string;
+  salarioCombinado: number;
+  tipoContrato: TipoContrato;
+  dataAdmissaoPrevista: string;
+  status: 'Documentação Pendente' | 'Pronto para Efetivação' | 'Efetivado' | 'Cancelado';
+  checklist: { item: string; concluido: boolean }[];
+  createdAt: string;
+}
+

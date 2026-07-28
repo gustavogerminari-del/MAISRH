@@ -28,9 +28,14 @@ const COLLECTIONS = {
   CONFIG: 'configuracoes_ponto'
 } as const;
 
-// Helper to wrap firestore errors
+// Helper to wrap firestore errors gracefully
 function handleFirestoreError(error: unknown, op: string, path: string) {
-  console.error(`[Firestore Ponto Error - ${op} - ${path}]:`, error);
+  const msg = error instanceof Error ? error.message : String(error);
+  if (msg.includes('offline') || msg.includes('unavailable') || msg.includes('permission-denied')) {
+    console.warn(`[Firestore Ponto - ${op} - ${path}]: Client is offline or unreachable. Using local storage fallback.`);
+  } else {
+    console.warn(`[Firestore Ponto - ${op} - ${path}]:`, error);
+  }
 }
 
 // Initial mock fallback data if collections are empty

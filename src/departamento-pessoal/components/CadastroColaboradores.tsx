@@ -37,7 +37,9 @@ import {
   RefreshCw,
   Award,
   TrendingUp,
-  FileSpreadsheet
+  FileSpreadsheet,
+  FileEdit,
+  Save
 } from 'lucide-react';
 import { ColaboradorCompleto, HistoricoOcorrenciaColaborador } from '../types/dp';
 import { useAuth } from '../../auth';
@@ -71,7 +73,8 @@ export const CadastroColaboradores: React.FC<CadastroColaboradoresProps> = ({
 
   // Modal de Detalhes / Perfil Completo
   const [isProfileOpen, setIsProfileOpen] = useState(false);
-  const [profileTab, setProfileTab] = useState<'dados' | 'documentos' | 'beneficios' | 'ponto' | 'folha' | 'ferias' | 'historico' | 'acesso'>('dados');
+  const [profileTab, setProfileTab] = useState<'pessoais' | 'contratuais' | 'jornada' | 'beneficios' | 'ferias' | 'documentos' | 'historico' | 'anotacoes'>('pessoais');
+  const [notesInput, setNotesInput] = useState('');
 
   // State para Acesso no Perfil e Modal
   const [showPasswordInForm, setShowPasswordInForm] = useState(false);
@@ -1113,14 +1116,14 @@ export const CadastroColaboradores: React.FC<CadastroColaboradoresProps> = ({
             {/* Hierarchical Profile Sub-Tabs */}
             <div className="flex items-center gap-1.5 border-b border-slate-200 overflow-x-auto pb-2 scrollbar-none">
               {[
-                { id: 'dados', label: 'Dados Gerais', icon: UserCheck },
-                { id: 'documentos', label: 'Documentos', icon: FileText },
+                { id: 'pessoais', label: 'Dados Pessoais', icon: UserCheck },
+                { id: 'contratuais', label: 'Dados Contratuais', icon: Briefcase },
+                { id: 'jornada', label: 'Jornada', icon: Clock },
                 { id: 'beneficios', label: 'Benefícios', icon: Gift },
-                { id: 'ponto', label: 'Ponto Digital', icon: Clock },
-                { id: 'folha', label: 'Folha & Holerites', icon: DollarSign },
                 { id: 'ferias', label: 'Férias', icon: Umbrella },
+                { id: 'documentos', label: 'Documentos', icon: FileText },
                 { id: 'historico', label: 'Histórico', icon: History },
-                { id: 'acesso', label: 'Acesso ao Portal', icon: Key }
+                { id: 'anotacoes', label: 'Anotações', icon: FileEdit }
               ].map(tab => (
                 <button
                   key={tab.id}
@@ -1138,37 +1141,95 @@ export const CadastroColaboradores: React.FC<CadastroColaboradoresProps> = ({
             </div>
 
             {/* TAB CONTENTS */}
-            {profileTab === 'dados' && (
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
-                {/* Dados Pessoais */}
-                <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 space-y-2">
-                  <h4 className="font-bold text-[#1E293B] text-xs border-b border-slate-200 pb-2 flex items-center gap-1.5">
-                    <UserCheck className="w-4 h-4 text-[#2563EB]" />
-                    <span>Dados Pessoais</span>
-                  </h4>
+            {profileTab === 'pessoais' && (
+              <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 space-y-3 text-xs">
+                <h4 className="font-bold text-[#1E293B] text-xs border-b border-slate-200 pb-2 flex items-center gap-1.5">
+                  <UserCheck className="w-4 h-4 text-[#2563EB]" />
+                  <span>Dados Pessoais</span>
+                </h4>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  <p><strong>Nome Completo:</strong> {selectedColaborador.pessoais.nomeCompleto}</p>
                   <p><strong>CPF:</strong> {selectedColaborador.pessoais.cpf}</p>
                   <p><strong>RG:</strong> {selectedColaborador.pessoais.rg || 'Não informado'}</p>
                   <p><strong>Data de Nascimento:</strong> {selectedColaborador.pessoais.dataNascimento}</p>
                   <p><strong>Estado Civil:</strong> {selectedColaborador.pessoais.estadoCivil}</p>
-                  <p><strong>Telefone:</strong> {selectedColaborador.pessoais.telefone}</p>
+                  <p><strong>Gênero / Sexo:</strong> {selectedColaborador.pessoais.genero || 'Não informado'}</p>
+                  <p><strong>Telefone WhatsApp:</strong> {selectedColaborador.pessoais.telefone}</p>
                   <p><strong>E-mail Pessoal:</strong> {selectedColaborador.pessoais.emailPessoal}</p>
-                  <p><strong>Endereço:</strong> {selectedColaborador.pessoais.endereco.logradouro}, {selectedColaborador.pessoais.endereco.numero} - {selectedColaborador.pessoais.endereco.bairro}, {selectedColaborador.pessoais.endereco.cidade}/{selectedColaborador.pessoais.endereco.estado}</p>
+                  <p className="col-span-1 md:col-span-2"><strong>Endereço Completo:</strong> {selectedColaborador.pessoais.endereco.logradouro}, {selectedColaborador.pessoais.endereco.numero} - {selectedColaborador.pessoais.endereco.bairro}, {selectedColaborador.pessoais.endereco.cidade}/{selectedColaborador.pessoais.endereco.estado} (CEP: {selectedColaborador.pessoais.endereco.cep})</p>
+                  <p><strong>Contato de Emergência:</strong> {selectedColaborador.pessoais.contatoEmergenciaNome || 'Não informado'} ({selectedColaborador.pessoais.contatoEmergenciaTelefone || 'Sem telefone'})</p>
                 </div>
+              </div>
+            )}
 
-                {/* Dados Profissionais & Cargo */}
-                <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 space-y-2">
-                  <h4 className="font-bold text-[#1E293B] text-xs border-b border-slate-200 pb-2 flex items-center gap-1.5">
-                    <Briefcase className="w-4 h-4 text-[#2563EB]" />
-                    <span>Profissionais & Cargo</span>
-                  </h4>
-                  <p><strong>Cargo:</strong> {selectedColaborador.profissionais.cargo}</p>
+            {profileTab === 'contratuais' && (
+              <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 space-y-3 text-xs">
+                <h4 className="font-bold text-[#1E293B] text-xs border-b border-slate-200 pb-2 flex items-center gap-1.5">
+                  <Briefcase className="w-4 h-4 text-[#2563EB]" />
+                  <span>Dados Contratuais & Vínculo Empregatício</span>
+                </h4>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  <p><strong>Matrícula eSocial:</strong> <span className="font-mono bg-slate-200 px-1.5 py-0.5 rounded font-bold">{selectedColaborador.pessoais.cpf.replace(/\D/g,'').slice(0,6)}</span></p>
+                  <p><strong>Cargo Profissional:</strong> {selectedColaborador.profissionais.cargo}</p>
                   <p><strong>Departamento:</strong> {selectedColaborador.profissionais.departamento}</p>
                   <p><strong>Centro de Custo:</strong> {selectedColaborador.profissionais.centroCusto}</p>
                   <p><strong>Data de Admissão:</strong> {selectedColaborador.profissionais.dataAdmissao}</p>
+                  <p><strong>Regime de Contratação:</strong> <span className="font-bold text-blue-700">CLT Mensalista</span></p>
                   <p><strong>Salário Base:</strong> <span className="font-bold text-slate-900">{selectedColaborador.profissionais.salarioBase.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</span></p>
                   <p><strong>Gestor Responsável:</strong> {selectedColaborador.profissionais.gestorResponsavel}</p>
                   <p><strong>E-mail Corporativo:</strong> {selectedColaborador.profissionais.emailCorporativo}</p>
-                  <p><strong>Jornada Semanal:</strong> {selectedColaborador.profissionais.jornadaSemanalHours}h ({selectedColaborador.profissionais.escalaTrabalho})</p>
+                  <p><strong>Dados Bancários para Folha:</strong> Banco Bradesco (237) | Ag. 1420 | C/C 48201-9</p>
+                </div>
+              </div>
+            )}
+
+            {profileTab === 'jornada' && (
+              <div className="space-y-4 text-xs">
+                <div className="bg-blue-50/60 p-4 rounded-xl border border-blue-200 space-y-2">
+                  <h4 className="font-bold text-[#1E293B] flex items-center gap-2">
+                    <Clock className="w-4 h-4 text-[#2563EB]" />
+                    <span>Jornada de Trabalho e Escala</span>
+                  </h4>
+                  <p><strong>Escala Atual:</strong> {selectedColaborador.profissionais.escalaTrabalho} ({selectedColaborador.profissionais.jornadaSemanalHours}h semanais)</p>
+                  <p><strong>Horário Padrão:</strong> 08:00 às 12:00 | 13:00 às 18:00 (Segunda a Sexta)</p>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                  <div className="p-3 bg-slate-50 rounded-xl border border-slate-200">
+                    <p className="text-[11px] text-slate-500">Saldo Banco de Horas</p>
+                    <p className="text-lg font-bold text-emerald-600">+08h 45min</p>
+                  </div>
+                  <div className="p-3 bg-slate-50 rounded-xl border border-slate-200">
+                    <p className="text-[11px] text-slate-500">Carga Semanal Cumprida</p>
+                    <p className="text-lg font-bold text-slate-900">44h / 44h</p>
+                  </div>
+                  <div className="p-3 bg-slate-50 rounded-xl border border-slate-200">
+                    <p className="text-[11px] text-slate-500">Atrasos / Faltas no Mês</p>
+                    <p className="text-lg font-bold text-slate-900">00h 00min</p>
+                  </div>
+                </div>
+
+                <div className="border border-slate-200 rounded-xl overflow-hidden">
+                  <div className="bg-slate-100 px-3 py-2 font-bold text-slate-700 border-b border-slate-200">
+                    Últimas Marcações do Ponto Eletrônico (REP-P)
+                  </div>
+                  <div className="divide-y divide-slate-100">
+                    {[
+                      { data: 'Hoje (27/07)', e1: '08:00', s1: '12:00', e2: '13:20', s2: '18:00', status: 'Normal' },
+                      { data: 'Ontem (26/07)', e1: '07:55', s1: '12:00', e2: '13:15', s2: '18:10', status: 'Hora Extra +10m' },
+                      { data: '25/07/2026', e1: '08:02', s1: '12:05', e2: '13:20', s2: '18:00', status: 'Normal' }
+                    ].map((p, i) => (
+                      <div key={i} className="p-3 flex items-center justify-between">
+                        <span className="font-bold text-slate-800">{p.data}</span>
+                        <div className="flex gap-2 font-mono text-slate-600">
+                          <span>{p.e1}</span> → <span>{p.s1}</span> | <span>{p.e2}</span> → <span>{p.s2}</span>
+                        </div>
+                        <span className="px-2 py-0.5 rounded-md bg-emerald-50 text-emerald-700 font-bold text-[10px]">
+                          {p.status}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
                 </div>
               </div>
             )}
@@ -1389,141 +1450,38 @@ export const CadastroColaboradores: React.FC<CadastroColaboradoresProps> = ({
               </div>
             )}
 
-            {profileTab === 'acesso' && (
+            {profileTab === 'anotacoes' && (
               <div className="space-y-4 text-xs">
-                <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 space-y-4">
-                  <div className="flex items-center justify-between border-b border-slate-200 pb-3">
-                    <div className="flex items-center gap-2.5">
-                      <Key className="w-5 h-5 text-[#2563EB]" />
-                      <div>
-                        <h4 className="font-bold text-slate-800">Status do Acesso ao Portal Self-Service</h4>
-                        <p className="text-slate-500 text-[11px]">Login do colaborador para marcação de ponto, holerite e benefícios.</p>
-                      </div>
-                    </div>
+                <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 space-y-3">
+                  <h4 className="font-bold text-slate-800 text-xs flex items-center gap-1.5">
+                    <FileEdit className="w-4 h-4 text-[#2563EB]" />
+                    <span>Anotações Internas do Departamento Pessoal</span>
+                  </h4>
+                  <p className="text-slate-500 text-[11px]">
+                    Utilize este espaço para registrar observações internas sobre o colaborador (sigiloso, visível apenas para a equipe de RH).
+                  </p>
 
-                    <span className={`px-3 py-1 rounded-full text-xs font-bold ${
-                      selectedColaborador.acessoColaborador?.statusAcesso === 'Ativo' ? 'bg-emerald-100 text-emerald-800' :
-                      selectedColaborador.acessoColaborador?.statusAcesso === 'Bloqueado' ? 'bg-rose-100 text-rose-800' : 'bg-amber-100 text-amber-800'
-                    }`}>
-                      Status: {selectedColaborador.acessoColaborador?.statusAcesso || 'Pendente'}
-                    </span>
-                  </div>
+                  <textarea
+                    rows={4}
+                    value={notesInput || (selectedColaborador as any).anotacoesRH || ''}
+                    onChange={(e) => setNotesInput(e.target.value)}
+                    placeholder="Escreva anotações, feedbacks ou observações sobre o funcionário..."
+                    className="w-full p-3 bg-white border border-slate-200 rounded-xl text-xs text-slate-800 focus:ring-2 focus:ring-[#2563EB] focus:outline-none"
+                  />
 
-                  {/* Credenciais Atuais do Colaborador */}
-                  <div className="p-3 bg-blue-50/60 border border-blue-200 rounded-xl space-y-2">
-                    <h5 className="font-bold text-[#2563EB] text-xs flex items-center justify-between">
-                      <span className="flex items-center gap-1.5">
-                        <Key className="w-3.5 h-3.5" />
-                        <span>Credenciais de Acesso ao Portal</span>
-                      </span>
-                      <button
-                        onClick={() => {
-                          const login = selectedColaborador.acessoColaborador?.loginUsername || selectedColaborador.profissionais.emailCorporativo;
-                          const pwd = selectedColaborador.acessoColaborador?.senhaProvisoria || 'MaisRH@2026';
-                          navigator.clipboard.writeText(`Login: ${login}\nSenha: ${pwd}`);
-                          showNotification('Credenciais copiadas para a área de transferência!');
-                        }}
-                        className="text-[11px] font-bold text-blue-700 hover:underline flex items-center gap-1 cursor-pointer bg-white px-2 py-0.5 rounded-md border border-blue-200 shadow-2xs"
-                      >
-                        <Copy className="w-3 h-3" />
-                        <span>Copiar Login e Senha</span>
-                      </button>
-                    </h5>
-
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3 pt-1 text-xs">
-                      <div className="bg-white p-2.5 rounded-lg border border-slate-200">
-                        <span className="text-[10px] uppercase font-bold text-slate-400 block">Usuário de Login</span>
-                        <span className="font-bold text-slate-800 font-mono text-xs">
-                          {selectedColaborador.acessoColaborador?.loginUsername || selectedColaborador.profissionais.emailCorporativo}
-                        </span>
-                      </div>
-
-                      <div className="bg-white p-2.5 rounded-lg border border-slate-200 relative">
-                        <span className="text-[10px] uppercase font-bold text-slate-400 block">Senha Atual / Provisória</span>
-                        <div className="flex items-center justify-between mt-0.5">
-                          <span className="font-bold text-slate-800 font-mono text-xs">
-                            {showProfilePassword 
-                              ? (selectedColaborador.acessoColaborador?.senhaProvisoria || 'MaisRH@2026')
-                              : '••••••••••••'}
-                          </span>
-                          <button
-                            onClick={() => setShowProfilePassword(!showProfilePassword)}
-                            className="text-slate-400 hover:text-slate-600 p-0.5"
-                            title={showProfilePassword ? 'Ocultar Senha' : 'Exibir Senha'}
-                          >
-                            {showProfilePassword ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
-                          </button>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Hierarquia do Acesso: Criar Login, Definir Senha, Ativar/Bloquear Acesso, Recuperar Senha */}
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    {/* Ações de Alteração de Status */}
-                    <div className="p-3 bg-white rounded-xl border border-slate-200 space-y-3">
-                      <h5 className="font-bold text-slate-800 border-b border-slate-100 pb-1.5 flex items-center gap-1.5">
-                        <Lock className="w-3.5 h-3.5 text-slate-600" />
-                        <span>Controle de Permissão</span>
-                      </h5>
-                      
-                      <p className="text-slate-500 text-[11px]">
-                        Usuário de Login: <strong className="text-slate-800">{selectedColaborador.acessoColaborador?.loginUsername || selectedColaborador.profissionais.emailCorporativo}</strong>
-                      </p>
-
-                      <div className="flex gap-2">
-                        <button
-                          onClick={() => handleToggleStatusAcesso(selectedColaborador)}
-                          className={`flex-1 px-3 py-2 rounded-xl font-bold flex items-center justify-center gap-1.5 cursor-pointer text-white transition-all ${
-                            selectedColaborador.acessoColaborador?.statusAcesso === 'Ativo' ? 'bg-rose-600 hover:bg-rose-700' : 'bg-emerald-600 hover:bg-emerald-700'
-                          }`}
-                        >
-                          {selectedColaborador.acessoColaborador?.statusAcesso === 'Ativo' ? (
-                            <>
-                              <UserX className="w-3.5 h-3.5" />
-                              <span>Bloquear Acesso</span>
-                            </>
-                          ) : (
-                            <>
-                              <UserCheck className="w-3.5 h-3.5" />
-                              <span>Ativar Acesso</span>
-                            </>
-                          )}
-                        </button>
-                      </div>
-                    </div>
-
-                    {/* Redefinição de Senha & Recuperação */}
-                    <div className="p-3 bg-white rounded-xl border border-slate-200 space-y-3">
-                      <h5 className="font-bold text-slate-800 border-b border-slate-100 pb-1.5 flex items-center gap-1.5">
-                        <RefreshCw className="w-3.5 h-3.5 text-slate-600" />
-                        <span>Definir / Redefinir Senha</span>
-                      </h5>
-
-                      <div className="flex gap-2">
-                        <input
-                          type="password"
-                          placeholder="Nova senha provisória..."
-                          value={tempPassword}
-                          onChange={(e) => setTempPassword(e.target.value)}
-                          className="flex-1 px-3 py-1.5 bg-slate-50 border border-slate-200 rounded-xl text-xs"
-                        />
-                        <button
-                          onClick={() => handleRedefinirSenha(selectedColaborador)}
-                          className="px-3 py-1.5 bg-[#2563EB] text-white font-bold rounded-xl hover:bg-blue-700 cursor-pointer"
-                        >
-                          Atribuir
-                        </button>
-                      </div>
-
-                      <button
-                        onClick={() => handleEnviarRecuperacaoSenha(selectedColaborador)}
-                        className="w-full px-3 py-1.5 border border-slate-200 text-slate-700 font-bold rounded-xl hover:bg-slate-50 flex items-center justify-center gap-1.5 cursor-pointer text-[11px]"
-                      >
-                        <Send className="w-3.5 h-3.5 text-blue-600" />
-                        <span>Enviar Link de Recuperação por E-mail</span>
-                      </button>
-                    </div>
+                  <div className="flex justify-end">
+                    <button
+                      onClick={() => {
+                        const updated = { ...selectedColaborador, anotacoesRH: notesInput };
+                        setSelectedColaborador(updated as any);
+                        onSalvarColaborador(updated as any);
+                        showNotification('Anotações salvas com sucesso!');
+                      }}
+                      className="px-4 py-2 bg-[#2563EB] text-white font-bold rounded-xl hover:bg-blue-700 cursor-pointer flex items-center gap-1.5"
+                    >
+                      <Save className="w-3.5 h-3.5" />
+                      <span>Salvar Anotações</span>
+                    </button>
                   </div>
                 </div>
               </div>

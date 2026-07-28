@@ -405,7 +405,6 @@ export const MOCK_HEADHUNTER_HIRINGS: HeadhunterHiring[] = [
     candidatoNome: 'Alexandre Prado',
     vagaId: 'job-303',
     vagaTitulo: 'Chief Technology Officer (CTO)',
-    cargo: 'Chief Technology Officer (CTO)',
     clienteId: 'cli-101',
     clienteNome: 'Grupo Nexus Tech',
     consultorNome: 'Carlos Headhunter',
@@ -413,8 +412,7 @@ export const MOCK_HEADHUNTER_HIRINGS: HeadhunterHiring[] = [
     salarioFinal: 45000,
     receitaGerada: 90000,
     comissaoGerada: 18000,
-    faturamentoGerado: true,
-    garantiaAteData: '2026-05-20'
+    faturamentoGerado: true
   },
   {
     id: 'hir-602',
@@ -426,7 +424,6 @@ export const MOCK_HEADHUNTER_HIRINGS: HeadhunterHiring[] = [
     candidatoNome: 'Eduardo Albuquerque',
     vagaId: 'job-301',
     vagaTitulo: 'Head of Growth & Performance Marketing',
-    cargo: 'Head of Growth',
     clienteId: 'cli-101',
     clienteNome: 'Grupo Nexus Tech',
     consultorNome: 'Carlos Headhunter',
@@ -434,8 +431,7 @@ export const MOCK_HEADHUNTER_HIRINGS: HeadhunterHiring[] = [
     salarioFinal: 28000,
     receitaGerada: 56000,
     comissaoGerada: 11200,
-    faturamentoGerado: true,
-    garantiaAteData: '2026-06-01'
+    faturamentoGerado: true
   },
   {
     id: 'hir-603',
@@ -447,7 +443,6 @@ export const MOCK_HEADHUNTER_HIRINGS: HeadhunterHiring[] = [
     candidatoNome: 'Luciano Seixas',
     vagaId: 'job-302',
     vagaTitulo: 'Diretor Industrial e Regulatório',
-    cargo: 'Diretor Industrial',
     clienteId: 'cli-102',
     clienteNome: 'Vanguard Pharma',
     consultorNome: 'Mariana Souza',
@@ -455,8 +450,7 @@ export const MOCK_HEADHUNTER_HIRINGS: HeadhunterHiring[] = [
     salarioFinal: 38000,
     receitaGerada: 83600,
     comissaoGerada: 18392,
-    faturamentoGerado: false,
-    garantiaAteData: '2026-07-10'
+    faturamentoGerado: false
   }
 ];
 

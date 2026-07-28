@@ -9,9 +9,10 @@ import {
   FileText, 
   BarChart2, 
   Settings, 
-  DollarSign, 
-  Building2, 
-  ShieldCheck 
+  LayoutDashboard, 
+  UserPlus, 
+  ShieldAlert, 
+  Key 
 } from 'lucide-react';
 import { useAuth } from '../auth';
 
@@ -21,53 +22,87 @@ import {
   ItemBeneficio, 
   RegistroFeriasColaborador, 
   CalculoRescisorio, 
+  AfastamentoColaborador, 
+  DocumentoColaborador, 
+  AjustePontoColaborador, 
+  AdmissaoPending, 
   ConfiguracoesTrabalhistas 
 } from './types/dp';
+
+// Import Firestore Service
 import { 
-  INITIAL_COLABORADORES, 
-  INITIAL_BENEFICIOS, 
-  INITIAL_FERIAS, 
-  INITIAL_RESCISOES, 
-  DEFAULT_CONFIG_TRABALHISTA 
-} from './data/dpMockData';
+  getColaboradoresFirestore, 
+  saveColaboradorFirestore, 
+  getBeneficiosFirestore, 
+  saveBeneficioFirestore, 
+  getFeriasFirestore, 
+  saveFeriasFirestore, 
+  getAfastamentosFirestore, 
+  saveAfastamentoFirestore, 
+  getDocumentosFirestore, 
+  saveDocumentoFirestore, 
+  getAjustesPontoFirestore, 
+  saveAjustePontoFirestore, 
+  getRescisoesFirestore, 
+  concluirRescisaoEBloquearColaborador, 
+  getAdmissoesPendenteFirestore, 
+  concluirEfetivacaoAdmissao, 
+  getConfigTrabalhistaFirestore, 
+  saveConfigTrabalhistaFirestore 
+} from './services/dpFirestoreService';
 
 // Import Submenu Components
+import { DpDashboard } from './components/DpDashboard';
 import { CadastroColaboradores } from './components/CadastroColaboradores';
-import { PortalColaboradorPonto } from './components/PortalColaboradorPonto';
 import { PontoDigitalView } from '../ponto-digital/PontoDigitalView';
+import { GestaoAdmissoes } from './components/GestaoAdmissoes';
 import { PayrollView } from '../payroll/PayrollView';
 import { GestaoBeneficios } from './components/GestaoBeneficios';
 import { GestaoFerias } from './components/GestaoFerias';
+import { GestaoAfastamentos } from './components/GestaoAfastamentos';
 import { CalculoRescisao } from './components/CalculoRescisao';
 import { DocumentsSignatureView } from '../documents-signature/DocumentsSignatureView';
 import { RelatoriosDpView } from './components/RelatoriosDpView';
 import { ConfiguracoesTrabalhistasView } from './components/ConfiguracoesTrabalhistas';
 import { PainelAcessosPortal } from './components/PainelAcessosPortal';
-import { Key } from 'lucide-react';
 
 export type DPSubTab = 
+  | 'visao-geral' 
   | 'colaboradores' 
   | 'ponto-digital' 
-  | 'folha-pagamento' 
+  | 'admissoes' 
   | 'beneficios' 
-  | 'ferias' 
-  | 'rescisao' 
+  | 'ferias-afastamentos' 
   | 'documentos' 
+  | 'rescisao' 
+  | 'folha-pagamento' 
   | 'relatorios-dp' 
-  | 'configuracoes-trabalhistas'
-  | 'acessos-portal';
+  | 'acessos-portal' 
+  | 'configuracoes-trabalhistas';
 
 interface DepartamentoPessoalViewProps {
   initialSubTab?: DPSubTab;
 }
 
 export const DepartamentoPessoalView: React.FC<DepartamentoPessoalViewProps> = ({
-  initialSubTab = 'colaboradores'
+  initialSubTab = 'visao-geral'
 }) => {
   const { user } = useAuth();
   const companyId = user?.companyId || user?.empresaId || user?.tenantId || 'emp-001';
 
   const [activeSubTab, setActiveSubTab] = useState<DPSubTab>(initialSubTab);
+  const [loadingFirestore, setLoadingFirestore] = useState(true);
+
+  // Firestore State
+  const [colaboradores, setColaboradores] = useState<ColaboradorCompleto[]>([]);
+  const [beneficios, setBeneficios] = useState<ItemBeneficio[]>([]);
+  const [feriasList, setFeriasList] = useState<RegistroFeriasColaborador[]>([]);
+  const [afastamentos, setAfastamentos] = useState<AfastamentoColaborador[]>([]);
+  const [documentos, setDocumentos] = useState<DocumentoColaborador[]>([]);
+  const [ajustesPonto, setAjustesPonto] = useState<AjustePontoColaborador[]>([]);
+  const [rescisoes, setRescisoes] = useState<CalculoRescisorio[]>([]);
+  const [admissoes, setAdmissoes] = useState<AdmissaoPending[]>([]);
+  const [configTrabalhista, setConfigTrabalhista] = useState<ConfiguracoesTrabalhistas | null>(null);
 
   // Sync state with prop if changed
   useEffect(() => {
@@ -76,86 +111,129 @@ export const DepartamentoPessoalView: React.FC<DepartamentoPessoalViewProps> = (
     }
   }, [initialSubTab]);
 
-  // Persistent DP State
-  const [colaboradores, setColaboradores] = useState<ColaboradorCompleto[]>(() => {
-    const saved = localStorage.getItem(`MAIS_RH_COLABORADORES_${companyId}`);
-    return saved ? JSON.parse(saved) : INITIAL_COLABORADORES;
-  });
+  // Load all DP Data from Firebase Firestore
+  useEffect(() => {
+    let isMounted = true;
+    async function loadData() {
+      setLoadingFirestore(true);
+      try {
+        const [
+          colabsData,
+          bensData,
+          feriasData,
+          afastData,
+          docsData,
+          ajustesData,
+          rescData,
+          admsData,
+          cfgData
+        ] = await Promise.all([
+          getColaboradoresFirestore(companyId),
+          getBeneficiosFirestore(companyId),
+          getFeriasFirestore(companyId),
+          getAfastamentosFirestore(companyId),
+          getDocumentosFirestore(companyId),
+          getAjustesPontoFirestore(companyId),
+          getRescisoesFirestore(companyId),
+          getAdmissoesPendenteFirestore(companyId),
+          getConfigTrabalhistaFirestore(companyId)
+        ]);
 
-  const [beneficios, setBeneficios] = useState<ItemBeneficio[]>(() => {
-    const saved = localStorage.getItem(`MAIS_RH_BENEFICIOS_${companyId}`);
-    return saved ? JSON.parse(saved) : INITIAL_BENEFICIOS;
-  });
+        if (isMounted) {
+          setColaboradores(colabsData);
+          setBeneficios(bensData);
+          setFeriasList(feriasData);
+          setAfastamentos(afastData);
+          setDocumentos(docsData);
+          setAjustesPonto(ajustesData);
+          setRescisoes(rescData);
+          setAdmissoes(admsData);
+          setConfigTrabalhista(cfgData);
+        }
+      } catch (err) {
+        console.error('[DP] Erro ao carregar dados do Firebase:', err);
+      } finally {
+        if (isMounted) {
+          setLoadingFirestore(false);
+        }
+      }
+    }
 
-  const [feriasList, setFeriasList] = useState<RegistroFeriasColaborador[]>(() => {
-    const saved = localStorage.getItem(`MAIS_RH_FERIAS_${companyId}`);
-    return saved ? JSON.parse(saved) : INITIAL_FERIAS;
-  });
+    loadData();
+    return () => { isMounted = false; };
+  }, [companyId]);
 
-  const [rescisoes, setRescisoes] = useState<CalculoRescisorio[]>(() => {
-    const saved = localStorage.getItem(`MAIS_RH_RESCISOES_${companyId}`);
-    return saved ? JSON.parse(saved) : INITIAL_RESCISOES;
-  });
-
-  const [configTrabalhista, setConfigTrabalhista] = useState<ConfiguracoesTrabalhistas>(() => {
-    const saved = localStorage.getItem(`MAIS_RH_CONFIG_TRABALHISTA_${companyId}`);
-    return saved ? JSON.parse(saved) : DEFAULT_CONFIG_TRABALHISTA;
-  });
-
-  // Save changes to localStorage for multiempresa persistence
-  const handleSalvarColaborador = (colab: ColaboradorCompleto) => {
+  // Action Handlers bound to Firestore
+  const handleSalvarColaborador = async (colab: ColaboradorCompleto) => {
     const updated = colaboradores.some(c => c.id === colab.id)
       ? colaboradores.map(c => c.id === colab.id ? colab : c)
       : [colab, ...colaboradores];
     setColaboradores(updated);
-    localStorage.setItem(`MAIS_RH_COLABORADORES_${companyId}`, JSON.stringify(updated));
+    await saveColaboradorFirestore(colab);
   };
 
-  const handleSalvarBeneficio = (ben: ItemBeneficio) => {
+  const handleEfetivarAdmissao = async (
+    admissao: AdmissaoPending,
+    dadosAdicionais?: { gestor?: string; escala?: string; bancoAgencia?: string; rg?: string }
+  ) => {
+    const novoColab = await concluirEfetivacaoAdmissao(admissao, dadosAdicionais);
+    setColaboradores(prev => [novoColab, ...prev.filter(c => c.id !== novoColab.id)]);
+    setAdmissoes(prev => prev.map(a => a.id === admissao.id ? { ...a, status: 'Efetivado' } : a));
+  };
+
+  const handleSalvarBeneficio = async (ben: ItemBeneficio) => {
     const updated = beneficios.some(b => b.id === ben.id)
       ? beneficios.map(b => b.id === ben.id ? ben : b)
       : [ben, ...beneficios];
     setBeneficios(updated);
-    localStorage.setItem(`MAIS_RH_BENEFICIOS_${companyId}`, JSON.stringify(updated));
+    await saveBeneficioFirestore(ben);
   };
 
-  const handleSalvarFerias = (f: RegistroFeriasColaborador) => {
+  const handleSalvarFerias = async (f: RegistroFeriasColaborador) => {
     const updated = feriasList.some(item => item.id === f.id)
       ? feriasList.map(item => item.id === f.id ? f : item)
       : [f, ...feriasList];
     setFeriasList(updated);
-    localStorage.setItem(`MAIS_RH_FERIAS_${companyId}`, JSON.stringify(updated));
+    await saveFeriasFirestore(f);
   };
 
-  const handleSalvarRescisao = (r: CalculoRescisorio) => {
+  const handleSalvarRescisao = async (r: CalculoRescisorio) => {
     const updated = rescisoes.some(item => item.id === r.id)
       ? rescisoes.map(item => item.id === r.id ? r : item)
       : [r, ...rescisoes];
     setRescisoes(updated);
-    localStorage.setItem(`MAIS_RH_RESCISOES_${companyId}`, JSON.stringify(updated));
+    
+    if (r.status === 'Homologado') {
+      await concluirRescisaoEBloquearColaborador(r);
+      // Reload colaboradores to reflect status = 'Rescindido'
+      const freshColabs = await getColaboradoresFirestore(companyId);
+      setColaboradores(freshColabs);
+    }
   };
 
-  const handleSalvarConfig = (cfg: ConfiguracoesTrabalhistas) => {
+  const handleSalvarConfig = async (cfg: ConfiguracoesTrabalhistas) => {
     setConfigTrabalhista(cfg);
-    localStorage.setItem(`MAIS_RH_CONFIG_TRABALHISTA_${companyId}`, JSON.stringify(cfg));
+    await saveConfigTrabalhistaFirestore(cfg);
   };
 
   const subMenuItems = [
+    { id: 'visao-geral', label: 'Visão Geral', icon: LayoutDashboard },
     { id: 'colaboradores', label: 'Colaboradores', icon: Users },
-    { id: 'ponto-digital', label: 'Ponto Digital', icon: Clock },
-    { id: 'folha-pagamento', label: 'Folha de Pagamento', icon: Calculator },
+    { id: 'ponto-digital', label: 'Jornada', icon: Clock },
+    { id: 'admissoes', label: 'Admissões', icon: UserPlus },
     { id: 'beneficios', label: 'Benefícios', icon: Gift },
-    { id: 'ferias', label: 'Férias', icon: Umbrella },
-    { id: 'rescisao', label: 'Rescisão', icon: LogOut },
-    { id: 'documentos', label: 'Documentos & Assinaturas', icon: FileText },
-    { id: 'relatorios-dp', label: 'Relatórios DP', icon: BarChart2 },
+    { id: 'ferias-afastamentos', label: 'Férias e Afastamentos', icon: Umbrella },
+    { id: 'documentos', label: 'Documentos', icon: FileText },
+    { id: 'rescisao', label: 'Rescisões', icon: LogOut },
+    { id: 'folha-pagamento', label: 'Folha de Pagamento', icon: Calculator },
+    { id: 'relatorios-dp', label: 'Relatórios', icon: BarChart2 },
     { id: 'acessos-portal', label: 'Acessos ao Portal', icon: Key },
     { id: 'configuracoes-trabalhistas', label: 'Configurações Trabalhistas', icon: Settings },
   ];
 
   return (
     <div className="space-y-6">
-      {/* Navigation Submenu Header */}
+      {/* Submenu Navigation Bar */}
       <div className="bg-white rounded-2xl border border-slate-200/80 p-2 shadow-2xs overflow-x-auto">
         <div className="flex items-center gap-1 min-w-max">
           {subMenuItems.map(item => {
@@ -179,8 +257,29 @@ export const DepartamentoPessoalView: React.FC<DepartamentoPessoalViewProps> = (
         </div>
       </div>
 
+      {/* Loading Indicator for Firebase */}
+      {loadingFirestore && (
+        <div className="flex items-center justify-center p-4 bg-indigo-50/60 border border-indigo-100 rounded-2xl text-xs text-indigo-900 font-bold gap-2">
+          <div className="w-3.5 h-3.5 border-2 border-indigo-600 border-t-transparent rounded-full animate-spin" />
+          <span>Sincronizando Departamento Pessoal com Firebase Firestore...</span>
+        </div>
+      )}
+
       {/* Main View Display */}
       <div>
+        {activeSubTab === 'visao-geral' && (
+          <DpDashboard
+            colaboradores={colaboradores}
+            ferias={feriasList}
+            rescisoes={rescisoes}
+            afastamentos={afastamentos}
+            documentos={documentos}
+            ajustesPonto={ajustesPonto}
+            admissoes={admissoes}
+            onNavigateSubTab={(tab) => setActiveSubTab(tab as DPSubTab)}
+          />
+        )}
+
         {activeSubTab === 'colaboradores' && (
           <CadastroColaboradores
             colaboradores={colaboradores}
@@ -191,6 +290,15 @@ export const DepartamentoPessoalView: React.FC<DepartamentoPessoalViewProps> = (
 
         {activeSubTab === 'ponto-digital' && (
           <PontoDigitalView />
+        )}
+
+        {activeSubTab === 'admissoes' && (
+          <GestaoAdmissoes
+            admissoes={admissoes}
+            colaboradores={colaboradores}
+            onEfetivarAdmissao={handleEfetivarAdmissao}
+            companyId={companyId}
+          />
         )}
 
         {activeSubTab === 'folha-pagamento' && (
@@ -206,13 +314,20 @@ export const DepartamentoPessoalView: React.FC<DepartamentoPessoalViewProps> = (
           />
         )}
 
-        {activeSubTab === 'ferias' && (
-          <GestaoFerias
-            feriasList={feriasList}
-            colaboradores={colaboradores}
-            onSalvarFerias={handleSalvarFerias}
-            companyId={companyId}
-          />
+        {activeSubTab === 'ferias-afastamentos' && (
+          <div className="space-y-8">
+            <GestaoFerias
+              feriasList={feriasList}
+              colaboradores={colaboradores}
+              onSalvarFerias={handleSalvarFerias}
+              companyId={companyId}
+            />
+
+            <GestaoAfastamentos
+              colaboradores={colaboradores}
+              companyId={companyId}
+            />
+          </div>
         )}
 
         {activeSubTab === 'rescisao' && (
@@ -239,7 +354,34 @@ export const DepartamentoPessoalView: React.FC<DepartamentoPessoalViewProps> = (
 
         {activeSubTab === 'configuracoes-trabalhistas' && (
           <ConfiguracoesTrabalhistasView
-            config={configTrabalhista}
+            config={configTrabalhista || {
+              companyId,
+              toleranciaPontoMinutos: 10,
+              adicionalHorasExtrasSemanaPercent: 50,
+              adicionalHorasExtrasDomingoFeriadoPercent: 100,
+              adicionalNoturnoPercent: 20,
+              horarioNoturnoInicio: '22:00',
+              horarioNoturnoFim: '05:00',
+              aliquotaFgtsPercent: 8,
+              regrasJornada: {
+                tipoControle: 'Pagamento de hora extra',
+                jornadaSemanal: '44h',
+                jornadaDiariaHoras: 8.8,
+                escalaPadrao: 'Segunda a sexta',
+                horariosPadrao: { entrada: '08:00', intervaloSaida: '12:00', intervaloRetorno: '13:00', saida: '17:00' },
+                pagaHoraExtra: true,
+                horaExtraDiaUtilPercent: 50,
+                horaExtraDomingoFeriadoPercent: 100,
+                adicionalNoturnoPercent: 20,
+                ativarBancoHoras: false,
+                prazoCompensacao: '6 meses',
+                limiteSaldoPositivoHoras: 20,
+                limiteSaldoNegativoHoras: 5,
+                formaAprovacao: 'Aprovação do Gestor'
+              },
+              tabelaInss: [],
+              tabelaIrrf: []
+            }}
             onSalvarConfig={handleSalvarConfig}
           />
         )}

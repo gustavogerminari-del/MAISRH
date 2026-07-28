@@ -59,6 +59,56 @@ service cloud.firestore {
     match /plans/{planId} {
       allow read, write: if true;
     }
+
+    // Departamento Pessoal Collections
+    match /colaboradores/{id} {
+      allow read, write: if true;
+    }
+    match /contratos_trabalho/{id} {
+      allow read, write: if true;
+    }
+    match /jornadas/{id} {
+      allow read, write: if true;
+    }
+    match /escalas/{id} {
+      allow read, write: if true;
+    }
+    match /marcacoes_ponto/{id} {
+      allow read, write: if true;
+    }
+    match /ajustes_ponto/{id} {
+      allow read, write: if true;
+    }
+    match /banco_horas/{id} {
+      allow read, write: if true;
+    }
+    match /beneficios_colaboradores/{id} {
+      allow read, write: if true;
+    }
+    match /ferias/{id} {
+      allow read, write: if true;
+    }
+    match /afastamentos/{id} {
+      allow read, write: if true;
+    }
+    match /documentos_colaboradores/{id} {
+      allow read, write: if true;
+    }
+    match /folhas_pagamento/{id} {
+      allow read, write: if true;
+    }
+    match /eventos_folha/{id} {
+      allow read, write: if true;
+    }
+    match /rescisoes/{id} {
+      allow read, write: if true;
+    }
+    match /historico_colaborador/{id} {
+      allow read, write: if true;
+    }
+    match /solicitacoes_admissao/{id} {
+      allow read, write: if true;
+    }
   }
 }
 

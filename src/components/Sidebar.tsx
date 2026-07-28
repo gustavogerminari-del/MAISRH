@@ -15,6 +15,7 @@ import {
   Wallet, 
   Receipt, 
   ShieldCheck, 
+  ShieldAlert,
   BarChart2, 
   Clock, 
   Calculator, 
@@ -57,11 +58,13 @@ export type MainTab =
   | 'headhunter-relatorios' 
   | 'colaboradores' 
   | 'ponto-digital' 
+  | 'jornada'
   | 'folha-pagamento' 
   | 'beneficios' 
   | 'ferias' 
   | 'rescisao' 
   | 'documentos' 
+  | 'afastamentos'
   | 'agenda' 
   | 'relatorios' 
   | 'configuracoes' 
@@ -159,12 +162,18 @@ export const Sidebar: React.FC<SidebarProps> = ({
       title: 'COLABORADORES',
       items: [
         { id: 'colaboradores', label: 'Colaboradores', icon: Users },
-        { id: 'ponto-digital', label: 'Ponto', icon: Clock },
-        { id: 'folha-pagamento', label: 'Departamento Pessoal', icon: Calculator },
+      ]
+    },
+    {
+      id: 'departamento-pessoal',
+      title: 'DEPARTAMENTO PESSOAL',
+      items: [
+        { id: 'ponto-digital', label: 'Jornada', icon: Clock },
         { id: 'beneficios', label: 'Benefícios', icon: Gift },
         { id: 'ferias', label: 'Férias', icon: Sun },
         { id: 'rescisao', label: 'Rescisões', icon: UserMinus },
         { id: 'documentos', label: 'Documentos', icon: FileCheck },
+        { id: 'afastamentos', label: 'Afastamentos', icon: ShieldAlert },
       ]
     },
     {
