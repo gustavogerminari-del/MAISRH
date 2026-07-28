@@ -103,16 +103,6 @@ export const HeadhunterDashboard: React.FC<HeadhunterDashboardProps> = ({
             Acompanhe a lucratividade da operação, pipeline de candidatos executivos e faturamento de honorários em tempo real.
           </p>
         </div>
-
-        <div className="flex items-center gap-2 shrink-0">
-          <button
-            onClick={() => onOpenAiModal('resumoExecutivo')}
-            className="px-4 py-2 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-bold text-xs rounded-xl border border-indigo-200 transition-all flex items-center gap-1.5 cursor-pointer"
-          >
-            <Sparkles className="w-4 h-4 text-indigo-600" />
-            <span>Resumo Tático IA</span>
-          </button>
-        </div>
       </div>
 
       {/* 12 Clickable KPI Cards */}

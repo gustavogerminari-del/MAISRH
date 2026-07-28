@@ -209,10 +209,10 @@ export const DashboardPonto: React.FC<DashboardPontoProps> = ({
               <div key={func.id} className="py-3 flex items-center justify-between">
                 <div className="flex items-center gap-3">
                   <div className="w-9 h-9 rounded-full bg-slate-100 font-bold text-slate-700 flex items-center justify-center text-xs border border-slate-200">
-                    {func.nome.split(' ').map(n => n[0]).join('').substring(0, 2)}
+                    {(func.nome || (func as any).nomeCompleto || 'C').split(' ').filter(Boolean).map(n => n[0]).join('').substring(0, 2)}
                   </div>
                   <div>
-                    <p className="text-sm font-bold text-slate-900">{func.nome}</p>
+                    <p className="text-sm font-bold text-slate-900">{func.nome || (func as any).nomeCompleto || 'Colaborador'}</p>
                     <p className="text-xs text-slate-500">{func.cargo} • {func.setor}</p>
                   </div>
                 </div>

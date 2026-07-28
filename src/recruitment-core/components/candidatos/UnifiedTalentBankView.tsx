@@ -51,11 +51,16 @@ export const UnifiedTalentBankView: React.FC<UnifiedTalentBankViewProps> = ({
   // Filter candidates list
   const filteredCandidates = candidates.filter(c => {
     const term = searchTerm.toLowerCase().trim();
+    const candidateName = c.nome || (c as any).name || '';
+    const emailStr = c.email || '';
+    const cargoStr = c.cargoAtual || (c as any).cargo || '';
+    const cidadeStr = c.cidade || '';
+
     const matchesSearch = !term || 
-      c.nome.toLowerCase().includes(term) ||
-      c.email.toLowerCase().includes(term) ||
-      c.cargoAtual.toLowerCase().includes(term) ||
-      (c.cidade && c.cidade.toLowerCase().includes(term)) ||
+      candidateName.toLowerCase().includes(term) ||
+      emailStr.toLowerCase().includes(term) ||
+      cargoStr.toLowerCase().includes(term) ||
+      cidadeStr.toLowerCase().includes(term) ||
       (c.competencias && c.competencias.some(sk => sk.toLowerCase().includes(term)));
 
     const matchesStatus = statusFilter === 'Todos' || c.status === statusFilter;

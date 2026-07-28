@@ -112,14 +112,6 @@ export const HeadhunterClientes: React.FC<HeadhunterClientesProps> = ({
 
         <div className="flex items-center gap-3">
           <button
-            onClick={() => onOpenAiModal('clientesLucrativos')}
-            className="px-3.5 py-2.5 bg-amber-500 hover:bg-amber-600 text-slate-950 font-bold text-xs rounded-xl shadow-xs transition-all flex items-center gap-1.5 cursor-pointer"
-          >
-            <Sparkles className="w-4 h-4" />
-            <span>Analisar Clientes Mais Lucrativos IA</span>
-          </button>
-
-          <button
             onClick={() => setShowModal(true)}
             className="px-4 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs rounded-xl shadow-md transition-all flex items-center gap-2 cursor-pointer"
           >

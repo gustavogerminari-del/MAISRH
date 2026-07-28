@@ -24,10 +24,10 @@ export const AreaGestorPonto: React.FC<AreaGestorPontoProps> = ({
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-3">
                 <div className="w-10 h-10 rounded-full bg-slate-100 font-bold text-slate-700 flex items-center justify-center text-xs border border-slate-200">
-                  {f.nome.split(' ').map(n => n[0]).join('').substring(0, 2)}
+                  {(f.nome || (f as any).nomeCompleto || 'C').split(' ').filter(Boolean).map(n => n[0]).join('').substring(0, 2)}
                 </div>
                 <div>
-                  <h3 className="font-bold text-slate-900 text-sm">{f.nome}</h3>
+                  <h3 className="font-bold text-slate-900 text-sm">{f.nome || (f as any).nomeCompleto || 'Colaborador'}</h3>
                   <p className="text-xs text-slate-500">{f.cargo}</p>
                 </div>
               </div>

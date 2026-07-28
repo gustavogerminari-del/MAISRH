@@ -42,15 +42,15 @@ export const UnifiedCandidateDetailModal: React.FC<UnifiedCandidateDetailModalPr
           <div className="flex items-center gap-3">
             <div className="w-14 h-14 rounded-full bg-slate-100 border border-slate-200 flex items-center justify-center font-black text-slate-700 text-lg shrink-0 overflow-hidden">
               {candidate.fotoUrl || candidate.avatar ? (
-                <img src={candidate.fotoUrl || candidate.avatar} alt={candidate.nome} className="w-full h-full object-cover" />
+                <img src={candidate.fotoUrl || candidate.avatar} alt={candidate.nome || (candidate as any).name || 'Candidato'} className="w-full h-full object-cover" />
               ) : (
-                <span>{candidate.nome.substring(0, 2).toUpperCase()}</span>
+                <span>{(candidate.nome || (candidate as any).name || 'C').substring(0, 2).toUpperCase()}</span>
               )}
             </div>
 
             <div>
               <div className="flex items-center gap-2">
-                <h2 className="text-xl font-black text-slate-900">{candidate.nome}</h2>
+                <h2 className="text-xl font-black text-slate-900">{candidate.nome || (candidate as any).name || 'Candidato Sem Nome'}</h2>
                 <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase ${
                   candidate.status === 'Ativo' ? 'bg-emerald-100 text-emerald-800' : 'bg-slate-100 text-slate-800'
                 }`}>

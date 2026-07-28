@@ -21,6 +21,7 @@ import { MasterAdminView } from './master-admin';
 import { MaisRhIaView } from './ai/components/MaisRhIaView';
 import { DepartamentoPessoalView, DPSubTab } from './departamento-pessoal/DepartamentoPessoalView';
 import { PortalColaboradorView } from './departamento-pessoal/components/PortalColaboradorView';
+import { UnifiedPipelineView, UnifiedContratacoesView, UnifiedAgendaView } from './recruitment-core';
 
 import { NewJobModal } from './components/NewJobModal';
 import { NewCandidateModal } from './components/NewCandidateModal';
@@ -275,7 +276,7 @@ function MainAppContent() {
               />
             )}
 
-            {activeTab === 'banco-talentos' && (
+            {(activeTab === 'banco-talentos' || activeTab === 'candidatos') && (
               <TalentBankView
                 candidates={candidates}
                 jobs={jobs}
@@ -285,11 +286,34 @@ function MainAppContent() {
               />
             )}
 
+            {activeTab === 'processos-seletivos' && (
+              <UnifiedPipelineView
+                origemProcesso="interno"
+                job={(jobs[0] as any) || { id: 'vaga-0', titulo: 'Vaga Selecionada', origemProcesso: 'interno' }}
+                candidates={candidates as any}
+                onBack={() => setActiveTab('vagas')}
+              />
+            )}
+
             {activeTab === 'entrevistas' && (
               <InterviewsView
                 interviews={interviews}
                 openScheduleInterviewModal={() => setIsInterviewModalOpen(true)}
                 onUpdateInterviewFeedback={handleUpdateInterviewFeedback}
+              />
+            )}
+
+            {activeTab === 'contratacoes' && (
+              <UnifiedContratacoesView
+                origemProcesso="interno"
+                hirings={[]}
+              />
+            )}
+
+            {activeTab === 'agenda' && (
+              <UnifiedAgendaView
+                origemProcesso="interno"
+                events={[]}
               />
             )}
 
@@ -311,7 +335,15 @@ function MainAppContent() {
               />
             )}
 
-            {(activeTab === 'headhunter' || activeTab === 'consultor-rh') && <HeadhunterView />}
+            {(activeTab === 'headhunter' || activeTab === 'consultor-rh' || activeTab.startsWith('headhunter-')) && (
+              <HeadhunterView 
+                initialSubTab={
+                  activeTab === 'headhunter' || activeTab === 'consultor-rh' 
+                    ? 'dashboard' 
+                    : (activeTab.replace('headhunter-', '') as any)
+                } 
+              />
+            )}
 
             {/* Departamento Pessoal Master Submenu Routing */}
             {['departamento-pessoal', 'colaboradores', 'beneficios', 'ferias', 'rescisao', 'relatorios-dp', 'configuracoes-trabalhistas'].includes(activeTab) && (
@@ -338,7 +370,7 @@ function MainAppContent() {
 
             {activeTab === 'planos-saas' && <SubscriptionsView />}
 
-            {activeTab === 'acesso-master' && <MasterAdminView />}
+            {(activeTab === 'acesso-master' || activeTab.startsWith('master-')) && <MasterAdminView />}
 
             {activeTab === 'configuracoes' && <SettingsView stages={fontStages} />}
           </ProtectedRoute>

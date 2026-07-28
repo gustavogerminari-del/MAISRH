@@ -122,7 +122,7 @@ export const MOCK_HEADHUNTER_LEADS: HeadhunterLead[] = [
     telefone: '(11) 98877-6655',
     origem: 'Outbound / LinkedIn Executive',
     consultor: 'Carlos Headhunter',
-    etapa: 'Proposta',
+    etapa: 'Proposta enviada',
     valorPrevisto: 35000,
     probabilidadePercent: 75,
     proximoContato: '2026-03-25',
@@ -405,6 +405,7 @@ export const MOCK_HEADHUNTER_HIRINGS: HeadhunterHiring[] = [
     candidatoNome: 'Alexandre Prado',
     vagaId: 'job-303',
     vagaTitulo: 'Chief Technology Officer (CTO)',
+    cargo: 'Chief Technology Officer (CTO)',
     clienteId: 'cli-101',
     clienteNome: 'Grupo Nexus Tech',
     consultorNome: 'Carlos Headhunter',
@@ -412,7 +413,50 @@ export const MOCK_HEADHUNTER_HIRINGS: HeadhunterHiring[] = [
     salarioFinal: 45000,
     receitaGerada: 90000,
     comissaoGerada: 18000,
-    faturamentoGerado: true
+    faturamentoGerado: true,
+    garantiaAteData: '2026-05-20'
+  },
+  {
+    id: 'hir-602',
+    empresaId: 'emp-001',
+    criadoPor: 'Carlos Headhunter',
+    criadoEm: '2026-03-01',
+    status: 'Concluído',
+    candidatoId: 'cand-401',
+    candidatoNome: 'Eduardo Albuquerque',
+    vagaId: 'job-301',
+    vagaTitulo: 'Head of Growth & Performance Marketing',
+    cargo: 'Head of Growth',
+    clienteId: 'cli-101',
+    clienteNome: 'Grupo Nexus Tech',
+    consultorNome: 'Carlos Headhunter',
+    dataContratacao: '2026-03-01',
+    salarioFinal: 28000,
+    receitaGerada: 56000,
+    comissaoGerada: 11200,
+    faturamentoGerado: true,
+    garantiaAteData: '2026-06-01'
+  },
+  {
+    id: 'hir-603',
+    empresaId: 'emp-001',
+    criadoPor: 'Mariana Souza',
+    criadoEm: '2026-03-10',
+    status: 'Concluído',
+    candidatoId: 'cand-405',
+    candidatoNome: 'Luciano Seixas',
+    vagaId: 'job-302',
+    vagaTitulo: 'Diretor Industrial e Regulatório',
+    cargo: 'Diretor Industrial',
+    clienteId: 'cli-102',
+    clienteNome: 'Vanguard Pharma',
+    consultorNome: 'Mariana Souza',
+    dataContratacao: '2026-03-10',
+    salarioFinal: 38000,
+    receitaGerada: 83600,
+    comissaoGerada: 18392,
+    faturamentoGerado: false,
+    garantiaAteData: '2026-07-10'
   }
 ];
 
@@ -423,16 +467,21 @@ export const MOCK_HEADHUNTER_COMMISSIONS: HeadhunterCommission[] = [
     criadoPor: 'Carlos Headhunter',
     criadoEm: '2026-02-22',
     status: 'Liberada',
+    beneficiarioNome: 'Carlos Headhunter',
+    clienteId: 'cli-101',
     clienteNome: 'Grupo Nexus Tech',
+    vagaId: 'job-303',
     vagaTitulo: 'Chief Technology Officer (CTO)',
     consultorNome: 'Carlos Headhunter',
     tipoComissao: 'Comissão percentual',
     valorRecebidoVaga: 90000,
     percentual: 20,
     valorComissao: 18000,
+    valorPago: 18000,
     dataPrevista: '2026-03-15',
     dataPagamento: '2026-03-14',
-    situacao: 'Recebida'
+    situacao: 'Paga',
+    regraLiberacao: 'cliente_pagou'
   },
   {
     id: 'com-702',
@@ -440,15 +489,20 @@ export const MOCK_HEADHUNTER_COMMISSIONS: HeadhunterCommission[] = [
     criadoPor: 'Mariana Souza',
     criadoEm: '2026-03-01',
     status: 'Prevista',
+    beneficiarioNome: 'Mariana Souza',
+    clienteId: 'cli-102',
     clienteNome: 'Vanguard Pharma',
+    vagaId: 'job-302',
     vagaTitulo: 'Diretor Industrial e Regulatório',
     consultorNome: 'Mariana Souza',
     tipoComissao: 'Comissão compartilhada',
     valorRecebidoVaga: 83600,
     percentual: 15,
     valorComissao: 12540,
+    valorPago: 0,
     dataPrevista: '2026-04-15',
-    situacao: 'Prevista'
+    situacao: 'Prevista',
+    regraLiberacao: 'cliente_pagou'
   }
 ];
 
@@ -591,3 +645,45 @@ export const MOCK_HEADHUNTER_CONTRACTS: HeadhunterContract[] = [
     documentoUrl: '#'
   }
 ];
+
+export const MOCK_HEADHUNTER_PROPOSALS: any[] = [
+  {
+    id: 'prop-101',
+    empresaId: 'emp-001',
+    criadoPor: 'Carlos Headhunter',
+    criadoEm: '2026-03-01',
+    status: 'Aprovada',
+    clienteId: 'cli-101',
+    clienteNome: 'Grupo Nexus Tech',
+    titulo: 'Proposta Comercial - CTO & Head of Tech',
+    servico: 'Executive Search',
+    qtdVagas: 1,
+    escopo: 'Busca discreta e mapeamento de mercado para substituição de liderança de TI.',
+    valor: 36000,
+    modeloCobranca: 'Success Fee',
+    formaPagamento: '50% na contratação / 50% após 30 dias',
+    prazoEntregaDias: 30,
+    prazoGarantiaDias: 90,
+    validadeData: '2026-04-01'
+  },
+  {
+    id: 'prop-102',
+    empresaId: 'emp-001',
+    criadoPor: 'Mariana Souza',
+    criadoEm: '2026-03-12',
+    status: 'Enviada',
+    clienteId: 'cli-102',
+    clienteNome: 'Vanguard Pharma',
+    titulo: 'Proposta Comercial - Diretor Industrial',
+    servico: 'Executive Search',
+    qtdVagas: 1,
+    escopo: 'Hunting especializado no setor farmacêutico para cargo de Direção.',
+    valor: 28000,
+    modeloCobranca: 'Retainer + Success',
+    formaPagamento: '3x iguais sem juros via Boleto',
+    prazoEntregaDias: 45,
+    prazoGarantiaDias: 120,
+    validadeData: '2026-04-15'
+  }
+];
+

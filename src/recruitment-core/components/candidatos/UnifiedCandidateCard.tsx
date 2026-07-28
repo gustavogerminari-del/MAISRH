@@ -37,9 +37,9 @@ export const UnifiedCandidateCard: React.FC<UnifiedCandidateCardProps> = ({
           <div className="flex items-center gap-3">
             <div className="w-12 h-12 rounded-full bg-slate-100 border border-slate-200 flex items-center justify-center font-black text-slate-700 text-sm overflow-hidden shrink-0">
               {candidate.fotoUrl || candidate.avatar ? (
-                <img src={candidate.fotoUrl || candidate.avatar} alt={candidate.nome} className="w-full h-full object-cover" />
+                <img src={candidate.fotoUrl || candidate.avatar} alt={candidate.nome || (candidate as any).name || 'Candidato'} className="w-full h-full object-cover" />
               ) : (
-                <span>{candidate.nome.substring(0, 2).toUpperCase()}</span>
+                <span>{(candidate.nome || (candidate as any).name || 'C').substring(0, 2).toUpperCase()}</span>
               )}
             </div>
 
@@ -49,7 +49,7 @@ export const UnifiedCandidateCard: React.FC<UnifiedCandidateCardProps> = ({
                   onClick={() => onOpenDetails(candidate)} 
                   className="text-base font-black text-slate-900 hover:text-indigo-600 transition-colors cursor-pointer"
                 >
-                  {candidate.nome}
+                  {candidate.nome || (candidate as any).name || 'Candidato Sem Nome'}
                 </h3>
                 {candidate.rating && (
                   <span className="flex items-center text-amber-500 text-xs font-bold gap-0.5">

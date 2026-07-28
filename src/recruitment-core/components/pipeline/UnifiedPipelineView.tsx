@@ -54,7 +54,9 @@ const STAGES: ProcessStage[] = [
   'Apresentado ao cliente',
   'Entrevista com cliente',
   'Proposta',
-  'Contratado'
+  'Contratado',
+  'Reprovado',
+  'Desistiu'
 ];
 
 export const UnifiedPipelineView: React.FC<UnifiedPipelineViewProps> = ({
@@ -74,11 +76,16 @@ export const UnifiedPipelineView: React.FC<UnifiedPipelineViewProps> = ({
   // Filter candidates
   const filteredCandidates = candidates.filter(c => {
     const term = searchTerm.toLowerCase().trim();
+    const candidateName = c.nome || (c as any).name || '';
+    const emailStr = c.email || '';
+    const cargoStr = c.cargoAtual || (c as any).cargo || '';
+    const cidadeStr = c.cidade || '';
+
     const matchesSearch = !term || 
-      c.nome.toLowerCase().includes(term) ||
-      c.email.toLowerCase().includes(term) ||
-      c.cargoAtual.toLowerCase().includes(term) ||
-      (c.cidade && c.cidade.toLowerCase().includes(term));
+      candidateName.toLowerCase().includes(term) ||
+      emailStr.toLowerCase().includes(term) ||
+      cargoStr.toLowerCase().includes(term) ||
+      cidadeStr.toLowerCase().includes(term);
 
     const candidateStage = c.currentStageId || 'Triagem';
     const matchesStage = selectedStage === 'Todos' || candidateStage === selectedStage;
@@ -217,12 +224,12 @@ export const UnifiedPipelineView: React.FC<UnifiedPipelineViewProps> = ({
               >
                 <div className="flex items-center gap-3">
                   <div className="w-10 h-10 rounded-full bg-indigo-100 text-indigo-800 font-black text-sm flex items-center justify-center shrink-0 border border-indigo-200">
-                    {c.nome.substring(0, 2).toUpperCase()}
+                    {(c.nome || (c as any).name || 'C').substring(0, 2).toUpperCase()}
                   </div>
 
                   <div>
                     <div className="flex items-center gap-2">
-                      <h4 className="text-sm font-black text-slate-900">{c.nome}</h4>
+                      <h4 className="text-sm font-black text-slate-900">{c.nome || (c as any).name || 'Candidato Sem Nome'}</h4>
                       {c.compatibilidadePercent && (
                         <span className="bg-emerald-100 text-emerald-800 text-[10px] font-extrabold px-2 py-0.5 rounded-full">
                           {c.compatibilidadePercent}% IA Match
@@ -288,7 +295,7 @@ export const UnifiedPipelineView: React.FC<UnifiedPipelineViewProps> = ({
                       className="bg-white p-3 rounded-xl border border-slate-200 shadow-2xs hover:shadow-xs transition-all cursor-pointer space-y-2"
                     >
                       <div className="flex items-center justify-between">
-                        <span className="text-xs font-bold text-slate-900">{c.nome}</span>
+                        <span className="text-xs font-bold text-slate-900">{c.nome || (c as any).name || 'Candidato Sem Nome'}</span>
                         {c.compatibilidadePercent && (
                           <span className="text-[10px] font-bold text-emerald-600">
                             {c.compatibilidadePercent}%

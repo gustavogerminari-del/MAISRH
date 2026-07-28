@@ -82,34 +82,71 @@ export const UnifiedJobDetailModal: React.FC<UnifiedJobDetailModalProps> = ({
           </div>
         </div>
 
-        {/* Headhunter Specific Commercial Block */}
+        {/* Headhunter Specific Commercial & Financial Block */}
         {isHeadhunter && (
-          <div className="bg-indigo-50 border border-indigo-100 p-4 rounded-xl space-y-2 text-xs">
-            <div className="flex items-center justify-between">
-              <span className="font-extrabold text-indigo-900 flex items-center gap-1.5">
-                <DollarSign className="w-4 h-4 text-indigo-600" />
-                <span>Condições Comerciais do Fee</span>
-              </span>
-              <span className="bg-indigo-200 text-indigo-900 font-extrabold px-2 py-0.5 rounded-md text-[10px]">
-                {job.regraCobranca || 'Honorário por Placement'}
-              </span>
+          <div className="space-y-3">
+            <div className="bg-indigo-50 border border-indigo-100 p-4 rounded-xl space-y-2 text-xs">
+              <div className="flex items-center justify-between">
+                <span className="font-extrabold text-indigo-900 flex items-center gap-1.5">
+                  <DollarSign className="w-4 h-4 text-indigo-600" />
+                  <span>Condições Comerciais do Fee</span>
+                </span>
+                <span className="bg-indigo-200 text-indigo-900 font-extrabold px-2 py-0.5 rounded-md text-[10px]">
+                  {job.regraCobranca || 'Honorário por Placement'}
+                </span>
+              </div>
+              <div className="grid grid-cols-3 gap-2 pt-1 border-t border-indigo-100">
+                <div>
+                  <span className="text-indigo-600 font-medium block">Valor Negociado</span>
+                  <strong className="text-indigo-950 font-black text-sm">
+                    R$ {(job.valorNegociado || job.valorCobrado || job.valorVaga || 0).toLocaleString('pt-BR')}
+                  </strong>
+                </div>
+                <div>
+                  <span className="text-indigo-600 font-medium block">Comissão Est.</span>
+                  <strong className="text-emerald-700 font-black text-sm">
+                    R$ {(job.comissaoCalculada || 0).toLocaleString('pt-BR')} ({job.percentualComissao || 0}%)
+                  </strong>
+                </div>
+                <div>
+                  <span className="text-indigo-600 font-medium block">SLA Atendimento</span>
+                  <strong className="text-indigo-900 font-bold">{job.slaDias || 15} dias úteis</strong>
+                </div>
+              </div>
             </div>
-            <div className="grid grid-cols-3 gap-2 pt-1 border-t border-indigo-100">
-              <div>
-                <span className="text-indigo-600 font-medium block">Valor Negociado</span>
-                <strong className="text-indigo-950 font-black text-sm">
-                  R$ {(job.valorNegociado || job.valorCobrado || job.valorVaga || 0).toLocaleString('pt-BR')}
-                </strong>
+
+            {/* Financial Summary card for Job */}
+            <div className="bg-slate-50 border border-slate-200 p-4 rounded-xl space-y-2 text-xs">
+              <div className="flex items-center justify-between">
+                <span className="font-extrabold text-slate-800 flex items-center gap-1.5">
+                  <ShieldCheck className="w-4 h-4 text-emerald-600" />
+                  <span>Resumo Financeiro da Vaga</span>
+                </span>
+                <span className="text-[11px] text-slate-500 font-bold">Lançamentos em Tempo Real</span>
               </div>
-              <div>
-                <span className="text-indigo-600 font-medium block">Comissão Est.</span>
-                <strong className="text-emerald-700 font-black text-sm">
-                  R$ {(job.comissaoCalculada || 0).toLocaleString('pt-BR')} ({job.percentualComissao || 0}%)
-                </strong>
-              </div>
-              <div>
-                <span className="text-indigo-600 font-medium block">SLA Atendimento</span>
-                <strong className="text-indigo-900 font-bold">{job.slaDias || 15} dias úteis</strong>
+              <div className="grid grid-cols-4 gap-2 pt-1 border-t border-slate-200 text-center">
+                <div className="p-2 bg-white rounded-lg border border-slate-100">
+                  <span className="text-slate-400 text-[10px] block font-bold">Faturamento</span>
+                  <strong className="text-emerald-600 font-black">
+                    R$ {(job.valorNegociado || job.valorCobrado || job.valorVaga || 0).toLocaleString('pt-BR')}
+                  </strong>
+                </div>
+                <div className="p-2 bg-white rounded-lg border border-slate-100">
+                  <span className="text-slate-400 text-[10px] block font-bold">Despesas Vaga</span>
+                  <strong className="text-rose-600 font-black">R$ 145,80</strong>
+                </div>
+                <div className="p-2 bg-white rounded-lg border border-slate-100">
+                  <span className="text-slate-400 text-[10px] block font-bold">Comissão</span>
+                  <strong className="text-amber-600 font-black">
+                    R$ {(job.comissaoCalculada || 0).toLocaleString('pt-BR')}
+                  </strong>
+                </div>
+                <div className="p-2 bg-white rounded-lg border border-slate-100">
+                  <span className="text-slate-400 text-[10px] block font-bold">Lucro Est.</span>
+                  <strong className="text-indigo-700 font-black">
+                    R$ {((job.valorNegociado || job.valorVaga || 0) - 145.80 - (job.comissaoCalculada || 0)).toLocaleString('pt-BR')}
+                  </strong>
+                </div>
               </div>
             </div>
           </div>

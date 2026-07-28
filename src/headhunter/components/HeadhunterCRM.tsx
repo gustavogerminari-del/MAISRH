@@ -21,7 +21,7 @@ interface HeadhunterCRMProps {
   onOpenAiModal: (type: string, data?: any) => void;
 }
 
-const STAGES: LeadStage[] = ['Lead', 'Contato', 'Proposta', 'Negociação', 'Cliente', 'Perdido', 'Ganho'];
+const STAGES: LeadStage[] = ['Novo lead', 'Contato realizado', 'Diagnóstico', 'Proposta enviada', 'Negociação', 'Aguardando assinatura', 'Ganho', 'Perdido'];
 
 export const HeadhunterCRM: React.FC<HeadhunterCRMProps> = ({
   leads,
@@ -59,7 +59,7 @@ export const HeadhunterCRM: React.FC<HeadhunterCRMProps> = ({
       telefone,
       origem,
       consultor,
-      etapa: 'Lead',
+      etapa: 'Novo lead',
       valorPrevisto,
       probabilidadePercent: probabilidade,
       proximoContato,

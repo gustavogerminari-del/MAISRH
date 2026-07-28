@@ -114,22 +114,6 @@ export const HeadhunterRelatorios: React.FC<HeadhunterRelatoriosProps> = ({ onOp
             <span className="text-[10px] text-emerald-600 font-bold mt-1 block">Margem Operacional Elevada</span>
           </div>
         </div>
-
-        <div className="p-4 bg-indigo-50/50 rounded-xl border border-indigo-100 flex items-center justify-between">
-          <div>
-            <h4 className="text-xs font-black text-indigo-950">Resumo com Inteligência Artificial</h4>
-            <p className="text-xs text-indigo-800 mt-0.5 font-medium">
-              A IA do MAIS RH pode gerar uma análise explicativa de tendência de receitas e gargalos de SLA para este relatório.
-            </p>
-          </div>
-          <button
-            onClick={() => onOpenAiModal('resumoExecutivo')}
-            className="px-3.5 py-2 bg-amber-500 hover:bg-amber-600 text-slate-950 font-bold text-xs rounded-xl shadow-xs transition-all flex items-center gap-1.5 cursor-pointer shrink-0"
-          >
-            <Sparkles className="w-4 h-4" />
-            <span>Gerar Análise IA</span>
-          </button>
-        </div>
       </div>
     </div>
   );

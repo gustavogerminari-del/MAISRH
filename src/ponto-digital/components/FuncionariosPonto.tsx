@@ -62,10 +62,10 @@ export const FuncionariosPonto: React.FC<FuncionariosPontoProps> = ({
                 <td className="p-4 font-bold text-slate-900">
                   <div className="flex items-center gap-3">
                     <div className="w-8 h-8 rounded-full bg-emerald-100 text-emerald-800 font-black flex items-center justify-center text-xs">
-                      {func.nome.split(' ').map(n => n[0]).join('').substring(0, 2)}
+                      {(func.nome || (func as any).nomeCompleto || 'C').split(' ').filter(Boolean).map(n => n[0]).join('').substring(0, 2)}
                     </div>
                     <div>
-                      <p className="font-bold text-slate-900">{func.nome}</p>
+                      <p className="font-bold text-slate-900">{func.nome || (func as any).nomeCompleto || 'Colaborador'}</p>
                       <p className="text-[11px] text-slate-400 font-mono">{func.cpf}</p>
                     </div>
                   </div>

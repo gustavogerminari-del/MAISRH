@@ -1,6 +1,14 @@
 export type HeadhunterRole = 'MASTER' | 'Administrador' | 'Gestor' | 'Headhunter' | 'Recrutador' | 'Financeiro';
 
-export type LeadStage = 'Lead' | 'Contato' | 'Proposta' | 'Negociação' | 'Cliente' | 'Perdido' | 'Ganho';
+export type LeadStage = 
+  | 'Novo lead' 
+  | 'Contato realizado' 
+  | 'Diagnóstico' 
+  | 'Proposta enviada' 
+  | 'Negociação' 
+  | 'Aguardando assinatura' 
+  | 'Ganho' 
+  | 'Perdido';
 
 export type JobStatus = 'Rascunho' | 'Aberta' | 'Busca ativa' | 'Triagem' | 'Entrevistas' | 'Aguardando cliente' | 'Em Andamento' | 'Fechada' | 'Pausada' | 'Cancelada' | 'Arquivada';
 
@@ -10,11 +18,14 @@ export type ProcessStage = 'Mapeado' | 'Abordado' | 'Interessado' | 'Triagem' | 
 
 export type CandidateStatus = 'Triagem' | 'Entrevista Headhunter' | 'Entrevista Cliente' | 'Proposta' | 'Contratado' | 'Reprovado' | ProcessStage;
 
-export type CommissionType = 'Comissão fixa' | 'Comissão percentual' | 'Comissão compartilhada' | 'Comissão por equipe' | 'Comissão por recrutador';
+export type ReceitaStatus = 'Prevista' | 'Aguardando' | 'Parcialmente Recebida' | 'Recebida' | 'Vencida' | 'Cancelada' | 'Estornada';
+export type CommissionStatus = 'Prevista' | 'Aguardando recebimento' | 'Liberada' | 'Parcialmente paga' | 'Paga' | 'Cancelada';
+export type CommissionType = 'Percentual' | 'Valor Fixo' | 'Sem Comissão' | 'Personalizado' | 'Comissão fixa' | 'Comissão percentual' | 'Comissão compartilhada' | 'Comissão por equipe' | 'Comissão por recrutador';
+export type ExpenseCategory = 'Anúncio' | 'Plataforma / LinkedIn' | 'Testes & Avaliações' | 'Deslocamento / Uber' | 'Hospedagem' | 'Alimentação' | 'Terceirização' | 'Aluguel' | 'Energia & Internet' | 'Salários & Encargos' | 'Marketing' | 'Softwares & Licenças' | 'Equipamentos' | 'Impostos & Contador' | 'Despesas Bancárias' | 'Combustível' | 'Pedágio' | 'Uber' | 'Hotel' | 'Passagens' | 'Material' | 'Internet' | 'Telefone' | 'Outros';
+export type GarantiaStatus = 'Ativa' | 'Próxima do Vencimento' | 'Encerrada' | 'Reposição solicitada' | 'Reposição em andamento' | 'Cancelada';
 
-export type CommissionStatus = 'Prevista' | 'Liberada' | 'Recebida' | 'Cancelada';
-
-export type ExpenseCategory = 'Combustível' | 'Pedágio' | 'Alimentação' | 'Uber' | 'Hotel' | 'Passagens' | 'Material' | 'Internet' | 'Telefone' | 'Marketing' | 'Outros';
+export type ProposalStatus = 'Rascunho' | 'Enviada' | 'Visualizada' | 'Aprovada' | 'Recusada' | 'Vencida' | 'Cancelada';
+export type ContractStatus = 'Rascunho' | 'Em revisão' | 'Aguardando assinatura' | 'Assinado' | 'Vigente' | 'Encerrado' | 'Cancelado';
 
 export interface HeadhunterBaseDoc {
   id: string;
@@ -23,6 +34,146 @@ export interface HeadhunterBaseDoc {
   criadoEm: string;
   atualizadoEm?: string;
   status: string;
+}
+
+export interface HeadhunterReceitaParcela {
+  numero: number;
+  valor: number;
+  vencimento: string;
+  status: 'Pendente' | 'Pago' | 'Atrasado';
+  dataPagamento?: string;
+  formaPagamento?: string;
+  observacoes?: string;
+}
+
+export type TipoReceitaHeadhunter = 
+  | 'Principal'
+  | 'Cobrança complementar'
+  | 'Taxa adicional'
+  | 'Multa'
+  | 'Reembolso'
+  | 'Outro lançamento extraordinário';
+
+export interface HeadhunterReceita extends HeadhunterBaseDoc {
+  clienteId: string;
+  clienteNome: string;
+  vagaId?: string;
+  vagaCodigo?: string;
+  vagaTitulo?: string;
+  candidatoId?: string;
+  candidatoNome?: string;
+  contratacaoId?: string;
+  propostaId?: string;
+  contratoId?: string;
+  
+  origemModulo?: 'headhunter' | string;
+  origemTipo?: 'contratacao' | string;
+  origemId?: string;
+
+  tipoReceita?: TipoReceitaHeadhunter | string;
+  justificativa?: string;
+
+  valorContratado: number;
+  valorRecebido: number;
+  saldo: number;
+  dataEmissao: string;
+  dataVencimento: string;
+  dataRecebimento?: string;
+  formaPagamento: 'PIX' | 'Boleto' | 'Transferência' | 'Cartão' | 'Nota Fiscal' | 'Outro';
+  numeroNotaFiscal?: string;
+  observacoes?: string;
+  situacao: ReceitaStatus;
+  parcelas?: HeadhunterReceitaParcela[];
+  historico?: Array<{ data: string; alteracao: string; usuario: string; valorAnterior?: number; valorNovo?: number; motivo?: string }>;
+}
+
+export interface HeadhunterExpense extends HeadhunterBaseDoc {
+  tipoDespesa?: 'vaga' | 'geral';
+  clienteId?: string;
+  clienteNome?: string;
+  vagaId?: string;
+  vagaTitulo?: string;
+  consultorNome: string;
+  centroCusto: string;
+  categoria: ExpenseCategory;
+  descricao?: string;
+  data: string;
+  valor: number;
+  comprovanteUrl?: string;
+  responsavel?: string;
+  situacao?: 'Pendente' | 'Pago' | 'Cancelado' | string;
+  observacao?: string;
+}
+
+export interface HeadhunterCommission extends HeadhunterBaseDoc {
+  beneficiarioId?: string;
+  beneficiarioNome: string;
+  clienteId: string;
+  clienteNome: string;
+  vagaId: string;
+  vagaTitulo: string;
+  contratacaoId?: string;
+  consultorNome: string;
+  tipoComissao: CommissionType;
+  valorRecebidoVaga: number;
+  percentual?: number;
+  valorFixo?: number;
+  valorComissao: number;
+  valorPago: number;
+  dataPrevista: string;
+  dataLiberacao?: string;
+  dataPagamento?: string;
+  situacao: CommissionStatus;
+  regraLiberacao: 'cliente_pagou' | 'proporcional' | 'manual';
+  formaPagamento?: string;
+  comprovanteUrl?: string;
+  observacoes?: string;
+  historico?: Array<{ data: string; acao: string; usuario: string }>;
+}
+
+export interface HeadhunterGarantia extends HeadhunterBaseDoc {
+  clienteId: string;
+  clienteNome: string;
+  vagaId: string;
+  vagaTitulo: string;
+  candidatoId: string;
+  candidatoNome: string;
+  contratacaoId: string;
+  dataInicial: string;
+  dataFinal: string;
+  prazoDias: number;
+  situacao: GarantiaStatus;
+  reposicaoVagaId?: string;
+  observacoes?: string;
+  diasRestantes?: number;
+}
+
+export interface RentabilidadeVaga {
+  vagaId: string;
+  vagaTitulo: string;
+  clienteId: string;
+  clienteNome: string;
+  valorContratado: number;
+  valorRecebido: number;
+  despesasVaga: number;
+  comissao: number;
+  outrosCustos: number;
+  lucroLiquido: number;
+  margemPercentual: number;
+}
+
+export interface HeadhunterFinanceItem extends HeadhunterBaseDoc {
+  tipo: 'Receita' | 'Despesa';
+  categoria: string;
+  descricao: string;
+  clienteNome?: string;
+  vagaTitulo?: string;
+  valor: number;
+  dataVencimento: string;
+  dataPagamento?: string;
+  formaPagamento: 'PIX' | 'Boleto' | 'Transferência' | 'Cartão' | 'Nota Fiscal';
+  centroCusto: string;
+  statusFinanceiro: 'Pendente' | 'Pago' | 'Atrasado' | 'Cancelado';
 }
 
 export interface HeadhunterClient extends HeadhunterBaseDoc {
@@ -53,18 +204,45 @@ export interface HeadhunterClient extends HeadhunterBaseDoc {
 }
 
 export interface HeadhunterLead extends HeadhunterBaseDoc {
+  clienteId?: string;
   empresa: string;
   contato: string;
   email: string;
   telefone: string;
   origem: string;
   consultor: string;
+  servico?: string;
+  cargoOuQtdVagas?: string;
+  qtdVagas?: number;
   etapa: LeadStage;
   valorPrevisto: number;
   probabilidadePercent: number;
   proximoContato: string;
+  propostaAprovadaId?: string;
+  contratoId?: string;
+  vagaCriadaId?: string;
   historico: Array<{ data: string; anotacao: string; autor: string }>;
   observacoes: string;
+}
+
+export interface HeadhunterProposal extends HeadhunterBaseDoc {
+  clienteId: string;
+  clienteNome: string;
+  oportunidadeId?: string;
+  titulo: string;
+  servico: string;
+  qtdVagas: number;
+  escopo: string;
+  valor: number;
+  modeloCobranca: 'Honorário Fixo' | 'Percentual do Anual' | 'Percentual do Salário' | 'Success Fee' | 'Retainer + Success';
+  formaPagamento: string;
+  prazoEntregaDias: number;
+  prazoGarantiaDias: number;
+  validadeData: string;
+  status: ProposalStatus;
+  observacoes?: string;
+  contratoGeradoId?: string;
+  versao?: number;
 }
 
 export interface HeadhunterJob extends HeadhunterBaseDoc {
@@ -179,47 +357,6 @@ export interface HeadhunterHiring extends HeadhunterBaseDoc {
   faturamentoGerado: boolean;
 }
 
-export interface HeadhunterCommission extends HeadhunterBaseDoc {
-  clienteNome: string;
-  vagaTitulo: string;
-  consultorNome: string;
-  tipoComissao: CommissionType;
-  valorRecebidoVaga: number;
-  percentual: number;
-  valorComissao: number;
-  dataPrevista: string;
-  dataPagamento?: string;
-  situacao: CommissionStatus;
-}
-
-export interface HeadhunterFinanceItem extends HeadhunterBaseDoc {
-  tipo: 'Receita' | 'Despesa';
-  categoria: string;
-  descricao: string;
-  clienteNome?: string;
-  vagaTitulo?: string;
-  valor: number;
-  dataVencimento: string;
-  dataPagamento?: string;
-  formaPagamento: 'PIX' | 'Boleto' | 'Transferência' | 'Cartão' | 'Nota Fiscal';
-  centroCusto: string;
-  statusFinanceiro: 'Pendente' | 'Pago' | 'Atrasado' | 'Cancelado';
-}
-
-export interface HeadhunterExpense extends HeadhunterBaseDoc {
-  clienteId?: string;
-  clienteNome?: string;
-  vagaId?: string;
-  vagaTitulo?: string;
-  consultorNome: string;
-  centroCusto: string;
-  categoria: ExpenseCategory;
-  data: string;
-  valor: number;
-  comprovanteUrl?: string;
-  observacao: string;
-}
-
 export interface HeadhunterEvent extends HeadhunterBaseDoc {
   tipo: 'Reunião' | 'Entrevista' | 'Visita' | 'Follow-up' | 'Pendência' | 'Retorno' | 'Ligação';
   titulo: string;
@@ -232,13 +369,26 @@ export interface HeadhunterEvent extends HeadhunterBaseDoc {
 }
 
 export interface HeadhunterContract extends HeadhunterBaseDoc {
+  status: ContractStatus;
   clienteId: string;
   clienteNome: string;
+  propostaId?: string;
+  oportunidadeId?: string;
   tituloContrato: string;
   tipo: 'Contrato Mãe' | 'Aditivo' | 'Tabela Comercial' | 'NDA' | 'Outros';
+  escopo?: string;
+  honorarios?: string;
+  valorContrato?: number;
+  formaPagamento?: string;
+  prazoSlaDias?: number;
+  prazoGarantiaDias?: number;
   dataInicio: string;
   dataVencimento: string;
-  valorOuPercentual: string;
+  vigencia?: string;
+  responsavelComercial?: string;
+  valorOuPercentual?: string;
   assinado: boolean;
+  vagaCriadaId?: string;
   documentoUrl?: string;
+  observacoes?: string;
 }

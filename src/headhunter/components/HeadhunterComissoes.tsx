@@ -42,16 +42,6 @@ export const HeadhunterComissoes: React.FC<HeadhunterComissoesProps> = ({
             Gestão de comissões fixas, percentuais, compartilhadas e pagamentos liberados por vaga fechada.
           </p>
         </div>
-
-        <div className="flex items-center gap-3">
-          <button
-            onClick={() => onOpenAiModal('calcularComissao')}
-            className="px-3.5 py-2.5 bg-amber-500 hover:bg-amber-600 text-slate-950 font-bold text-xs rounded-xl shadow-xs transition-all flex items-center gap-1.5 cursor-pointer"
-          >
-            <Sparkles className="w-4 h-4" />
-            <span>Calcular Comissões com IA</span>
-          </button>
-        </div>
       </div>
 
       {/* KPI Cards */}

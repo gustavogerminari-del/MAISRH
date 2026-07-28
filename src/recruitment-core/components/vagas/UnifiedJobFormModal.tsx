@@ -131,65 +131,92 @@ export const UnifiedJobFormModal: React.FC<UnifiedJobFormModalProps> = ({
             />
           </div>
 
-          {/* Contextual Selector: Client (Headhunter) vs Depto/Gestor (Recrutamento) */}
+          {/* Contextual Section: DADOS COMERCIAIS DO HEADHUNTER vs Estrutura Interna */}
           {isHeadhunter ? (
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 bg-indigo-50/50 p-3 rounded-xl border border-indigo-100">
-              <div>
-                <label className="block font-bold text-indigo-900 mb-1">Cliente Contratante *</label>
-                {clients.length > 0 ? (
-                  <select
-                    value={clienteId}
-                    onChange={e => {
-                      setClienteId(e.target.value);
-                      const c = clients.find(x => x.id === e.target.value);
-                      if (c) setClienteNome(c.nomeFantasia);
-                    }}
-                    className="w-full p-2 bg-white border border-indigo-200 rounded-xl font-bold"
-                  >
-                    {clients.map(c => (
-                      <option key={c.id} value={c.id}>{c.nomeFantasia}</option>
-                    ))}
-                  </select>
-                ) : (
+            <div className="bg-indigo-50/70 p-4 rounded-xl border border-indigo-100 space-y-3">
+              <h4 className="text-xs font-black text-indigo-900 uppercase tracking-wider flex items-center gap-2 border-b border-indigo-200/60 pb-2">
+                <Building2 className="w-4 h-4 text-indigo-600" />
+                Dados Comerciais do Headhunter
+              </h4>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block font-bold text-indigo-900 mb-1">Cliente Contratante *</label>
+                  {clients.length > 0 ? (
+                    <select
+                      value={clienteId}
+                      onChange={e => {
+                        setClienteId(e.target.value);
+                        const c = clients.find(x => x.id === e.target.value);
+                        if (c) setClienteNome(c.nomeFantasia);
+                      }}
+                      className="w-full p-2 bg-white border border-indigo-200 rounded-xl font-bold"
+                    >
+                      {clients.map(c => (
+                        <option key={c.id} value={c.id}>{c.nomeFantasia}</option>
+                      ))}
+                    </select>
+                  ) : (
+                    <input
+                      required
+                      type="text"
+                      value={clienteNome}
+                      onChange={e => setClienteNome(e.target.value)}
+                      placeholder="Nome do Cliente..."
+                      className="w-full p-2 bg-white border border-indigo-200 rounded-xl font-bold"
+                    />
+                  )}
+                </div>
+
+                <div>
+                  <label className="block font-bold text-indigo-900 mb-1">Regra de Cobrança / Contrato</label>
                   <input
-                    required
                     type="text"
-                    value={clienteNome}
-                    onChange={e => setClienteNome(e.target.value)}
-                    placeholder="Nome do Cliente..."
-                    className="w-full p-2 bg-white border border-indigo-200 rounded-xl"
+                    value={regraCobranca}
+                    onChange={e => setRegraCobranca(e.target.value)}
+                    placeholder="Ex: Honorário Fixo na Contratação..."
+                    className="w-full p-2 bg-white border border-indigo-200 rounded-xl font-medium"
                   />
-                )}
-              </div>
+                </div>
 
-              <div>
-                <label className="block font-bold text-indigo-900 mb-1">Fee / Honorário Negociado (R$)</label>
-                <input
-                  type="number"
-                  value={valorNegociado}
-                  onChange={e => setValorNegociado(Number(e.target.value))}
-                  className="w-full p-2 bg-white border border-indigo-200 rounded-xl font-bold text-indigo-900"
-                />
-              </div>
+                <div>
+                  <label className="block font-bold text-indigo-900 mb-1">Honorário Negociado / Valor Fixo (R$)</label>
+                  <input
+                    type="number"
+                    value={valorNegociado}
+                    onChange={e => setValorNegociado(Number(e.target.value))}
+                    className="w-full p-2 bg-white border border-indigo-200 rounded-xl font-bold text-indigo-900"
+                  />
+                </div>
 
-              <div>
-                <label className="block font-bold text-indigo-900 mb-1">Comissão (%)</label>
-                <input
-                  type="number"
-                  value={percentualComissao}
-                  onChange={e => setPercentualComissao(Number(e.target.value))}
-                  className="w-full p-2 bg-white border border-indigo-200 rounded-xl font-bold"
-                />
-              </div>
+                <div>
+                  <label className="block font-bold text-indigo-900 mb-1">Percentual de Comissão (%)</label>
+                  <input
+                    type="number"
+                    value={percentualComissao}
+                    onChange={e => setPercentualComissao(Number(e.target.value))}
+                    className="w-full p-2 bg-white border border-indigo-200 rounded-xl font-bold"
+                  />
+                </div>
 
-              <div>
-                <label className="block font-bold text-indigo-900 mb-1">SLA (Dias Úteis)</label>
-                <input
-                  type="number"
-                  value={slaDias}
-                  onChange={e => setSlaDias(Number(e.target.value))}
-                  className="w-full p-2 bg-white border border-indigo-200 rounded-xl"
-                />
+                <div>
+                  <label className="block font-bold text-indigo-900 mb-1">Prazo de Garantia / SLA (Dias)</label>
+                  <input
+                    type="number"
+                    value={slaDias}
+                    onChange={e => setSlaDias(Number(e.target.value))}
+                    className="w-full p-2 bg-white border border-indigo-200 rounded-xl font-bold"
+                  />
+                </div>
+
+                <div>
+                  <label className="block font-bold text-indigo-900 mb-1">Consultor Responsável</label>
+                  <input
+                    type="text"
+                    defaultValue="Consultor Sênior HR"
+                    className="w-full p-2 bg-white border border-indigo-200 rounded-xl font-medium"
+                  />
+                </div>
               </div>
             </div>
           ) : (

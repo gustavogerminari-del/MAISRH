@@ -84,6 +84,13 @@ export interface UnifiedJob {
   centroCusto?: string;
 
   // Headhunter Específicos
+  tipoVaga?: 'empresa' | 'headhunter';
+  oportunidadeId?: string;
+  propostaId?: string;
+  contratoId?: string;
+  responsavelComercial?: string;
+  valorContratado?: number;
+  prazoGarantia?: number;
   valorNegociado?: number;
   valorVaga?: number;
   valorCobrado?: number;
@@ -98,6 +105,7 @@ export interface UnifiedJob {
   posicoesPreenchidas?: number;
 
   dataCriacao: string;
+  dataAbertura?: string;
   createdAt?: string;
   deadline?: string;
   atualizadoEm?: string;

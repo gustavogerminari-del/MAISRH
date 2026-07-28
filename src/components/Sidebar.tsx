@@ -1,65 +1,104 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
-  Home, 
+  LayoutDashboard, 
   Briefcase, 
-  FileText, 
   Users, 
-  Calendar, 
+  Contact, 
+  ListChecks, 
+  Video, 
+  UserCheck, 
+  Building2, 
+  TrendingUp, 
+  FileText, 
+  FileSignature, 
+  BadgeDollarSign, 
+  Wallet, 
+  Receipt, 
+  ShieldCheck, 
   BarChart2, 
+  Clock, 
+  Calculator, 
+  Gift, 
+  Sun, 
+  UserMinus, 
+  FileCheck, 
+  Calendar, 
   Settings, 
-  ChevronDown, 
-  ChevronRight,
-  PlusCircle,
-  UserCheck,
-  Globe,
-  Crown,
-  Bot,
-  Sparkles,
-  Lock,
-  Calculator,
-  Clock,
-  Building2,
-  TrendingUp,
-  Award,
-  X
+  Building, 
+  Crown, 
+  Layers, 
+  Palette, 
+  Shield, 
+  ChevronLeft, 
+  ChevronRight, 
+  X,
+  Globe
 } from 'lucide-react';
 import { useAuth } from '../auth';
 
 export type MainTab = 
   | 'dashboard' 
-  | 'mais-rh-ia'
-  | 'ponto-digital'
   | 'vagas' 
+  | 'candidatos' 
   | 'banco-talentos' 
+  | 'processos-seletivos' 
   | 'entrevistas' 
-  | 'relatorios' 
-  | 'empresa' 
-  | 'colaboradores' 
-  | 'site-vagas' 
-  | 'consultor-rh'
+  | 'contratacoes' 
   | 'headhunter'
-  | 'ferias-beneficios' 
-  | 'beneficios'
-  | 'ferias'
-  | 'rescisao'
+  | 'headhunter-clientes' 
+  | 'headhunter-comercial'
+  | 'headhunter-crm'
+  | 'headhunter-propostas' 
+  | 'headhunter-contratos' 
+  | 'headhunter-comissoes' 
+  | 'headhunter-financeiro' 
+  | 'headhunter-despesas' 
+  | 'headhunter-garantias' 
+  | 'headhunter-relatorios' 
+  | 'colaboradores' 
+  | 'ponto-digital' 
+  | 'folha-pagamento' 
+  | 'beneficios' 
+  | 'ferias' 
+  | 'rescisao' 
   | 'documentos' 
-  | 'folha-pagamento'
-  | 'relatorios-dp'
-  | 'configuracoes-trabalhistas'
-  | 'auditoria' 
-  | 'planos-saas' 
+  | 'agenda' 
+  | 'relatorios' 
+  | 'configuracoes' 
+  | 'site-vagas' 
   | 'acesso-master' 
-  | 'configuracoes';
+  | 'master-empresas' 
+  | 'master-planos' 
+  | 'master-modulos' 
+  | 'master-usuarios' 
+  | 'master-personalizacao' 
+  | 'auditoria';
+
+interface NavItem {
+  id: MainTab;
+  label: string;
+  icon: React.FC<{ className?: string }>;
+  badge?: number | string;
+}
+
+interface NavGroup {
+  id: string;
+  title: string;
+  masterOnly?: boolean;
+  items: NavItem[];
+}
+
+const COLLAPSED_STORAGE_KEY = 'sidebarCollapsed';
 
 interface SidebarProps {
   activeTab: MainTab;
   setActiveTab: (tab: MainTab) => void;
-  openNewJobModal: () => void;
-  openNewCandidateModal: () => void;
-  openScheduleInterviewModal: () => void;
-  jobsCount: number;
-  candidatesCount: number;
-  interviewsCount: number;
+  openNewJobModal?: () => void;
+  openNewCandidateModal?: () => void;
+  openScheduleInterviewModal?: () => void;
+  jobsCount?: number;
+  candidatesCount?: number;
+  interviewsCount?: number;
   isOpenMobile?: boolean;
   onCloseMobile?: () => void;
 }
@@ -67,443 +106,238 @@ interface SidebarProps {
 export const Sidebar: React.FC<SidebarProps> = ({
   activeTab,
   setActiveTab,
-  openNewJobModal,
-  openNewCandidateModal,
-  openScheduleInterviewModal,
-  jobsCount,
-  candidatesCount,
-  interviewsCount,
+  jobsCount = 0,
+  candidatesCount = 0,
+  interviewsCount = 0,
   isOpenMobile = false,
   onCloseMobile
 }) => {
-  const { user, isModuleActive } = useAuth();
-  const [recruitmentOpen, setRecruitmentOpen] = useState(true);
-  const [dpOpen, setDpOpen] = useState(true);
-
+  const { user } = useAuth();
   const isMaster = user?.role === 'Super Administrador' || user?.tipoUsuario === 'MASTER';
 
-  // Module active flags
-  const hasRecrutamento = isModuleActive('recrutamento') || isModuleActive('vagas');
-  const hasDp = isModuleActive('dp') || isModuleActive('equipeInterna');
-  const hasDocumentos = isModuleActive('documentos') || isModuleActive('documentosAssinatura');
-  const hasFolha = isModuleActive('folha') || isModuleActive('folhaPagamento') || isModuleActive('folha-pagamento') || isMaster;
-  const hasPonto = isModuleActive('ponto') || isModuleActive('pontoDigital') || isMaster;
-  const hasRelatorios = isModuleActive('relatoriosAvancados') || isMaster;
+  const [isCollapsed, setIsCollapsed] = useState<boolean>(() => {
+    const saved = localStorage.getItem(COLLAPSED_STORAGE_KEY);
+    return saved === 'true';
+  });
+
+  useEffect(() => {
+    localStorage.setItem(COLLAPSED_STORAGE_KEY, String(isCollapsed));
+  }, [isCollapsed]);
+
+  const navGroups: NavGroup[] = [
+    {
+      id: 'inicio',
+      title: 'INÍCIO',
+      items: [
+        { id: 'dashboard', label: 'Visão Geral', icon: LayoutDashboard },
+      ]
+    },
+    {
+      id: 'recrutamento',
+      title: 'RECRUTAMENTO',
+      items: [
+        { id: 'vagas', label: 'Vagas', icon: Briefcase, badge: jobsCount > 0 ? jobsCount : undefined },
+        { id: 'candidatos', label: 'Candidatos', icon: Users, badge: candidatesCount > 0 ? candidatesCount : undefined },
+        { id: 'banco-talentos', label: 'Banco de Talentos', icon: Contact },
+        { id: 'processos-seletivos', label: 'Processos Seletivos', icon: ListChecks },
+        { id: 'entrevistas', label: 'Entrevistas', icon: Video, badge: interviewsCount > 0 ? interviewsCount : undefined },
+        { id: 'contratacoes', label: 'Contratações', icon: UserCheck },
+      ]
+    },
+    {
+      id: 'headhunter',
+      title: 'HEADHUNTER',
+      items: [
+        { id: 'headhunter' as MainTab, label: 'Visão Geral', icon: LayoutDashboard },
+        { id: 'headhunter-clientes' as MainTab, label: 'Clientes', icon: Building2 },
+        { id: 'headhunter-comercial' as MainTab, label: 'Comercial', icon: TrendingUp },
+        { id: 'headhunter-financeiro' as MainTab, label: 'Financeiro', icon: Wallet },
+      ]
+    },
+    {
+      id: 'colaboradores',
+      title: 'COLABORADORES',
+      items: [
+        { id: 'colaboradores', label: 'Colaboradores', icon: Users },
+        { id: 'ponto-digital', label: 'Ponto', icon: Clock },
+        { id: 'folha-pagamento', label: 'Departamento Pessoal', icon: Calculator },
+        { id: 'beneficios', label: 'Benefícios', icon: Gift },
+        { id: 'ferias', label: 'Férias', icon: Sun },
+        { id: 'rescisao', label: 'Rescisões', icon: UserMinus },
+        { id: 'documentos', label: 'Documentos', icon: FileCheck },
+      ]
+    },
+    {
+      id: 'gestao',
+      title: 'GESTÃO',
+      items: [
+        { id: 'agenda', label: 'Agenda', icon: Calendar },
+        { id: 'relatorios', label: 'Relatórios Gerais', icon: BarChart2 },
+        { id: 'configuracoes', label: 'Configurações', icon: Settings },
+      ]
+    },
+    ...(isMaster ? [{
+      id: 'plataforma',
+      title: 'PLATAFORMA',
+      masterOnly: true,
+      items: [
+        { id: 'acesso-master' as MainTab, label: 'Painel Master', icon: Crown },
+        { id: 'master-empresas' as MainTab, label: 'Empresas', icon: Building },
+        { id: 'master-planos' as MainTab, label: 'Planos', icon: Crown },
+        { id: 'master-modulos' as MainTab, label: 'Módulos', icon: Layers },
+        { id: 'master-usuarios' as MainTab, label: 'Usuários', icon: Users },
+        { id: 'master-personalizacao' as MainTab, label: 'Personalização', icon: Palette },
+        { id: 'auditoria' as MainTab, label: 'Logs', icon: Shield },
+      ]
+    }] : [])
+  ];
 
   const handleSelectTab = (tab: MainTab) => {
     setActiveTab(tab);
-    if (onCloseMobile) {
-      onCloseMobile();
-    }
+    if (onCloseMobile) onCloseMobile();
+  };
+
+  // Helper to check if item is active or matched parent tab
+  const isTabActive = (itemTab: MainTab) => {
+    if (activeTab === itemTab) return true;
+    if (itemTab === 'headhunter-clientes' && activeTab === 'headhunter') return true;
+    return false;
   };
 
   return (
     <>
-      {/* Mobile Backdrop Overlay */}
+      {/* Mobile Backdrop */}
       {isOpenMobile && (
         <div 
-          className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-40 lg:hidden transition-opacity" 
-          onClick={onCloseMobile} 
+          className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-40 lg:hidden transition-opacity"
+          onClick={onCloseMobile}
         />
       )}
 
-      {/* Sidebar Navigation Drawer */}
+      {/* Main Sidebar Element */}
       <aside 
-        className={`fixed lg:static top-0 bottom-0 left-0 z-50 w-72 lg:w-64 bg-white border-r border-[#E5E7EB] flex flex-col justify-between shrink-0 select-none transition-transform duration-300 ${
-          isOpenMobile ? 'translate-x-0 shadow-2xl' : '-translate-x-full lg:translate-x-0'
+        className={`fixed lg:static top-0 bottom-0 left-0 z-50 bg-white border-r border-slate-200 flex flex-col justify-between shrink-0 select-none transition-all duration-300 ${
+          isOpenMobile 
+            ? 'translate-x-0 w-72 shadow-2xl' 
+            : `-translate-x-full lg:translate-x-0 ${isCollapsed ? 'lg:w-16' : 'lg:w-60'}`
         }`}
       >
-        <div className="p-4 space-y-6 overflow-y-auto max-h-[calc(100vh-60px)]">
+        <div className="p-3 space-y-4 overflow-y-auto max-h-[calc(100vh-50px)] scrollbar-thin">
           
-          {/* Brand Logo & Mobile Close Button */}
-          <div className="px-2 py-1 flex items-center justify-between">
-            <div className="flex items-center gap-2.5">
-              <div className="w-9 h-9 rounded-xl bg-[#2563EB] text-white font-black flex items-center justify-center text-base shadow-xs">
-                M
+          {/* Header & Logo */}
+          <div className={`flex items-center pb-2 border-b border-slate-100 ${isCollapsed && !isOpenMobile ? 'justify-center' : 'justify-between px-1'}`}>
+            {(!isCollapsed || isOpenMobile) && (
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-xl bg-indigo-600 text-white font-black flex items-center justify-center text-sm shadow-xs">
+                  M
+                </div>
+                <div>
+                  <span className="text-base font-black text-slate-900 tracking-tight">
+                    MAIS<span className="text-indigo-600">RH</span>
+                  </span>
+                  <p className="text-[10px] text-slate-400 font-semibold -mt-1">SaaS Corporativo</p>
+                </div>
               </div>
-              <div>
-                <span className="text-lg font-black text-[#1E293B] tracking-tight">
-                  MAIS<span className="text-[#2563EB]">RH</span>
-                </span>
-                <p className="text-[10px] text-[#64748B] font-semibold -mt-1">SaaS Corporativo</p>
-              </div>
-            </div>
-            
-            {/* Close Button on Mobile */}
+            )}
+
+            {/* Mobile close button */}
             <button
               onClick={onCloseMobile}
-              className="lg:hidden p-2 text-slate-500 hover:text-slate-800 hover:bg-slate-100 rounded-xl transition-all cursor-pointer"
-              title="Fechar menu"
+              className="lg:hidden p-1.5 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-lg transition-colors cursor-pointer"
             >
               <X className="w-5 h-5" />
             </button>
+
+            {/* Desktop Collapse/Expand Button */}
+            <button
+              onClick={() => setIsCollapsed(!isCollapsed)}
+              title={isCollapsed ? "Expandir menu" : "Recolher menu"}
+              className="hidden lg:flex p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors cursor-pointer"
+            >
+              {isCollapsed ? <ChevronRight className="w-4 h-4" /> : <ChevronLeft className="w-4 h-4" />}
+            </button>
           </div>
 
-          {/* Action Button */}
-          {hasRecrutamento && (
-            <button
-              onClick={() => {
-                openNewJobModal();
-                if (onCloseMobile) onCloseMobile();
-              }}
-              className="w-full bg-[#2563EB] hover:bg-[#1d4ed8] text-white font-semibold px-3 py-2.5 rounded-xl text-xs transition-all shadow-2xs flex items-center justify-center gap-2 cursor-pointer min-h-[44px]"
-            >
-              <PlusCircle className="w-4 h-4" />
-              <span>Criar Nova Vaga</span>
-            </button>
-          )}
-
-          {/* Navigation Items */}
-          <nav className="space-y-1">
-            <p className="px-3 text-[10px] font-black text-[#64748B] uppercase tracking-wider mb-2">
-              NAVEGAÇÃO PRINCIPAL
-            </p>
-
-            {/* 1. Dashboard / Início */}
-            <button
-              onClick={() => handleSelectTab('dashboard')}
-              className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-semibold transition-all cursor-pointer min-h-[44px] ${
-                activeTab === 'dashboard'
-                  ? 'bg-[#2563EB] text-white shadow-xs font-bold'
-                  : 'text-[#1E293B] hover:bg-[#F8FAFC] hover:text-[#2563EB]'
-              }`}
-            >
-              <Home className="w-4 h-4" />
-              <span>🏠 Início</span>
-            </button>
-
-            {/* 2. Recrutamento (Vagas, Candidatos, Banco de Talentos, Entrevistas) */}
-            {hasRecrutamento ? (
-              <div className="space-y-1 pt-1">
-                <button
-                  onClick={() => setRecruitmentOpen(!recruitmentOpen)}
-                  className={`w-full flex items-center justify-between px-3 py-2.5 rounded-xl text-xs font-semibold transition-all cursor-pointer min-h-[44px] ${
-                    activeTab === 'vagas' || activeTab === 'banco-talentos' || activeTab === 'entrevistas'
-                      ? 'text-[#2563EB] bg-blue-50/50'
-                      : 'text-[#1E293B] hover:bg-[#F8FAFC]'
-                  }`}
-                >
-                  <div className="flex items-center gap-3">
-                    <Briefcase className="w-4 h-4 text-[#2563EB]" />
-                    <span>🎯 Recrutamento</span>
-                  </div>
-                  {recruitmentOpen ? (
-                    <ChevronDown className="w-3.5 h-3.5 text-[#64748B]" />
-                  ) : (
-                    <ChevronRight className="w-3.5 h-3.5 text-[#64748B]" />
-                  )}
-                </button>
-
-                {recruitmentOpen && (
-                  <div className="pl-6 space-y-1 border-l-2 border-[#E5E7EB] ml-4 py-1">
-                    <button
-                      onClick={() => handleSelectTab('vagas')}
-                      className={`w-full flex items-center justify-between px-3 py-2 rounded-lg text-xs font-medium transition-all cursor-pointer ${
-                        activeTab === 'vagas'
-                          ? 'bg-[#2563EB] text-white font-bold shadow-2xs'
-                          : 'text-[#64748B] hover:bg-[#F8FAFC] hover:text-[#1E293B]'
-                      }`}
-                    >
-                      <span>Vagas</span>
-                      <span className={`px-1.5 py-0.2 text-[10px] rounded-full font-bold ${
-                        activeTab === 'vagas' ? 'bg-blue-700 text-white' : 'bg-[#E5E7EB] text-[#1E293B]'
-                      }`}>
-                        {jobsCount}
-                      </span>
-                    </button>
-
-                    <button
-                      onClick={() => handleSelectTab('banco-talentos')}
-                      className={`w-full flex items-center justify-between px-3 py-2 rounded-lg text-xs font-medium transition-all cursor-pointer ${
-                        activeTab === 'banco-talentos'
-                          ? 'bg-[#2563EB] text-white font-bold shadow-2xs'
-                          : 'text-[#64748B] hover:bg-[#F8FAFC] hover:text-[#1E293B]'
-                      }`}
-                    >
-                      <span>Candidatos</span>
-                      <span className={`px-1.5 py-0.2 text-[10px] rounded-full font-bold ${
-                        activeTab === 'banco-talentos' ? 'bg-blue-700 text-white' : 'bg-[#E5E7EB] text-[#1E293B]'
-                      }`}>
-                        {candidatesCount}
-                      </span>
-                    </button>
-
-                    <button
-                      onClick={() => handleSelectTab('banco-talentos')}
-                      className="w-full flex items-center justify-between px-3 py-2 rounded-lg text-xs font-medium text-[#64748B] hover:bg-[#F8FAFC] hover:text-[#1E293B] transition-all cursor-pointer"
-                    >
-                      <span>Banco de Talentos IA</span>
-                    </button>
-
-                    <button
-                      onClick={() => handleSelectTab('entrevistas')}
-                      className={`w-full flex items-center justify-between px-3 py-2 rounded-lg text-xs font-medium transition-all cursor-pointer ${
-                        activeTab === 'entrevistas'
-                          ? 'bg-[#2563EB] text-white font-bold shadow-2xs'
-                          : 'text-[#64748B] hover:bg-[#F8FAFC] hover:text-[#1E293B]'
-                      }`}
-                    >
-                      <span>Processo Seletivo</span>
-                      <span className={`px-1.5 py-0.2 text-[10px] rounded-full font-bold ${
-                        activeTab === 'entrevistas' ? 'bg-blue-700 text-white' : 'bg-[#E5E7EB] text-[#1E293B]'
-                      }`}>
-                        {interviewsCount}
-                      </span>
-                    </button>
-                  </div>
-                )}
-              </div>
-            ) : (
-              <div className="p-2.5 bg-amber-50 border border-amber-200/60 rounded-xl my-1 text-xs text-amber-900 space-y-1">
-                <div className="flex items-center gap-1.5 font-bold">
-                  <Lock className="w-3.5 h-3.5 text-amber-600" />
-                  <span>Recrutamento Indisponível</span>
-                </div>
-              </div>
-            )}
-
-            {/* 3. MAIS RH IA */}
-            <div className="pt-1">
-              <button
-                onClick={() => handleSelectTab('mais-rh-ia')}
-                className={`w-full flex items-center justify-between px-3 py-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer border min-h-[44px] ${
-                  activeTab === 'mais-rh-ia'
-                    ? 'bg-[#B8963E] text-white border-[#B8963E] shadow-sm'
-                    : 'bg-[#B8963E]/5 text-[#1E293B] hover:bg-[#B8963E]/10 border-[#B8963E]/20'
-                }`}
-              >
-                <div className="flex items-center gap-2.5">
-                  <Sparkles className={`w-4 h-4 ${activeTab === 'mais-rh-ia' ? 'text-white' : 'text-[#B8963E]'}`} />
-                  <span>🤖 MAIS RH IA</span>
-                </div>
-                <span className={`text-[9px] uppercase tracking-wider font-extrabold px-1.5 py-0.5 rounded ${
-                  activeTab === 'mais-rh-ia' ? 'bg-white text-[#B8963E]' : 'bg-[#B8963E] text-white'
-                }`}>
-                  IA
-                </span>
-              </button>
-            </div>
-
-            {/* Headhunter Module */}
-            <div className="pt-1">
-              <button
-                onClick={() => handleSelectTab('headhunter')}
-                className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer min-h-[44px] ${
-                  activeTab === 'headhunter' || activeTab === 'consultor-rh'
-                    ? 'bg-indigo-600 text-white shadow-xs font-extrabold'
-                    : 'text-[#1E293B] hover:bg-[#F8FAFC] hover:text-[#2563EB]'
-                }`}
-              >
-                <Award className={`w-4 h-4 ${activeTab === 'headhunter' || activeTab === 'consultor-rh' ? 'text-white' : 'text-indigo-600'}`} />
-                <span>Headhunter</span>
-              </button>
-            </div>
-
-            {/* 4. Colaboradores / DP */}
-            <div className="space-y-1 pt-1">
-              <button
-                onClick={() => setDpOpen(!dpOpen)}
-                className={`w-full flex items-center justify-between px-3 py-2.5 rounded-xl text-xs font-semibold transition-all cursor-pointer min-h-[44px] ${
-                  [
-                    'colaboradores',
-                    'ponto-digital',
-                    'folha-pagamento',
-                    'beneficios',
-                    'ferias',
-                    'rescisao',
-                    'documentos',
-                    'relatorios-dp',
-                    'configuracoes-trabalhistas'
-                  ].includes(activeTab)
-                    ? 'text-[#2563EB] bg-blue-50/50 font-bold'
-                    : 'text-[#1E293B] hover:bg-[#F8FAFC]'
-                }`}
-              >
-                <div className="flex items-center gap-3">
-                  <Users className="w-4 h-4 text-[#2563EB]" />
-                  <span>👥 Colaboradores</span>
-                </div>
-                {dpOpen ? (
-                  <ChevronDown className="w-3.5 h-3.5 text-[#64748B]" />
+          {/* Navigation Groups */}
+          <nav className="space-y-4">
+            {navGroups.map((group, groupIdx) => (
+              <div key={group.id} className="space-y-1">
+                {(!isCollapsed || isOpenMobile) ? (
+                  <span className="px-3 text-[10px] font-extrabold text-slate-400 uppercase tracking-wider block pt-1 pb-1">
+                    {group.title}
+                  </span>
                 ) : (
-                  <ChevronRight className="w-3.5 h-3.5 text-[#64748B]" />
+                  groupIdx > 0 && <div className="border-t border-slate-100 my-2" />
                 )}
-              </button>
 
-              {dpOpen && (
-                <div className="pl-6 space-y-1 border-l-2 border-[#E5E7EB] ml-4 py-1">
-                  <button
-                    onClick={() => handleSelectTab('colaboradores')}
-                    className={`w-full flex items-center justify-between px-3 py-2 rounded-lg text-xs font-medium transition-all cursor-pointer ${
-                      activeTab === 'colaboradores'
-                        ? 'bg-[#2563EB] text-white font-bold shadow-2xs'
-                        : 'text-[#64748B] hover:bg-[#F8FAFC] hover:text-[#1E293B]'
-                    }`}
-                  >
-                    <span>Lista de Colaboradores</span>
-                  </button>
+                {group.items.map(item => {
+                  const Icon = item.icon;
+                  const active = isTabActive(item.id);
 
-                  <button
-                    onClick={() => handleSelectTab('ponto-digital')}
-                    className={`w-full flex items-center justify-between px-3 py-2 rounded-lg text-xs font-medium transition-all cursor-pointer ${
-                      activeTab === 'ponto-digital'
-                        ? 'bg-[#2563EB] text-white font-bold shadow-2xs'
-                        : 'text-[#64748B] hover:bg-[#F8FAFC] hover:text-[#1E293B]'
-                    }`}
-                  >
-                    <span>⏱ Ponto Digital</span>
-                  </button>
+                  return (
+                    <button
+                      key={item.id}
+                      onClick={() => handleSelectTab(item.id)}
+                      title={isCollapsed && !isOpenMobile ? item.label : undefined}
+                      className={`w-full rounded-xl text-xs font-semibold transition-all flex items-center cursor-pointer min-h-[38px] ${
+                        isCollapsed && !isOpenMobile
+                          ? 'justify-center p-2'
+                          : 'px-3 py-2 gap-3 text-left justify-between'
+                      } ${
+                        active
+                          ? 'bg-indigo-600 text-white shadow-xs font-extrabold'
+                          : 'text-slate-700 hover:bg-slate-100 hover:text-slate-900'
+                      }`}
+                    >
+                      <div className="flex items-center gap-3 min-w-0">
+                        <Icon className={`w-4 h-4 shrink-0 ${active ? 'text-white' : 'text-slate-500'}`} />
+                        {(!isCollapsed || isOpenMobile) && (
+                          <span className="truncate">{item.label}</span>
+                        )}
+                      </div>
 
-                  <button
-                    onClick={() => handleSelectTab('folha-pagamento')}
-                    className={`w-full flex items-center justify-between px-3 py-2 rounded-lg text-xs font-medium transition-all cursor-pointer ${
-                      activeTab === 'folha-pagamento'
-                        ? 'bg-[#2563EB] text-white font-bold shadow-2xs'
-                        : 'text-[#64748B] hover:bg-[#F8FAFC] hover:text-[#1E293B]'
-                    }`}
-                  >
-                    <span>💰 Departamento Pessoal</span>
-                  </button>
-
-                  <button
-                    onClick={() => handleSelectTab('beneficios')}
-                    className={`w-full flex items-center justify-between px-3 py-2 rounded-lg text-xs font-medium transition-all cursor-pointer ${
-                      activeTab === 'beneficios'
-                        ? 'bg-[#2563EB] text-white font-bold shadow-2xs'
-                        : 'text-[#64748B] hover:bg-[#F8FAFC] hover:text-[#1E293B]'
-                    }`}
-                  >
-                    <span>Benefícios</span>
-                  </button>
-
-                  <button
-                    onClick={() => handleSelectTab('ferias')}
-                    className={`w-full flex items-center justify-between px-3 py-2 rounded-lg text-xs font-medium transition-all cursor-pointer ${
-                      activeTab === 'ferias'
-                        ? 'bg-[#2563EB] text-white font-bold shadow-2xs'
-                        : 'text-[#64748B] hover:bg-[#F8FAFC] hover:text-[#1E293B]'
-                    }`}
-                  >
-                    <span>Férias</span>
-                  </button>
-
-                  <button
-                    onClick={() => handleSelectTab('rescisao')}
-                    className={`w-full flex items-center justify-between px-3 py-2 rounded-lg text-xs font-medium transition-all cursor-pointer ${
-                      activeTab === 'rescisao'
-                        ? 'bg-[#2563EB] text-white font-bold shadow-2xs'
-                        : 'text-[#64748B] hover:bg-[#F8FAFC] hover:text-[#1E293B]'
-                    }`}
-                  >
-                    <span>Rescisão</span>
-                  </button>
-
-                  <button
-                    onClick={() => handleSelectTab('documentos')}
-                    className={`w-full flex items-center justify-between px-3 py-2 rounded-lg text-xs font-medium transition-all cursor-pointer ${
-                      activeTab === 'documentos'
-                        ? 'bg-[#2563EB] text-white font-bold shadow-2xs'
-                        : 'text-[#64748B] hover:bg-[#F8FAFC] hover:text-[#1E293B]'
-                    }`}
-                  >
-                    <span>Documentos</span>
-                  </button>
-
-                  <button
-                    onClick={() => handleSelectTab('relatorios-dp')}
-                    className={`w-full flex items-center justify-between px-3 py-2 rounded-lg text-xs font-medium transition-all cursor-pointer ${
-                      activeTab === 'relatorios-dp'
-                        ? 'bg-[#2563EB] text-white font-bold shadow-2xs'
-                        : 'text-[#64748B] hover:bg-[#F8FAFC] hover:text-[#1E293B]'
-                    }`}
-                  >
-                    <span>Relatórios DP</span>
-                  </button>
-
-                  <button
-                    onClick={() => handleSelectTab('configuracoes-trabalhistas')}
-                    className={`w-full flex items-center justify-between px-3 py-2 rounded-lg text-xs font-medium transition-all cursor-pointer ${
-                      activeTab === 'configuracoes-trabalhistas'
-                        ? 'bg-[#2563EB] text-white font-bold shadow-2xs'
-                        : 'text-[#64748B] hover:bg-[#F8FAFC] hover:text-[#1E293B]'
-                    }`}
-                  >
-                    <span>Configurações Trabalhistas</span>
-                  </button>
-                </div>
-              )}
-            </div>
-
-            {/* 5. Relatórios */}
-            {hasRelatorios && (
-              <button
-                onClick={() => handleSelectTab('relatorios')}
-                className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-semibold transition-all cursor-pointer min-h-[44px] ${
-                  activeTab === 'relatorios'
-                    ? 'bg-[#2563EB] text-white shadow-xs font-bold'
-                    : 'text-[#1E293B] hover:bg-[#F8FAFC] hover:text-[#2563EB]'
-                }`}
-              >
-                <BarChart2 className="w-4 h-4 text-[#2563EB]" />
-                <span>📊 Relatórios</span>
-              </button>
-            )}
-
-            {/* 6. Configurações */}
-            <button
-              onClick={() => handleSelectTab('configuracoes')}
-              className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-semibold transition-all cursor-pointer min-h-[44px] ${
-                activeTab === 'configuracoes'
-                  ? 'bg-[#2563EB] text-white shadow-xs font-bold'
-                  : 'text-[#1E293B] hover:bg-[#F8FAFC] hover:text-[#2563EB]'
-              }`}
-            >
-              <Settings className="w-4 h-4 text-[#2563EB]" />
-              <span>Configurações</span>
-            </button>
+                      {(!isCollapsed || isOpenMobile) && item.badge !== undefined && (
+                        <span className={`px-1.5 py-0.2 text-[10px] rounded-full font-bold shrink-0 ${
+                          active ? 'bg-indigo-700 text-white' : 'bg-slate-100 text-slate-600'
+                        }`}>
+                          {item.badge}
+                        </span>
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
+            ))}
 
             {/* Portal de Vagas Público */}
-            <button
-              onClick={() => handleSelectTab('site-vagas')}
-              className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-semibold transition-all cursor-pointer mt-2 min-h-[44px] ${
-                activeTab === 'site-vagas'
-                  ? 'bg-[#2563EB] text-white shadow-xs font-bold'
-                  : 'text-[#64748B] hover:bg-[#F8FAFC] hover:text-[#1E293B]'
-              }`}
-            >
-              <Globe className="w-4 h-4 text-[#64748B]" />
-              <span>Portal de Vagas</span>
-            </button>
-
-            {/* Master Admin Panel */}
-            {isMaster && (
+            <div className="pt-2 border-t border-slate-100">
               <button
-                onClick={() => handleSelectTab('acesso-master')}
-                className={`w-full flex items-center justify-between px-3 py-2.5 rounded-xl text-xs font-extrabold transition-all cursor-pointer mt-3 min-h-[44px] ${
-                  activeTab === 'acesso-master'
-                    ? 'bg-[#1E293B] text-white shadow-sm'
-                    : 'bg-[#F8FAFC] text-[#1E293B] border border-[#E5E7EB] hover:bg-[#E5E7EB]/50'
+                onClick={() => handleSelectTab('site-vagas')}
+                title={isCollapsed && !isOpenMobile ? "Portal de Vagas" : undefined}
+                className={`w-full rounded-xl text-xs font-semibold transition-all flex items-center cursor-pointer min-h-[38px] ${
+                  isCollapsed && !isOpenMobile
+                    ? 'justify-center p-2'
+                    : 'px-3 py-2 gap-3 text-left'
+                } ${
+                  activeTab === 'site-vagas'
+                    ? 'bg-indigo-600 text-white shadow-xs font-extrabold'
+                    : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
                 }`}
               >
-                <div className="flex items-center gap-2">
-                  <Crown className="w-4 h-4 text-[#B8963E]" />
-                  <span>Painel Master</span>
-                </div>
-                <span className="text-[9px] uppercase tracking-wider font-extrabold px-1.5 py-0.5 rounded bg-[#B8963E] text-white">
-                  Admin
-                </span>
+                <Globe className={`w-4 h-4 shrink-0 ${activeTab === 'site-vagas' ? 'text-white' : 'text-slate-500'}`} />
+                {(!isCollapsed || isOpenMobile) && <span>Portal de Vagas</span>}
               </button>
-            )}
+            </div>
           </nav>
         </div>
 
         {/* Footer info */}
-        <div className="p-3 border-t border-[#E5E7EB] bg-[#F8FAFC] text-center">
-          <p className="text-[10px] text-[#64748B] font-medium">MAIS RH © 2026 — Plataforma Oficial</p>
-        </div>
+        {(!isCollapsed || isOpenMobile) && (
+          <div className="p-3 border-t border-slate-100 bg-slate-50/80 text-center">
+            <p className="text-[10px] text-slate-400 font-semibold">MAIS RH © 2026</p>
+          </div>
+        )}
       </aside>
     </>
   );
 };
-
-
