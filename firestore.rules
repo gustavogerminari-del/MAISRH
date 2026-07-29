@@ -2,158 +2,493 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    // Helper functions
+    // =========================================================================
+    // HELPER FUNCTIONS & AUTHENTICATION
+    // =========================================================================
+
     function isSignedIn() {
       return request.auth != null;
     }
 
-    // Default catch-all
-    match /{document=**} {
-      allow read, write: if true;
+    // Helper to load user profile document from /users or /usuarios
+    function getUserData() {
+      return exists(/databases/$(database)/documents/users/$(request.auth.uid))
+        ? get(/databases/$(database)/documents/users/$(request.auth.uid)).data
+        : (exists(/databases/$(database)/documents/usuarios/$(request.auth.uid))
+          ? get(/databases/$(database)/documents/usuarios/$(request.auth.uid)).data
+          : null);
     }
 
-    // Companies / Empresas
-    match /companies/{companyId} {
-      allow read, write: if true;
-    }
-    match /empresas/{empresaId} {
-      allow read, write: if true;
-    }
-
-    // Users / Usuarios
-    match /users/{userId} {
-      allow read, write: if true;
-    }
-    match /usuarios/{userId} {
-      allow read, write: if true;
+    function getUserRole() {
+      let data = getUserData();
+      return data != null 
+        ? (data.role != null ? data.role : (data.tipoUsuario != null ? data.tipoUsuario : (data.perfil != null ? data.perfil : null)))
+        : (request.auth.token.role != null ? request.auth.token.role : null);
     }
 
-    // Modules / Modulos
-    match /modules/{moduleId} {
-      allow read, write: if true;
-    }
-    match /modulos/{moduloId} {
-      allow read, write: if true;
+    function getUserCompanyId() {
+      let data = getUserData();
+      return data != null
+        ? (data.companyId != null ? data.companyId : (data.empresaId != null ? data.empresaId : (data.tenantId != null ? data.tenantId : null)))
+        : (request.auth.token.companyId != null ? request.auth.token.companyId : (request.auth.token.empresaId != null ? request.auth.token.empresaId : null));
     }
 
-    // Company Modules / Empresa Modulos
-    match /companyModules/{docId} {
-      allow read, write: if true;
+    function isMaster() {
+      let role = getUserRole();
+      return isSignedIn() && (
+        request.auth.token.isMaster == true ||
+        request.auth.token.role in ['MASTER', 'master', 'SUPER_ADMIN', 'super_admin', 'OWNER', 'owner'] ||
+        role in ['MASTER', 'master', 'SUPER_ADMIN', 'super_admin', 'OWNER', 'owner', 'Super Administrador']
+      );
     }
-    match /empresa_modulos/{docId} {
-      allow read, write: if true;
+
+    function isCompanyAdmin() {
+      let role = getUserRole();
+      return isSignedIn() && (
+        isMaster() ||
+        role in ['ADMIN', 'admin', 'ADMINISTRADOR', 'administrador', 'Administrador', 'Super Administrador', 'EMPRESA']
+      );
+    }
+
+    function isRh() {
+      let role = getUserRole();
+      return isSignedIn() && (
+        isCompanyAdmin() ||
+        role in ['RH', 'rh', 'Gestor de RH', 'RECRUTADOR', 'recrutador', 'Recrutador']
+      );
+    }
+
+    function isManager() {
+      let role = getUserRole();
+      return isSignedIn() && (
+        isRh() ||
+        role in ['GESTOR', 'gestor', 'Gestor', 'Líder', 'Coordenador']
+      );
+    }
+
+    function belongsToCurrentCompany(data) {
+      let userComp = getUserCompanyId();
+      return isSignedIn() && (
+        isMaster() ||
+        (userComp != null && (data.companyId == userComp || data.empresaId == userComp || data.tenantId == userComp))
+      );
+    }
+
+    function notChangingCompanyId() {
+      return resource == null || (
+        (resource.data.companyId == null || request.resource.data.companyId == resource.data.companyId) &&
+        (resource.data.empresaId == null || request.resource.data.empresaId == resource.data.empresaId)
+      );
+    }
+
+    function notChangingCriticalUserFields() {
+      return !request.resource.data.diff(resource.data).affectedKeys()
+        .hasAny(['role', 'perfil', 'permissions', 'permissoes', 'companyId', 'empresaId', 'tenantId', 'admin', 'isMaster', 'master', 'planId', 'subscriptionId', 'tipoUsuario']);
+    }
+
+    function isOwnerOfEmployeeRecord(resourceData) {
+      return isSignedIn() && (
+        resourceData.userId == request.auth.uid ||
+        resourceData.usuarioId == request.auth.uid ||
+        resourceData.employeeId == request.auth.uid ||
+        resourceData.colaboradorId == request.auth.uid ||
+        resourceData.uid == request.auth.uid
+      );
+    }
+
+    // =========================================================================
+    // PUBLIC COLLECTIONS (PLANS & PUBLIC JOBS)
+    // =========================================================================
+
+    // Plans
+    match /plans/{planId} {
+      allow read: if true;
+      allow write: if isMaster();
     }
 
     // Jobs / Vagas
     match /jobs/{jobId} {
-      allow read, write: if true;
+      allow read: if (
+        resource.data.status in ['published', 'publicada', 'active', 'ativa'] ||
+        resource.data.published == true ||
+        resource.data.publicada == true ||
+        resource.data.ativo == true
+      ) || (
+        isSignedIn() && belongsToCurrentCompany(resource.data)
+      );
+      allow create: if isSignedIn() && isRh() && belongsToCurrentCompany(request.resource.data);
+      allow update: if isSignedIn() && isRh() && belongsToCurrentCompany(resource.data) && notChangingCompanyId();
+      allow delete: if isSignedIn() && isCompanyAdmin() && belongsToCurrentCompany(resource.data);
     }
+
     match /vagas/{vagaId} {
-      allow read, write: if true;
+      allow read: if (
+        resource.data.status in ['published', 'publicada', 'active', 'ativa'] ||
+        resource.data.published == true ||
+        resource.data.publicada == true ||
+        resource.data.ativo == true
+      ) || (
+        isSignedIn() && belongsToCurrentCompany(resource.data)
+      );
+      allow create: if isSignedIn() && isRh() && belongsToCurrentCompany(request.resource.data);
+      allow update: if isSignedIn() && isRh() && belongsToCurrentCompany(resource.data) && notChangingCompanyId();
+      allow delete: if isSignedIn() && isCompanyAdmin() && belongsToCurrentCompany(resource.data);
     }
 
-    // Subscriptions & Plans
+    // Candidaturas Públicas / Applications
+    match /applications/{applicationId} {
+      // Unauthenticated candidate can apply, but only with valid initial status & mandatory fields
+      allow create: if (
+        (request.resource.data.jobId != null || request.resource.data.vagaId != null) &&
+        (request.resource.data.companyId != null || request.resource.data.empresaId != null) &&
+        (request.resource.data.nome != null || request.resource.data.name != null) &&
+        request.resource.data.email != null &&
+        (request.resource.data.status in ['received', 'recebida', 'pendente', 'novo', 'Nova']) &&
+        !request.resource.data.keys().hasAny(['score', 'notaIA', 'parecerRH', 'salario', 'statusContratacao', 'responsavel', 'aprovadoPor', 'dadosInternos', 'anotacoesInternas'])
+      ) || (
+        isSignedIn() && isRh() && belongsToCurrentCompany(request.resource.data)
+      );
+
+      allow read: if isSignedIn() && isRh() && belongsToCurrentCompany(resource.data);
+      allow update: if isSignedIn() && isRh() && belongsToCurrentCompany(resource.data) && notChangingCompanyId();
+      allow delete: if isSignedIn() && isCompanyAdmin() && belongsToCurrentCompany(resource.data);
+    }
+
+    match /candidaturas/{candidaturaId} {
+      allow create: if (
+        (request.resource.data.jobId != null || request.resource.data.vagaId != null) &&
+        (request.resource.data.companyId != null || request.resource.data.empresaId != null) &&
+        (request.resource.data.nome != null || request.resource.data.name != null) &&
+        request.resource.data.email != null &&
+        (request.resource.data.status in ['received', 'recebida', 'pendente', 'novo', 'Nova']) &&
+        !request.resource.data.keys().hasAny(['score', 'notaIA', 'parecerRH', 'salario', 'statusContratacao', 'responsavel', 'aprovadoPor', 'dadosInternos', 'anotacoesInternas'])
+      ) || (
+        isSignedIn() && isRh() && belongsToCurrentCompany(request.resource.data)
+      );
+
+      allow read: if isSignedIn() && isRh() && belongsToCurrentCompany(resource.data);
+      allow update: if isSignedIn() && isRh() && belongsToCurrentCompany(resource.data) && notChangingCompanyId();
+      allow delete: if isSignedIn() && isCompanyAdmin() && belongsToCurrentCompany(resource.data);
+    }
+
+    // =========================================================================
+    // CORE TENANT & USER MANAGEMENT
+    // =========================================================================
+
+    // Companies / Empresas
+    match /companies/{companyId} {
+      allow read: if isSignedIn() && (isMaster() || getUserCompanyId() == companyId);
+      allow create, update: if isSignedIn() && (isMaster() || (isCompanyAdmin() && getUserCompanyId() == companyId));
+      allow delete: if isMaster();
+    }
+
+    match /empresas/{empresaId} {
+      allow read: if isSignedIn() && (isMaster() || getUserCompanyId() == empresaId);
+      allow create, update: if isSignedIn() && (isMaster() || (isCompanyAdmin() && getUserCompanyId() == empresaId));
+      allow delete: if isMaster();
+    }
+
+    // Users / Usuarios
+    match /users/{userId} {
+      allow read: if isSignedIn() && (
+        isMaster() ||
+        request.auth.uid == userId ||
+        (getUserCompanyId() != null && (resource.data.companyId == getUserCompanyId() || resource.data.empresaId == getUserCompanyId()))
+      );
+      allow create: if isSignedIn() && (
+        isMaster() ||
+        (isCompanyAdmin() && (request.resource.data.companyId == getUserCompanyId() || request.resource.data.empresaId == getUserCompanyId())) ||
+        request.auth.uid == userId
+      );
+      allow update: if isSignedIn() && (
+        isMaster() ||
+        (isCompanyAdmin() && (resource.data.companyId == getUserCompanyId() || resource.data.empresaId == getUserCompanyId()) && notChangingCompanyId()) ||
+        (request.auth.uid == userId && notChangingCriticalUserFields() && notChangingCompanyId())
+      );
+      allow delete: if isSignedIn() && (isMaster() || (isCompanyAdmin() && (resource.data.companyId == getUserCompanyId() || resource.data.empresaId == getUserCompanyId())));
+    }
+
+    match /usuarios/{userId} {
+      allow read: if isSignedIn() && (
+        isMaster() ||
+        request.auth.uid == userId ||
+        (getUserCompanyId() != null && (resource.data.companyId == getUserCompanyId() || resource.data.empresaId == getUserCompanyId()))
+      );
+      allow create: if isSignedIn() && (
+        isMaster() ||
+        (isCompanyAdmin() && (request.resource.data.companyId == getUserCompanyId() || request.resource.data.empresaId == getUserCompanyId())) ||
+        request.auth.uid == userId
+      );
+      allow update: if isSignedIn() && (
+        isMaster() ||
+        (isCompanyAdmin() && (resource.data.companyId == getUserCompanyId() || resource.data.empresaId == getUserCompanyId()) && notChangingCompanyId()) ||
+        (request.auth.uid == userId && notChangingCriticalUserFields() && notChangingCompanyId())
+      );
+      allow delete: if isSignedIn() && (isMaster() || (isCompanyAdmin() && (resource.data.companyId == getUserCompanyId() || resource.data.empresaId == getUserCompanyId())));
+    }
+
+    // Modules & Subscriptions
+    match /modules/{moduleId} {
+      allow read: if isSignedIn();
+      allow write: if isMaster();
+    }
+    match /modulos/{moduloId} {
+      allow read: if isSignedIn();
+      allow write: if isMaster();
+    }
+
+    match /companyModules/{docId} {
+      allow read: if isSignedIn() && belongsToCurrentCompany(resource.data);
+      allow write: if isMaster() || (isSignedIn() && isCompanyAdmin() && belongsToCurrentCompany(request.resource.data));
+    }
+    match /empresa_modulos/{docId} {
+      allow read: if isSignedIn() && belongsToCurrentCompany(resource.data);
+      allow write: if isMaster() || (isSignedIn() && isCompanyAdmin() && belongsToCurrentCompany(request.resource.data));
+    }
+
     match /subscriptions/{subId} {
-      allow read, write: if true;
-    }
-    match /plans/{planId} {
-      allow read, write: if true;
+      allow read: if isSignedIn() && belongsToCurrentCompany(resource.data);
+      allow write: if isMaster();
     }
 
-    // Departamento Pessoal Collections
+    // =========================================================================
+    // CANDIDATES & RECRUITMENT COLLECTIONS
+    // =========================================================================
+
+    match /candidates/{candidateId} {
+      allow read, update: if isSignedIn() && isRh() && belongsToCurrentCompany(resource.data) && notChangingCompanyId();
+      allow create: if isSignedIn() && isRh() && belongsToCurrentCompany(request.resource.data);
+      allow delete: if isSignedIn() && isCompanyAdmin() && belongsToCurrentCompany(resource.data);
+    }
+    match /candidatos/{candidatoId} {
+      allow read, update: if isSignedIn() && isRh() && belongsToCurrentCompany(resource.data) && notChangingCompanyId();
+      allow create: if isSignedIn() && isRh() && belongsToCurrentCompany(request.resource.data);
+      allow delete: if isSignedIn() && isCompanyAdmin() && belongsToCurrentCompany(resource.data);
+    }
+
+    match /interviews/{interviewId} {
+      allow read, update: if isSignedIn() && isRh() && belongsToCurrentCompany(resource.data) && notChangingCompanyId();
+      allow create: if isSignedIn() && isRh() && belongsToCurrentCompany(request.resource.data);
+      allow delete: if isSignedIn() && isRh() && belongsToCurrentCompany(resource.data);
+    }
+    match /entrevistas/{entrevistaId} {
+      allow read, update: if isSignedIn() && isRh() && belongsToCurrentCompany(resource.data) && notChangingCompanyId();
+      allow create: if isSignedIn() && isRh() && belongsToCurrentCompany(request.resource.data);
+      allow delete: if isSignedIn() && isRh() && belongsToCurrentCompany(resource.data);
+    }
+
+    match /talent_bank/{docId} {
+      allow read, update: if isSignedIn() && isRh() && belongsToCurrentCompany(resource.data) && notChangingCompanyId();
+      allow create: if isSignedIn() && isRh() && belongsToCurrentCompany(request.resource.data);
+      allow delete: if isSignedIn() && isCompanyAdmin() && belongsToCurrentCompany(resource.data);
+    }
+    match /banco_talentos/{docId} {
+      allow read, update: if isSignedIn() && isRh() && belongsToCurrentCompany(resource.data) && notChangingCompanyId();
+      allow create: if isSignedIn() && isRh() && belongsToCurrentCompany(request.resource.data);
+      allow delete: if isSignedIn() && isCompanyAdmin() && belongsToCurrentCompany(resource.data);
+    }
+
+    // =========================================================================
+    // DEPARTAMENTO PESSOAL & PORTAL DO FUNCIONÁRIO
+    // =========================================================================
+
     match /colaboradores/{id} {
-      allow read, write: if true;
+      allow read: if isSignedIn() && (belongsToCurrentCompany(resource.data) && (isManager() || isOwnerOfEmployeeRecord(resource.data)));
+      allow create: if isSignedIn() && isRh() && belongsToCurrentCompany(request.resource.data);
+      allow update: if isSignedIn() && (
+        (isRh() && belongsToCurrentCompany(resource.data) && notChangingCompanyId()) ||
+        (isOwnerOfEmployeeRecord(resource.data) && notChangingCriticalUserFields() && notChangingCompanyId())
+      );
+      allow delete: if isSignedIn() && isCompanyAdmin() && belongsToCurrentCompany(resource.data);
     }
+
     match /contratos_trabalho/{id} {
-      allow read, write: if true;
+      allow read: if isSignedIn() && belongsToCurrentCompany(resource.data) && (isRh() || isOwnerOfEmployeeRecord(resource.data));
+      allow create: if isSignedIn() && isRh() && belongsToCurrentCompany(request.resource.data);
+      allow update: if isSignedIn() && isRh() && belongsToCurrentCompany(resource.data) && notChangingCompanyId();
+      allow delete: if isSignedIn() && isCompanyAdmin() && belongsToCurrentCompany(resource.data);
     }
+
     match /jornadas/{id} {
-      allow read, write: if true;
+      allow read: if isSignedIn() && belongsToCurrentCompany(resource.data);
+      allow write: if isSignedIn() && isRh() && belongsToCurrentCompany(request.resource.data);
     }
+
     match /escalas/{id} {
-      allow read, write: if true;
+      allow read: if isSignedIn() && belongsToCurrentCompany(resource.data);
+      allow write: if isSignedIn() && isRh() && belongsToCurrentCompany(request.resource.data);
     }
+
+    // Ponto Eletrônico & Ajustes
     match /marcacoes_ponto/{id} {
-      allow read, write: if true;
+      allow read: if isSignedIn() && belongsToCurrentCompany(resource.data) && (isManager() || isOwnerOfEmployeeRecord(resource.data));
+      allow create: if isSignedIn() && (
+        (isOwnerOfEmployeeRecord(request.resource.data) && belongsToCurrentCompany(request.resource.data)) ||
+        (isRh() && belongsToCurrentCompany(request.resource.data))
+      );
+      allow update, delete: if isSignedIn() && isRh() && belongsToCurrentCompany(resource.data) && notChangingCompanyId();
     }
+
     match /ajustes_ponto/{id} {
-      allow read, write: if true;
+      allow read: if isSignedIn() && belongsToCurrentCompany(resource.data) && (isManager() || isOwnerOfEmployeeRecord(resource.data));
+      allow create: if isSignedIn() && (
+        (isOwnerOfEmployeeRecord(request.resource.data) && belongsToCurrentCompany(request.resource.data)) ||
+        (isRh() && belongsToCurrentCompany(request.resource.data))
+      );
+      allow update, delete: if isSignedIn() && isRh() && belongsToCurrentCompany(resource.data) && notChangingCompanyId();
     }
+
     match /banco_horas/{id} {
-      allow read, write: if true;
+      allow read: if isSignedIn() && belongsToCurrentCompany(resource.data) && (isManager() || isOwnerOfEmployeeRecord(resource.data));
+      allow write: if isSignedIn() && isRh() && belongsToCurrentCompany(request.resource.data);
     }
+
+    // Férias, Afastamentos, Benefícios
     match /beneficios_colaboradores/{id} {
-      allow read, write: if true;
-    }
-    match /ferias/{id} {
-      allow read, write: if true;
-    }
-    match /afastamentos/{id} {
-      allow read, write: if true;
-    }
-    match /documentos_colaboradores/{id} {
-      allow read, write: if true;
-    }
-    match /folhas_pagamento/{id} {
-      allow read, write: if true;
-    }
-    match /eventos_folha/{id} {
-      allow read, write: if true;
-    }
-    match /rescisoes/{id} {
-      allow read, write: if true;
-    }
-    match /historico_colaborador/{id} {
-      allow read, write: if true;
-    }
-    match /solicitacoes_admissao/{id} {
-      allow read, write: if true;
+      allow read: if isSignedIn() && belongsToCurrentCompany(resource.data) && (isRh() || isOwnerOfEmployeeRecord(resource.data));
+      allow write: if isSignedIn() && isRh() && belongsToCurrentCompany(request.resource.data);
     }
     match /employee_benefits/{id} {
-      allow read, write: if true;
+      allow read: if isSignedIn() && belongsToCurrentCompany(resource.data) && (isRh() || isOwnerOfEmployeeRecord(resource.data));
+      allow write: if isSignedIn() && isRh() && belongsToCurrentCompany(request.resource.data);
     }
     match /historico_beneficios/{id} {
-      allow read, write: if true;
+      allow read: if isSignedIn() && belongsToCurrentCompany(resource.data) && (isRh() || isOwnerOfEmployeeRecord(resource.data));
+      allow write: if isSignedIn() && isRh() && belongsToCurrentCompany(request.resource.data);
     }
-    match /anotacoes_internas_colaborador/{id} {
-      allow read, write: if true;
+
+    match /ferias/{id} {
+      allow read: if isSignedIn() && belongsToCurrentCompany(resource.data) && (isManager() || isOwnerOfEmployeeRecord(resource.data));
+      allow create: if isSignedIn() && (
+        (isOwnerOfEmployeeRecord(request.resource.data) && belongsToCurrentCompany(request.resource.data)) ||
+        (isRh() && belongsToCurrentCompany(request.resource.data))
+      );
+      allow update, delete: if isSignedIn() && isRh() && belongsToCurrentCompany(resource.data) && notChangingCompanyId();
     }
+
     match /periodos_aquisitivos/{id} {
-      allow read, write: if true;
+      allow read: if isSignedIn() && belongsToCurrentCompany(resource.data) && (isRh() || isOwnerOfEmployeeRecord(resource.data));
+      allow write: if isSignedIn() && isRh() && belongsToCurrentCompany(request.resource.data);
     }
     match /regras_ferias/{id} {
-      allow read, write: if true;
+      allow read: if isSignedIn() && belongsToCurrentCompany(resource.data);
+      allow write: if isSignedIn() && isRh() && belongsToCurrentCompany(request.resource.data);
     }
-    match /cat_registros/{id} {
-      allow read, write: if true;
+
+    match /afastamentos/{id} {
+      allow read: if isSignedIn() && belongsToCurrentCompany(resource.data) && (isManager() || isOwnerOfEmployeeRecord(resource.data));
+      allow write: if isSignedIn() && isRh() && belongsToCurrentCompany(request.resource.data);
     }
-    match /inss_processos/{id} {
-      allow read, write: if true;
+
+    match /solicitacoes_admissao/{id} {
+      allow read, write: if isSignedIn() && isRh() && belongsToCurrentCompany(request.resource.data);
     }
-    match /retorno_trabalho/{id} {
-      allow read, write: if true;
-    }
+
     match /alertas_dp/{id} {
-      allow read, write: if true;
+      allow read: if isSignedIn() && belongsToCurrentCompany(resource.data) && isRh();
+      allow write: if isSignedIn() && isRh() && belongsToCurrentCompany(request.resource.data);
     }
-    match /audit_logs/{id} {
-      allow read, write: if true;
+
+    match /notifications/{id} {
+      allow read: if isSignedIn() && (resource.data.userId == request.auth.uid || isRh());
+      allow create: if isSignedIn();
+      allow update, delete: if isSignedIn() && (resource.data.userId == request.auth.uid || isRh());
     }
-    match /documents/{id} {
-      allow read, write: if true;
+    match /notificacoes/{id} {
+      allow read: if isSignedIn() && (resource.data.userId == request.auth.uid || isRh());
+      allow create: if isSignedIn();
+      allow update, delete: if isSignedIn() && (resource.data.userId == request.auth.uid || isRh());
     }
-    match /document_templates/{id} {
-      allow read, write: if true;
+
+    // =========================================================================
+    // EXTREMELY SENSITIVE COLLECTIONS (PAYROLL, SST, PRIVATE NOTES)
+    // =========================================================================
+
+    match /folhas_pagamento/{id} {
+      allow read: if isSignedIn() && belongsToCurrentCompany(resource.data) && (
+        isRh() || (isOwnerOfEmployeeRecord(resource.data) && resource.data.tipo == 'demonstrativo')
+      );
+      allow write: if isSignedIn() && isCompanyAdmin() && belongsToCurrentCompany(request.resource.data);
     }
-    match /document_categories/{id} {
-      allow read, write: if true;
+
+    match /eventos_folha/{id} {
+      allow read: if isSignedIn() && belongsToCurrentCompany(resource.data) && isRh();
+      allow write: if isSignedIn() && isCompanyAdmin() && belongsToCurrentCompany(request.resource.data);
+    }
+
+    match /rescisoes/{id} {
+      allow read: if isSignedIn() && belongsToCurrentCompany(resource.data) && isRh();
+      allow write: if isSignedIn() && isCompanyAdmin() && belongsToCurrentCompany(request.resource.data);
     }
     match /terminations/{id} {
-      allow read, write: if true;
+      allow read: if isSignedIn() && belongsToCurrentCompany(resource.data) && isRh();
+      allow write: if isSignedIn() && isCompanyAdmin() && belongsToCurrentCompany(request.resource.data);
     }
     match /termination_event_rules/{id} {
-      allow read, write: if true;
+      allow read: if isSignedIn() && belongsToCurrentCompany(resource.data) && isRh();
+      allow write: if isSignedIn() && isCompanyAdmin() && belongsToCurrentCompany(request.resource.data);
+    }
+
+    match /anotacoes_internas_colaborador/{id} {
+      allow read: if isSignedIn() && belongsToCurrentCompany(resource.data) && isRh();
+      allow write: if isSignedIn() && isRh() && belongsToCurrentCompany(request.resource.data);
+    }
+
+    match /historico_colaborador/{id} {
+      allow read: if isSignedIn() && belongsToCurrentCompany(resource.data) && isRh();
+      allow write: if isSignedIn() && isRh() && belongsToCurrentCompany(request.resource.data);
+    }
+
+    match /cat_registros/{id} {
+      allow read: if isSignedIn() && belongsToCurrentCompany(resource.data) && isRh();
+      allow write: if isSignedIn() && isRh() && belongsToCurrentCompany(request.resource.data);
+    }
+    match /inss_processos/{id} {
+      allow read: if isSignedIn() && belongsToCurrentCompany(resource.data) && isRh();
+      allow write: if isSignedIn() && isRh() && belongsToCurrentCompany(request.resource.data);
+    }
+    match /retorno_trabalho/{id} {
+      allow read: if isSignedIn() && belongsToCurrentCompany(resource.data) && isRh();
+      allow write: if isSignedIn() && isRh() && belongsToCurrentCompany(request.resource.data);
+    }
+
+    // Document Management
+    match /documentos_colaboradores/{id} {
+      allow read: if isSignedIn() && belongsToCurrentCompany(resource.data) && (isRh() || isOwnerOfEmployeeRecord(resource.data));
+      allow write: if isSignedIn() && isRh() && belongsToCurrentCompany(request.resource.data);
+    }
+
+    match /documents/{id} {
+      allow read: if isSignedIn() && belongsToCurrentCompany(resource.data) && (isRh() || isOwnerOfEmployeeRecord(resource.data));
+      allow write: if isSignedIn() && isRh() && belongsToCurrentCompany(request.resource.data);
+    }
+
+    match /document_templates/{id} {
+      allow read: if isSignedIn() && belongsToCurrentCompany(resource.data);
+      allow write: if isSignedIn() && isRh() && belongsToCurrentCompany(request.resource.data);
+    }
+
+    match /document_categories/{id} {
+      allow read: if isSignedIn() && belongsToCurrentCompany(resource.data);
+      allow write: if isSignedIn() && isRh() && belongsToCurrentCompany(request.resource.data);
+    }
+
+    // =========================================================================
+    // AUDIT LOGS (READ ONLY BY ADMIN, WRITE BLOCKED FOR FRONTEND)
+    // =========================================================================
+
+    match /audit_logs/{id} {
+      allow read: if isSignedIn() && isCompanyAdmin() && belongsToCurrentCompany(resource.data);
+      allow create: if isSignedIn() && isRh();
+      allow update, delete: if false; // Audit logs are immutable
+    }
+
+    // =========================================================================
+    // STRICT DEFAULT CATCH-ALL (DENY ALL UNMATCHED)
+    // =========================================================================
+
+    match /{document=**} {
+      allow read, write: if false;
     }
   }
 }
-

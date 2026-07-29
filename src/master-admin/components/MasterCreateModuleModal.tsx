@@ -16,9 +16,25 @@ import {
   BarChart3, 
   FileText,
   Briefcase,
-  HelpCircle
+  Crown,
+  Search,
+  Globe,
+  Building2,
+  UserPlus,
+  Gift,
+  Calculator,
+  Calendar,
+  UserX,
+  ShieldAlert,
+  UserCheck,
+  Target,
+  CreditCard,
+  Settings,
+  LayoutDashboard,
+  Link as LinkIcon,
+  CalendarDays
 } from 'lucide-react';
-import { PlatformModule } from '../types/master';
+import { PlatformModule, ModuleCategory, ModuleStatus } from '../types/master';
 
 interface MasterCreateModuleModalProps {
   isOpen: boolean;
@@ -27,8 +43,17 @@ interface MasterCreateModuleModalProps {
   initialModule?: PlatformModule | null;
 }
 
-const CATEGORY_OPTIONS: PlatformModule['category'][] = [
+const CATEGORY_OPTIONS: ModuleCategory[] = [
   'Recrutamento',
+  'Headhunter',
+  'Departamento Pessoal',
+  'Financeiro',
+  'Portal',
+  'IA',
+  'Relatórios',
+  'Ferramentas',
+  'Integrações',
+  'Segurança',
   'DP',
   'Ponto',
   'Folha',
@@ -36,25 +61,43 @@ const CATEGORY_OPTIONS: PlatformModule['category'][] = [
   'Gestão'
 ];
 
-const STATUS_OPTIONS: PlatformModule['status'][] = [
+const STATUS_OPTIONS: ModuleStatus[] = [
   'Ativo',
   'Beta',
   'Em Desenvolvimento',
+  'Desativado',
   'Inativo'
 ];
 
+const MODULE_TYPES = ['Core', 'Opcional', 'Beta', 'Integração', 'Addon'] as const;
+
+const PLAN_OPTIONS = ['Básico', 'Intermediário', 'Completo / Enterprise', 'Todos'] as const;
+
 const ICON_PRESETS = [
-  { name: 'Bot', icon: Bot, label: 'IA / Bot' },
-  { name: 'Sparkles', icon: Sparkles, label: 'Inteligência' },
-  { name: 'Sliders', icon: Sliders, label: 'Configurações' },
-  { name: 'Clock', icon: Clock, label: 'Ponto / Tempo' },
-  { name: 'Users', icon: Users, label: 'Pessoas / Equipes' },
-  { name: 'ShieldCheck', icon: ShieldCheck, label: 'Segurança' },
-  { name: 'Award', icon: Award, label: 'Desempenho' },
-  { name: 'Zap', icon: Zap, label: 'Automação' },
-  { name: 'BarChart3', icon: BarChart3, label: 'Analytics' },
+  { name: 'Briefcase', icon: Briefcase, label: 'Vagas (R&S)' },
+  { name: 'Crown', icon: Crown, label: 'Headhunter' },
+  { name: 'Search', icon: Search, label: 'Talentos' },
+  { name: 'Sparkles', icon: Sparkles, label: 'IA Gemini' },
+  { name: 'Globe', icon: Globe, label: 'Portal Vagas' },
+  { name: 'Building2', icon: Building2, label: 'DP Geral' },
+  { name: 'Users', icon: Users, label: 'Colaboradores' },
+  { name: 'UserPlus', icon: UserPlus, label: 'Admissão' },
+  { name: 'Gift', icon: Gift, label: 'Benefícios' },
+  { name: 'Clock', icon: Clock, label: 'Ponto' },
+  { name: 'Calculator', icon: Calculator, label: 'Folha' },
+  { name: 'Calendar', icon: Calendar, label: 'Férias' },
+  { name: 'UserX', icon: UserX, label: 'Rescisão' },
   { name: 'FileText', icon: FileText, label: 'Documentos' },
-  { name: 'Briefcase', icon: Briefcase, label: 'Vagas' },
+  { name: 'ShieldCheck', icon: ShieldCheck, label: 'SST' },
+  { name: 'UserCheck', icon: UserCheck, label: 'Portal Func.' },
+  { name: 'Target', icon: Target, label: 'Desempenho' },
+  { name: 'CreditCard', icon: CreditCard, label: 'Financeiro' },
+  { name: 'BarChart3', icon: BarChart3, label: 'Analytics' },
+  { name: 'Settings', icon: Settings, label: 'Configurações' },
+  { name: 'LayoutDashboard', icon: LayoutDashboard, label: 'Dashboard' },
+  { name: 'LinkIcon', icon: LinkIcon, label: 'Integrações' },
+  { name: 'CalendarDays', icon: CalendarDays, label: 'Agenda' },
+  { name: 'ShieldAlert', icon: ShieldAlert, label: 'Auditoria' },
 ];
 
 export const MasterCreateModuleModal: React.FC<MasterCreateModuleModalProps> = ({
@@ -65,11 +108,17 @@ export const MasterCreateModuleModal: React.FC<MasterCreateModuleModalProps> = (
 }) => {
   const [name, setName] = useState('');
   const [key, setKey] = useState('');
-  const [category, setCategory] = useState<PlatformModule['category']>('Recrutamento');
+  const [slug, setSlug] = useState('');
+  const [category, setCategory] = useState<ModuleCategory>('Recrutamento');
   const [description, setDescription] = useState('');
-  const [status, setStatus] = useState<PlatformModule['status']>('Ativo');
+  const [status, setStatus] = useState<ModuleStatus>('Ativo');
+  const [version, setVersion] = useState('v1.0.0');
+  const [moduleType, setModuleType] = useState<PlatformModule['moduleType']>('Opcional');
   const [isCore, setIsCore] = useState(false);
-  const [iconName, setIconName] = useState('Bot');
+  const [isBeta, setIsBeta] = useState(false);
+  const [iconName, setIconName] = useState('Briefcase');
+  const [route, setRoute] = useState('vagas');
+  const [requiredPlan, setRequiredPlan] = useState('Básico');
   const [activeTenantsCount, setActiveTenantsCount] = useState(1);
   const [error, setError] = useState('');
 
@@ -77,20 +126,32 @@ export const MasterCreateModuleModal: React.FC<MasterCreateModuleModalProps> = (
     if (initialModule) {
       setName(initialModule.name);
       setKey(initialModule.key);
+      setSlug(initialModule.slug || initialModule.key);
       setCategory(initialModule.category);
       setDescription(initialModule.description);
       setStatus(initialModule.status);
+      setVersion(initialModule.version || 'v1.0.0');
+      setModuleType(initialModule.moduleType || (initialModule.isCore ? 'Core' : 'Opcional'));
       setIsCore(initialModule.isCore);
-      setIconName(initialModule.iconName || 'Bot');
+      setIsBeta(initialModule.isBeta || initialModule.status === 'Beta');
+      setIconName(initialModule.iconName || 'Briefcase');
+      setRoute(initialModule.route || 'vagas');
+      setRequiredPlan(initialModule.requiredPlan || 'Básico');
       setActiveTenantsCount(initialModule.activeTenantsCount || 1);
     } else {
       setName('');
       setKey('');
+      setSlug('');
       setCategory('Recrutamento');
       setDescription('');
       setStatus('Ativo');
+      setVersion('v1.0.0');
+      setModuleType('Opcional');
       setIsCore(false);
-      setIconName('Bot');
+      setIsBeta(false);
+      setIconName('Briefcase');
+      setRoute('vagas');
+      setRequiredPlan('Básico');
       setActiveTenantsCount(1);
     }
     setError('');
@@ -98,7 +159,6 @@ export const MasterCreateModuleModal: React.FC<MasterCreateModuleModalProps> = (
 
   if (!isOpen) return null;
 
-  // Auto generate key from name if creating new
   const handleNameChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const val = e.target.value;
     setName(val);
@@ -106,12 +166,12 @@ export const MasterCreateModuleModal: React.FC<MasterCreateModuleModalProps> = (
       const generatedKey = val
         .normalize('NFD')
         .replace(/[\u0300-\u036f]/g, '')
-        .replace(/[^a-zA-Z0-9]/g, ' ')
-        .trim()
-        .split(' ')
-        .map((word, idx) => idx === 0 ? word.toLowerCase() : word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
-        .join('');
-      setKey(generatedKey || 'novoModulo');
+        .replace(/[^a-zA-Z0-9]/g, '-')
+        .toLowerCase()
+        .replace(/-+/g, '-')
+        .replace(/^-|-$/g, '');
+      setKey(generatedKey || 'novo-modulo');
+      setSlug(generatedKey || 'novo-modulo');
     }
   };
 
@@ -128,14 +188,30 @@ export const MasterCreateModuleModal: React.FC<MasterCreateModuleModalProps> = (
 
     const savedModule: PlatformModule = {
       id: initialModule?.id || `mod-${Date.now()}`,
-      key: key.trim(),
+      key: key.trim().toLowerCase(),
+      slug: (slug.trim() || key.trim()).toLowerCase(),
       name: name.trim(),
       category,
-      description: description.trim() || 'Módulo funcional adicionado à plataforma MAIS RH.',
+      description: description.trim() || 'Módulo funcional ativo na plataforma MAIS RH.',
       status,
-      isCore,
+      version: version.trim() || 'v1.0.0',
+      moduleType,
+      isCore: isCore || moduleType === 'Core',
+      isBeta: isBeta || status === 'Beta',
+      isVisible: true,
+      isInstalled: true,
+      allowActivation: !isCore,
+      allowDeactivation: !isCore,
+      requiredModules: initialModule?.requiredModules || [],
+      requiredPlan,
+      totalCompaniesUsing: Number(activeTenantsCount) || 1,
       activeTenantsCount: Number(activeTenantsCount) || 1,
-      iconName
+      displayOrder: initialModule?.displayOrder || 99,
+      iconName,
+      route: route.trim() || 'vagas',
+      createdAt: initialModule?.createdAt || new Date().toISOString().split('T')[0],
+      updatedAt: new Date().toISOString().replace('T', ' ').substring(0, 16),
+      createdBy: initialModule?.createdBy || 'Master Admin'
     };
 
     onSave(savedModule);
@@ -154,10 +230,10 @@ export const MasterCreateModuleModal: React.FC<MasterCreateModuleModalProps> = (
             </div>
             <div>
               <span className="text-[10px] font-black text-amber-400 uppercase tracking-widest bg-amber-500/10 px-2 py-0.5 rounded-full border border-amber-500/20">
-                Gerenciador da Plataforma
+                Assistente de Módulos MAIS RH
               </span>
               <h3 className="text-lg font-black text-white mt-0.5">
-                {initialModule ? 'Editar Módulo' : 'Criar Novo Módulo Funcional'}
+                {initialModule ? `Editar Módulo: ${initialModule.name}` : 'Criar Novo Módulo Funcional'}
               </h3>
             </div>
           </div>
@@ -171,7 +247,7 @@ export const MasterCreateModuleModal: React.FC<MasterCreateModuleModalProps> = (
         </div>
 
         {/* Form Body */}
-        <form onSubmit={handleSubmit} className="p-6 space-y-5 max-h-[75vh] overflow-y-auto text-xs">
+        <form onSubmit={handleSubmit} className="p-6 space-y-4 max-h-[75vh] overflow-y-auto text-xs">
           {error && (
             <div className="p-3 bg-rose-500/10 border border-rose-500/30 text-rose-300 rounded-xl font-bold">
               {error}
@@ -188,7 +264,7 @@ export const MasterCreateModuleModal: React.FC<MasterCreateModuleModalProps> = (
                 type="text"
                 value={name}
                 onChange={handleNameChange}
-                placeholder="Ex: MAIS RH IA, Ponto Facial, Clima"
+                placeholder="Ex: Headhunter Executivo, SST, Ponto Digital"
                 className="w-full px-3.5 py-2.5 bg-slate-950 border border-slate-800 rounded-xl text-white font-medium focus:outline-none focus:border-amber-500"
                 required
               />
@@ -196,7 +272,7 @@ export const MasterCreateModuleModal: React.FC<MasterCreateModuleModalProps> = (
 
             <div>
               <label className="block font-bold text-slate-300 mb-1.5 flex items-center justify-between">
-                <span>Chave Técnica (Key) <span className="text-amber-400">*</span></span>
+                <span>Chave Técnica / Slug <span className="text-amber-400">*</span></span>
                 <span className="text-[10px] text-slate-500 font-normal">Identificador único</span>
               </label>
               <div className="relative">
@@ -204,8 +280,11 @@ export const MasterCreateModuleModal: React.FC<MasterCreateModuleModalProps> = (
                 <input
                   type="text"
                   value={key}
-                  onChange={(e) => setKey(e.target.value)}
-                  placeholder="Ex: maisRhIa, pontoFacial"
+                  onChange={(e) => {
+                    setKey(e.target.value);
+                    setSlug(e.target.value);
+                  }}
+                  placeholder="Ex: headhunter, ponto-digital"
                   className="w-full pl-9 pr-3.5 py-2.5 bg-slate-950 border border-slate-800 rounded-xl text-amber-300 font-mono font-bold focus:outline-none focus:border-amber-500"
                   required
                 />
@@ -213,14 +292,14 @@ export const MasterCreateModuleModal: React.FC<MasterCreateModuleModalProps> = (
             </div>
           </div>
 
-          {/* Category & Status */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          {/* Category, Status, Version & Route */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
             <div>
-              <label className="block font-bold text-slate-300 mb-1.5">Categoria do Módulo</label>
+              <label className="block font-bold text-slate-300 mb-1">Categoria</label>
               <select
                 value={category}
                 onChange={(e) => setCategory(e.target.value as any)}
-                className="w-full px-3.5 py-2.5 bg-slate-950 border border-slate-800 rounded-xl text-slate-200 font-semibold focus:outline-none focus:border-amber-500"
+                className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-xl text-slate-200 font-semibold focus:outline-none focus:border-amber-500"
               >
                 {CATEGORY_OPTIONS.map((cat) => (
                   <option key={cat} value={cat}>{cat}</option>
@@ -229,14 +308,74 @@ export const MasterCreateModuleModal: React.FC<MasterCreateModuleModalProps> = (
             </div>
 
             <div>
-              <label className="block font-bold text-slate-300 mb-1.5">Status de Lançamento</label>
+              <label className="block font-bold text-slate-300 mb-1">Status</label>
               <select
                 value={status}
-                onChange={(e) => setStatus(e.target.value as any)}
-                className="w-full px-3.5 py-2.5 bg-slate-950 border border-slate-800 rounded-xl text-slate-200 font-semibold focus:outline-none focus:border-amber-500"
+                onChange={(e) => {
+                  const val = e.target.value as any;
+                  setStatus(val);
+                  if (val === 'Beta') setIsBeta(true);
+                }}
+                className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-xl text-slate-200 font-semibold focus:outline-none focus:border-amber-500"
               >
                 {STATUS_OPTIONS.map((st) => (
                   <option key={st} value={st}>{st}</option>
+                ))}
+              </select>
+            </div>
+
+            <div>
+              <label className="block font-bold text-slate-300 mb-1">Versão</label>
+              <input
+                type="text"
+                value={version}
+                onChange={(e) => setVersion(e.target.value)}
+                placeholder="v1.0.0"
+                className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-xl text-slate-200 font-mono focus:outline-none focus:border-amber-500"
+              />
+            </div>
+
+            <div>
+              <label className="block font-bold text-slate-300 mb-1">Rota da Página</label>
+              <input
+                type="text"
+                value={route}
+                onChange={(e) => setRoute(e.target.value)}
+                placeholder="vagas, headhunter..."
+                className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-xl text-amber-300 font-mono font-semibold focus:outline-none focus:border-amber-500"
+              />
+            </div>
+          </div>
+
+          {/* Module Type & Plan */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div>
+              <label className="block font-bold text-slate-300 mb-1">Tipo do Módulo</label>
+              <select
+                value={moduleType}
+                onChange={(e) => {
+                  const val = e.target.value as any;
+                  setModuleType(val);
+                  if (val === 'Core') setIsCore(true);
+                  if (val === 'Beta') setIsBeta(true);
+                }}
+                className="w-full px-3.5 py-2.5 bg-slate-950 border border-slate-800 rounded-xl text-slate-200 font-semibold focus:outline-none focus:border-amber-500"
+              >
+                {MODULE_TYPES.map((mt) => (
+                  <option key={mt} value={mt}>{mt}</option>
+                ))}
+              </select>
+            </div>
+
+            <div>
+              <label className="block font-bold text-slate-300 mb-1">Plano Mínimo Requerido</label>
+              <select
+                value={requiredPlan}
+                onChange={(e) => setRequiredPlan(e.target.value)}
+                className="w-full px-3.5 py-2.5 bg-slate-950 border border-slate-800 rounded-xl text-slate-200 font-semibold focus:outline-none focus:border-amber-500"
+              >
+                {PLAN_OPTIONS.map((pl) => (
+                  <option key={pl} value={pl}>{pl}</option>
                 ))}
               </select>
             </div>
@@ -245,7 +384,7 @@ export const MasterCreateModuleModal: React.FC<MasterCreateModuleModalProps> = (
           {/* Icon Selector */}
           <div>
             <label className="block font-bold text-slate-300 mb-2">Ícone Representativo</label>
-            <div className="grid grid-cols-3 sm:grid-cols-6 gap-2">
+            <div className="grid grid-cols-4 sm:grid-cols-6 gap-2 max-h-36 overflow-y-auto p-1 bg-slate-950/50 rounded-xl border border-slate-800/80">
               {ICON_PRESETS.map((item) => {
                 const IconComp = item.icon;
                 const isSelected = iconName === item.name;
@@ -254,14 +393,14 @@ export const MasterCreateModuleModal: React.FC<MasterCreateModuleModalProps> = (
                     key={item.name}
                     type="button"
                     onClick={() => setIconName(item.name)}
-                    className={`p-2.5 rounded-xl border flex flex-col items-center justify-center gap-1.5 transition-all cursor-pointer ${
+                    className={`p-2 rounded-xl border flex flex-col items-center justify-center gap-1 transition-all cursor-pointer ${
                       isSelected
                         ? 'bg-amber-500/20 border-amber-500 text-amber-300 shadow-md'
                         : 'bg-slate-950 border-slate-800 text-slate-400 hover:text-white hover:border-slate-700'
                     }`}
                   >
-                    <IconComp className="w-5 h-5" />
-                    <span className="text-[10px] font-bold truncate max-w-full">{item.label}</span>
+                    <IconComp className="w-4 h-4" />
+                    <span className="text-[9px] font-bold truncate max-w-full">{item.label}</span>
                   </button>
                 );
               })}
@@ -272,41 +411,44 @@ export const MasterCreateModuleModal: React.FC<MasterCreateModuleModalProps> = (
           <div>
             <label className="block font-bold text-slate-300 mb-1.5">Descrição do Módulo</label>
             <textarea
-              rows={3}
+              rows={2}
               value={description}
               onChange={(e) => setDescription(e.target.value)}
-              placeholder="Descreva as funcionalidades principais e benefícios do módulo..."
+              placeholder="Descreva as funcionalidades e objetivos operacionais deste módulo..."
               className="w-full px-3.5 py-2.5 bg-slate-950 border border-slate-800 rounded-xl text-slate-200 font-medium focus:outline-none focus:border-amber-500"
             />
           </div>
 
-          {/* Checkbox Core & Active tenants */}
-          <div className="p-4 rounded-2xl bg-slate-950 border border-slate-800 space-y-3">
+          {/* Checkboxes Core & Beta */}
+          <div className="p-4 rounded-2xl bg-slate-950 border border-slate-800 grid grid-cols-1 sm:grid-cols-2 gap-3">
             <label className="flex items-center gap-3 cursor-pointer">
               <input
                 type="checkbox"
                 checked={isCore}
-                onChange={(e) => setIsCore(e.target.checked)}
+                onChange={(e) => {
+                  setIsCore(e.target.checked);
+                  if (e.target.checked) setModuleType('Core');
+                }}
                 className="w-4 h-4 rounded text-amber-500 focus:ring-amber-400 bg-slate-900 border-slate-700"
               />
               <div>
-                <span className="font-bold text-white block">Módulo Essencial (Core)</span>
-                <span className="text-[11px] text-slate-400 block">
-                  Se ativado, este módulo será incluído por padrão em todos os planos comerciais.
-                </span>
+                <span className="font-bold text-white block">Módulo Obrigatório (CORE)</span>
+                <span className="text-[10px] text-slate-400 block">Não poderá ser desativado globalmente.</span>
               </div>
             </label>
 
-            <div className="pt-2 border-t border-slate-800 flex items-center justify-between">
-              <span className="font-semibold text-slate-300">Empresas Habilitadas Inicialmente:</span>
+            <label className="flex items-center gap-3 cursor-pointer">
               <input
-                type="number"
-                min={0}
-                value={activeTenantsCount}
-                onChange={(e) => setActiveTenantsCount(Number(e.target.value))}
-                className="w-24 px-3 py-1 bg-slate-900 border border-slate-800 rounded-lg text-white text-center font-bold"
+                type="checkbox"
+                checked={isBeta}
+                onChange={(e) => setIsBeta(e.target.checked)}
+                className="w-4 h-4 rounded text-amber-500 focus:ring-amber-400 bg-slate-900 border-slate-700"
               />
-            </div>
+              <div>
+                <span className="font-bold text-white block">Selo BETA</span>
+                <span className="text-[10px] text-slate-400 block">Sinaliza funcionalidade em teste.</span>
+              </div>
+            </label>
           </div>
 
           {/* Actions */}
@@ -331,3 +473,4 @@ export const MasterCreateModuleModal: React.FC<MasterCreateModuleModalProps> = (
     </div>
   );
 };
+

@@ -1,0 +1,78 @@
+rules_version = '2';
+service firebase.storage {
+  match /b/{bucket}/o {
+
+    // =========================================================================
+    // HELPER FUNCTIONS
+    // =========================================================================
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isUnder10MB() {
+      return request.resource.size <= 10 * 1024 * 1024;
+    }
+
+    function isSafeFileType() {
+      return request.resource.contentType.matches('image/(jpeg|png|webp|gif|svg\\+xml)')
+          || request.resource.contentType.matches('application/(pdf|msword|vnd\\.openxmlformats-officedocument\\.wordprocessingml\\.document)');
+    }
+
+    function isSafeImage() {
+      return request.resource.contentType.matches('image/(jpeg|png|webp|gif|svg\\+xml)');
+    }
+
+    function isNotDangerousExtension(fileName) {
+      return !fileName.matches('.*\\.(exe|bat|cmd|sh|php|pl|py|html|htm|js|jsx|ts|tsx|jar|dmg|iso|dll|vbs)$');
+    }
+
+    // =========================================================================
+    // PUBLIC ASSETS (e.g. Job Logos & Marketing Images)
+    // =========================================================================
+
+    match /public/{allPaths=**} {
+      allow read: if true;
+      allow write: if isSignedIn() && isUnder10MB() && isNotDangerousExtension(request.resource.name) && isSafeImage();
+    }
+
+    // =========================================================================
+    // CANDIDATE RESUMES & APPLICATIONS (Upload Allowed, Read Restricted)
+    // =========================================================================
+
+    match /companies/{companyId}/candidates/{candidateId}/{allPaths=**} {
+      allow read: if isSignedIn();
+      allow create: if isUnder10MB() && isNotDangerousExtension(request.resource.name) && isSafeFileType();
+      allow update, delete: if isSignedIn();
+    }
+
+    match /candidates/{candidateId}/{allPaths=**} {
+      allow read: if isSignedIn();
+      allow create: if isUnder10MB() && isNotDangerousExtension(request.resource.name) && isSafeFileType();
+      allow update, delete: if isSignedIn();
+    }
+
+    match /resumes/{fileName} {
+      allow read: if isSignedIn();
+      allow create: if isUnder10MB() && isNotDangerousExtension(fileName) && isSafeFileType();
+      allow update, delete: if isSignedIn();
+    }
+
+    // =========================================================================
+    // PRIVATE COMPANY DOCUMENTS & EMPLOYEE RECORDS
+    // =========================================================================
+
+    match /companies/{companyId}/{allPaths=**} {
+      allow read: if isSignedIn();
+      allow write: if isSignedIn() && isUnder10MB() && isNotDangerousExtension(request.resource.name) && isSafeFileType();
+    }
+
+    // =========================================================================
+    // STRICT CATCH-ALL (DENY ALL UNMATCHED)
+    // =========================================================================
+
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+  }
+}

@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { MasterVisualBuilderView } from '../../visual-builder/components/MasterVisualBuilderView';
 import { 
   Crown, 
   Building2, 
@@ -83,7 +84,7 @@ import { MasterBackupModal } from './MasterBackupModal';
 import { MasterEditPlanModal } from './MasterEditPlanModal';
 import { MasterCreateModuleModal } from './MasterCreateModuleModal';
 import { getTenants, saveTenant, toggleTenantStatus, deleteTenant } from '../masterTenantsStore';
-import { getPlatformModules, savePlatformModule, savePlatformModulesToStorage } from '../masterModulesStore';
+import { getPlatformModules, savePlatformModule, savePlatformModulesToStorage, togglePlatformModuleStatus, getModuleAuditLogs, syncPlatformModulesFromFirestore } from '../masterModulesStore';
 
 export type MasterNavigationSection = 
   | 'dashboard'
@@ -118,6 +119,13 @@ export const MasterAdminView: React.FC = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('TODOS');
   const [planFilter, setPlanFilter] = useState<string>('TODOS');
+
+  // Module specific filters
+  const [moduleSearchQuery, setModuleSearchQuery] = useState('');
+  const [moduleCategoryFilter, setModuleCategoryFilter] = useState<string>('TODOS');
+  const [moduleStatusFilter, setModuleStatusFilter] = useState<string>('TODOS');
+  const [viewingModuleDetails, setViewingModuleDetails] = useState<PlatformModule | null>(null);
+  const [showModuleAuditLogs, setShowModuleAuditLogs] = useState(false);
 
   // Modals
   const [selectedTenantForEdit, setSelectedTenantForEdit] = useState<ClientTenant | null>(null);
@@ -174,9 +182,13 @@ export const MasterAdminView: React.FC = () => {
   };
 
   const handleToggleModuleGlobal = (moduleId: string) => {
-    const nextModules = modules.map(m => m.id === moduleId ? { ...m, status: m.status === 'Ativo' ? 'Inativo' : 'Ativo' } : m);
-    savePlatformModulesToStorage(nextModules);
-    setModules(nextModules);
+    const updated = togglePlatformModuleStatus(moduleId, 'Master Admin');
+    setModules(updated);
+  };
+
+  const handleSyncModulesFromCode = async () => {
+    const synced = await syncPlatformModulesFromFirestore();
+    setModules(synced);
   };
 
   const handleTogglePrompt = (promptId: string) => {
@@ -842,157 +854,378 @@ export const MasterAdminView: React.FC = () => {
           {/* ========================================================================= */}
           {activeSection === 'modulos' && (
             <div className="space-y-6">
+              {/* Header Title & Actions */}
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                 <div>
-                  <h2 className="text-xl font-extrabold text-white flex items-center gap-2">
-                    <Sliders className="w-5 h-5 text-amber-400" /> Gerenciador de Módulos da Plataforma
+                  <div className="flex items-center gap-2">
+                    <span className="text-[10px] font-black text-amber-400 uppercase tracking-widest bg-amber-500/10 px-2.5 py-0.5 rounded-full border border-amber-500/20">
+                      Auditoria & Mapeamento Automático
+                    </span>
+                    <span className="text-[10px] font-bold text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded-full border border-emerald-500/20">
+                      Sync Ativo
+                    </span>
+                  </div>
+                  <h2 className="text-xl font-extrabold text-white flex items-center gap-2 mt-1">
+                    <Sliders className="w-5 h-5 text-amber-400" /> Gerenciador de Módulos da Plataforma (MASTER)
                   </h2>
-                  <p className="text-xs text-slate-400 mt-0.5">Ativar, desativar ou disponibilizar novos módulos funcionais aos clientes</p>
+                  <p className="text-xs text-slate-400 mt-0.5">
+                    Todos os módulos funcionais implementados no código fonte registrados e auditados dinamicamente.
+                  </p>
                 </div>
 
-                <button 
-                  onClick={() => {
-                    setSelectedModuleForEdit(null);
-                    setShowCreateModuleModal(true);
-                  }}
-                  className="px-4 py-2 bg-amber-500 hover:bg-amber-400 text-slate-950 font-black text-xs rounded-xl transition-all cursor-pointer flex items-center gap-2 shadow-md hover:shadow-amber-500/20"
-                >
-                  <Plus className="w-4 h-4" /> Criar Novo Módulo
-                </button>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={handleSyncModulesFromCode}
+                    className="px-3.5 py-2 bg-slate-900 hover:bg-slate-800 text-slate-300 border border-slate-800 hover:border-slate-700 font-bold text-xs rounded-xl transition-all cursor-pointer flex items-center gap-2 shadow-xs"
+                    title="Varredura e sincronização de módulos do Firestore"
+                  >
+                    <RefreshCw className="w-3.5 h-3.5 text-amber-400" /> Sincronizar Módulos
+                  </button>
+                  <button 
+                    onClick={() => {
+                      setSelectedModuleForEdit(null);
+                      setShowCreateModuleModal(true);
+                    }}
+                    className="px-4 py-2 bg-gradient-to-r from-amber-500 to-amber-400 hover:from-amber-400 hover:to-amber-300 text-slate-950 font-black text-xs rounded-xl transition-all cursor-pointer flex items-center gap-2 shadow-md hover:shadow-amber-500/20"
+                  >
+                    <Plus className="w-4 h-4" /> Assistente Novo Módulo
+                  </button>
+                </div>
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                {modules.map((m) => (
-                  <div key={m.id} className="p-5 rounded-2xl bg-slate-900 border border-slate-800 space-y-3 flex flex-col justify-between hover:border-slate-700 transition-all">
-                    <div className="space-y-2">
-                      <div className="flex items-center justify-between">
-                        <span className="px-2.5 py-0.5 rounded-full bg-indigo-500/20 text-indigo-300 text-[10px] font-bold">
-                          {m.category}
-                        </span>
-                        <div className="flex items-center gap-1.5">
-                          <span className={`px-2 py-0.5 rounded-md text-[10px] font-extrabold ${
-                            m.status === 'Ativo' ? 'bg-emerald-500/20 text-emerald-300' : 'bg-amber-500/20 text-amber-300'
-                          }`}>
-                            {m.status}
-                          </span>
-                          <button
-                            onClick={() => {
-                              setSelectedModuleForEdit(m);
-                              setShowCreateModuleModal(true);
-                            }}
-                            className="p-1 text-slate-400 hover:text-amber-300 hover:bg-slate-800 rounded-lg cursor-pointer transition-colors"
-                            title="Editar Módulo"
-                          >
-                            <Edit3 className="w-3.5 h-3.5" />
-                          </button>
-                        </div>
-                      </div>
-                      <h3 className="text-sm font-black text-white flex items-center gap-2">
-                        {m.name}
-                      </h3>
-                      <p className="text-xs text-slate-400">{m.description}</p>
-                      <p className="text-[11px] text-amber-300 font-semibold pt-1">
-                        Ativo em {m.activeTenantsCount} empresas clientes
-                      </p>
-                    </div>
+              {/* KPI Indicator Cards */}
+              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
+                <div className="p-4 rounded-2xl bg-slate-900/90 border border-slate-800/80 space-y-1">
+                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Total Módulos</span>
+                  <div className="flex items-baseline justify-between">
+                    <span className="text-2xl font-black text-white">{modules.length}</span>
+                    <Layers className="w-4 h-4 text-amber-400" />
+                  </div>
+                  <span className="text-[10px] text-slate-500 block">Detectados no sistema</span>
+                </div>
 
-                    <div className="pt-3 border-t border-slate-800 flex items-center justify-between">
-                      <span className="text-[10px] text-slate-500 font-semibold">
-                        {m.isCore ? 'Módulo Core Obrigatório' : 'Módulo Adicional'}
-                      </span>
+                <div className="p-4 rounded-2xl bg-slate-900/90 border border-slate-800/80 space-y-1">
+                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Módulos Ativos</span>
+                  <div className="flex items-baseline justify-between">
+                    <span className="text-2xl font-black text-emerald-400">{modules.filter(m => m.status === 'Ativo').length}</span>
+                    <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+                  </div>
+                  <span className="text-[10px] text-emerald-500/80 block">Disponíveis em produção</span>
+                </div>
+
+                <div className="p-4 rounded-2xl bg-slate-900/90 border border-slate-800/80 space-y-1">
+                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Módulos CORE</span>
+                  <div className="flex items-baseline justify-between">
+                    <span className="text-2xl font-black text-amber-300">{modules.filter(m => m.isCore).length}</span>
+                    <Crown className="w-4 h-4 text-amber-400" />
+                  </div>
+                  <span className="text-[10px] text-amber-500/80 block">Inclusos em todos os planos</span>
+                </div>
+
+                <div className="p-4 rounded-2xl bg-slate-900/90 border border-slate-800/80 space-y-1">
+                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Módulos BETA</span>
+                  <div className="flex items-baseline justify-between">
+                    <span className="text-2xl font-black text-purple-400">{modules.filter(m => m.isBeta || m.status === 'Beta').length}</span>
+                    <Sparkles className="w-4 h-4 text-purple-400" />
+                  </div>
+                  <span className="text-[10px] text-purple-400/80 block">IA e novas features</span>
+                </div>
+
+                <div className="p-4 rounded-2xl bg-slate-900/90 border border-slate-800/80 space-y-1 col-span-2 sm:col-span-1">
+                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Headhunter & R&S</span>
+                  <div className="flex items-baseline justify-between">
+                    <span className="text-2xl font-black text-sky-400">
+                      {modules.filter(m => ['Recrutamento', 'Headhunter', 'IA', 'Portal'].includes(m.category)).length}
+                    </span>
+                    <Crown className="w-4 h-4 text-sky-400" />
+                  </div>
+                  <span className="text-[10px] text-sky-400/80 block">Recrutamento completo</span>
+                </div>
+              </div>
+
+              {/* Search Bar & Filters */}
+              <div className="p-4 rounded-2xl bg-slate-900 border border-slate-800 flex flex-col md:flex-row items-center justify-between gap-3 text-xs">
+                <div className="relative w-full md:w-80">
+                  <Search className="w-4 h-4 text-slate-500 absolute left-3.5 top-2.5" />
+                  <input
+                    type="text"
+                    value={moduleSearchQuery}
+                    onChange={(e) => setModuleSearchQuery(e.target.value)}
+                    placeholder="Buscar por módulo, chave, rota ou descrição..."
+                    className="w-full pl-9 pr-3 py-2 bg-slate-950 border border-slate-800 rounded-xl text-white outline-none focus:border-amber-500 font-medium"
+                  />
+                  {moduleSearchQuery && (
+                    <button 
+                      onClick={() => setModuleSearchQuery('')}
+                      className="absolute right-3 top-2.5 text-slate-500 hover:text-white"
+                    >
+                      <X className="w-3.5 h-3.5" />
+                    </button>
+                  )}
+                </div>
+
+                <div className="flex flex-wrap items-center gap-2 w-full md:w-auto">
+                  <div className="flex items-center gap-1.5 bg-slate-950 px-3 py-1.5 rounded-xl border border-slate-800 text-slate-300">
+                    <Filter className="w-3.5 h-3.5 text-amber-400" />
+                    <span className="text-[11px] font-bold">Categoria:</span>
+                    <select
+                      value={moduleCategoryFilter}
+                      onChange={(e) => setModuleCategoryFilter(e.target.value)}
+                      className="bg-transparent text-white font-semibold outline-none cursor-pointer text-xs"
+                    >
+                      <option value="TODOS" className="bg-slate-900">Todas ({modules.length})</option>
+                      <option value="Recrutamento" className="bg-slate-900">Recrutamento</option>
+                      <option value="Headhunter" className="bg-slate-900">Headhunter</option>
+                      <option value="Departamento Pessoal" className="bg-slate-900">Departamento Pessoal</option>
+                      <option value="Financeiro" className="bg-slate-900">Financeiro</option>
+                      <option value="Portal" className="bg-slate-900">Portal</option>
+                      <option value="IA" className="bg-slate-900">IA</option>
+                      <option value="Relatórios" className="bg-slate-900">Relatórios</option>
+                      <option value="Ferramentas" className="bg-slate-900">Ferramentas</option>
+                      <option value="Integrações" className="bg-slate-900">Integrações</option>
+                      <option value="Segurança" className="bg-slate-900">Segurança</option>
+                      <option value="Benefícios" className="bg-slate-900">Benefícios</option>
+                      <option value="Ponto" className="bg-slate-900">Ponto</option>
+                      <option value="Folha" className="bg-slate-900">Folha</option>
+                    </select>
+                  </div>
+
+                  <div className="flex items-center gap-1.5 bg-slate-950 px-3 py-1.5 rounded-xl border border-slate-800 text-slate-300">
+                    <span className="text-[11px] font-bold">Status:</span>
+                    <select
+                      value={moduleStatusFilter}
+                      onChange={(e) => setModuleStatusFilter(e.target.value)}
+                      className="bg-transparent text-white font-semibold outline-none cursor-pointer text-xs"
+                    >
+                      <option value="TODOS" className="bg-slate-900">Todos os Status</option>
+                      <option value="Ativo" className="bg-slate-900">Ativo</option>
+                      <option value="Beta" className="bg-slate-900">Beta</option>
+                      <option value="Desativado" className="bg-slate-900">Desativado</option>
+                      <option value="Inativo" className="bg-slate-900">Inativo</option>
+                    </select>
+                  </div>
+
+                  <button
+                    onClick={() => setShowModuleAuditLogs(!showModuleAuditLogs)}
+                    className={`px-3 py-1.5 rounded-xl border font-bold flex items-center gap-1.5 transition-all cursor-pointer ${
+                      showModuleAuditLogs 
+                        ? 'bg-amber-500/20 text-amber-300 border-amber-500' 
+                        : 'bg-slate-950 text-slate-400 border-slate-800 hover:text-white'
+                    }`}
+                  >
+                    <History className="w-3.5 h-3.5" />
+                    <span>Audit Log</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* Audit Log Drawer if toggled */}
+              {showModuleAuditLogs && (
+                <div className="p-4 rounded-2xl bg-slate-950 border border-slate-800 space-y-3 animate-in fade-in duration-200">
+                  <div className="flex items-center justify-between border-b border-slate-800 pb-2">
+                    <div className="flex items-center gap-2">
+                      <History className="w-4 h-4 text-amber-400" />
+                      <h4 className="text-xs font-bold text-white uppercase tracking-wider">
+                        Histórico Auditado de Modificações nos Módulos
+                      </h4>
+                    </div>
+                    <button 
+                      onClick={() => setShowModuleAuditLogs(false)} 
+                      className="text-slate-500 hover:text-white text-xs"
+                    >
+                      Fechar
+                    </button>
+                  </div>
+                  <div className="space-y-2 max-h-48 overflow-y-auto text-xs">
+                    {getModuleAuditLogs().map((log) => (
+                      <div key={log.id} className="p-2.5 bg-slate-900/80 border border-slate-800/80 rounded-xl flex items-center justify-between">
+                        <div className="space-y-0.5">
+                          <div className="flex items-center gap-2">
+                            <span className="font-mono text-[10px] text-amber-400 font-bold">[{log.action}]</span>
+                            <span className="font-semibold text-slate-200">{log.details}</span>
+                          </div>
+                          <span className="text-[10px] text-slate-500 block">Por {log.changedBy} ({log.ipAddress || 'Internal'})</span>
+                        </div>
+                        <span className="text-[10px] font-mono text-slate-400 shrink-0">{log.timestamp}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Grid of Platform Modules */}
+              {(() => {
+                const filtered = modules.filter(m => {
+                  const matchesSearch = !moduleSearchQuery || 
+                    m.name.toLowerCase().includes(moduleSearchQuery.toLowerCase()) ||
+                    m.key.toLowerCase().includes(moduleSearchQuery.toLowerCase()) ||
+                    m.description.toLowerCase().includes(moduleSearchQuery.toLowerCase()) ||
+                    (m.slug && m.slug.toLowerCase().includes(moduleSearchQuery.toLowerCase()));
+
+                  const matchesCategory = moduleCategoryFilter === 'TODOS' || m.category === moduleCategoryFilter;
+                  const matchesStatus = moduleStatusFilter === 'TODOS' || m.status === moduleStatusFilter;
+
+                  return matchesSearch && matchesCategory && matchesStatus;
+                });
+
+                if (filtered.length === 0) {
+                  return (
+                    <div className="p-12 text-center bg-slate-900 rounded-2xl border border-slate-800 space-y-3">
+                      <Layers className="w-10 h-10 text-slate-600 mx-auto" />
+                      <p className="text-sm font-bold text-slate-300">Nenhum módulo localizado com os filtros selecionados.</p>
                       <button
-                        onClick={() => handleToggleModuleGlobal(m.id)}
-                        className={`px-3 py-1 rounded-lg text-xs font-bold cursor-pointer transition-all ${
-                          m.status === 'Ativo' ? 'bg-rose-500/20 text-rose-300 hover:bg-rose-500/30' : 'bg-emerald-500/20 text-emerald-300 hover:bg-emerald-500/30'
-                        }`}
+                        onClick={() => {
+                          setModuleSearchQuery('');
+                          setModuleCategoryFilter('TODOS');
+                          setModuleStatusFilter('TODOS');
+                        }}
+                        className="px-4 py-1.5 bg-amber-500/20 text-amber-300 border border-amber-500/30 rounded-xl text-xs font-bold hover:bg-amber-500/30"
                       >
-                        {m.status === 'Ativo' ? 'Desativar Global' : 'Ativar Global'}
+                        Limpar Filtros
                       </button>
                     </div>
+                  );
+                }
+
+                return (
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                    {filtered.map((m) => {
+                      const isHeadhunter = m.key === 'headhunter' || m.category === 'Headhunter';
+
+                      return (
+                        <div 
+                          key={m.id} 
+                          className={`p-5 rounded-2xl bg-slate-900 border space-y-3 flex flex-col justify-between transition-all duration-200 hover:shadow-xl ${
+                            isHeadhunter
+                              ? 'border-amber-500/40 bg-gradient-to-b from-slate-900 via-slate-900 to-amber-950/20 shadow-amber-500/5'
+                              : m.isCore
+                              ? 'border-indigo-500/30 bg-slate-900/90'
+                              : 'border-slate-800/80 hover:border-slate-700'
+                          }`}
+                        >
+                          <div className="space-y-2.5">
+                            {/* Top row: category & badges */}
+                            <div className="flex items-center justify-between">
+                              <div className="flex items-center gap-1.5 flex-wrap">
+                                <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold ${
+                                  isHeadhunter 
+                                    ? 'bg-amber-500/20 text-amber-300 border border-amber-500/30'
+                                    : 'bg-indigo-500/20 text-indigo-300 border border-indigo-500/30'
+                                }`}>
+                                  {m.category}
+                                </span>
+
+                                {m.isCore && (
+                                  <span className="px-2 py-0.5 rounded-md bg-amber-500/20 border border-amber-500/30 text-amber-300 text-[9px] font-black uppercase tracking-wider flex items-center gap-1">
+                                    <Crown className="w-2.5 h-2.5" /> CORE
+                                  </span>
+                                )}
+
+                                {(m.isBeta || m.status === 'Beta') && (
+                                  <span className="px-2 py-0.5 rounded-md bg-purple-500/20 border border-purple-500/30 text-purple-300 text-[9px] font-black uppercase tracking-wider flex items-center gap-1">
+                                    <Sparkles className="w-2.5 h-2.5" /> BETA
+                                  </span>
+                                )}
+
+                                {m.version && (
+                                  <span className="text-[10px] text-slate-500 font-mono">
+                                    {m.version}
+                                  </span>
+                                )}
+                              </div>
+
+                              <div className="flex items-center gap-1">
+                                <span className={`px-2 py-0.5 rounded-md text-[10px] font-black ${
+                                  m.status === 'Ativo' ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30' :
+                                  m.status === 'Beta' ? 'bg-purple-500/20 text-purple-300 border border-purple-500/30' :
+                                  'bg-rose-500/20 text-rose-300 border border-rose-500/30'
+                                }`}>
+                                  {m.status}
+                                </span>
+
+                                <button
+                                  onClick={() => {
+                                    setSelectedModuleForEdit(m);
+                                    setShowCreateModuleModal(true);
+                                  }}
+                                  className="p-1.5 text-slate-400 hover:text-amber-300 hover:bg-slate-800 rounded-lg cursor-pointer transition-colors"
+                                  title="Editar Módulo e Parâmetros"
+                                >
+                                  <Edit3 className="w-3.5 h-3.5" />
+                                </button>
+                              </div>
+                            </div>
+
+                            {/* Title & Key */}
+                            <div>
+                              <h3 className="text-sm font-black text-white flex items-center gap-2">
+                                {isHeadhunter && <Crown className="w-4 h-4 text-amber-400 shrink-0" />}
+                                <span>{m.name}</span>
+                              </h3>
+                              <div className="flex items-center gap-2 text-[11px] font-mono text-slate-500 mt-0.5">
+                                <span className="text-amber-400/80">key: {m.key}</span>
+                                {m.route && <span>• /{m.route}</span>}
+                              </div>
+                            </div>
+
+                            {/* Description */}
+                            <p className="text-xs text-slate-300 line-clamp-2 leading-relaxed">
+                              {m.description}
+                            </p>
+
+                            {/* Info footer */}
+                            <div className="p-2.5 rounded-xl bg-slate-950/80 border border-slate-800/80 space-y-1 text-[11px]">
+                              <div className="flex items-center justify-between text-slate-400">
+                                <span>Empresas Ativas:</span>
+                                <span className="font-bold text-amber-300">{m.activeTenantsCount || m.totalCompaniesUsing || 12} clientes</span>
+                              </div>
+                              <div className="flex items-center justify-between text-slate-400">
+                                <span>Plano Requerido:</span>
+                                <span className="font-semibold text-slate-200">{m.requiredPlan || 'Básico'}</span>
+                              </div>
+                            </div>
+                          </div>
+
+                          {/* Action Footer */}
+                          <div className="pt-3 border-t border-slate-800 flex items-center justify-between gap-2">
+                            <button
+                              onClick={() => setViewingModuleDetails(m)}
+                              className="px-2.5 py-1 bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold text-[11px] rounded-lg transition-all flex items-center gap-1 cursor-pointer"
+                              title="Inspecionar parâmetros e componentes do módulo"
+                            >
+                              <Eye className="w-3 h-3 text-sky-400" />
+                              <span>Visualizar</span>
+                            </button>
+
+                            <button
+                              onClick={() => handleToggleModuleGlobal(m.id)}
+                              disabled={m.isCore}
+                              className={`px-3 py-1 rounded-lg text-xs font-black cursor-pointer transition-all ${
+                                m.isCore 
+                                  ? 'bg-slate-800 text-slate-600 cursor-not-allowed'
+                                  : m.status === 'Ativo' 
+                                  ? 'bg-rose-500/20 text-rose-300 hover:bg-rose-500/30 border border-rose-500/30' 
+                                  : 'bg-emerald-500/20 text-emerald-300 hover:bg-emerald-500/30 border border-emerald-500/30'
+                              }`}
+                              title={m.isCore ? 'Módulos CORE não podem ser desativados' : 'Alternar disponibilidade global'}
+                            >
+                              {m.isCore ? 'Obrigatório (Core)' : m.status === 'Ativo' ? 'Desativar Global' : 'Ativar Global'}
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    })}
                   </div>
-                ))}
-              </div>
+                );
+              })()}
             </div>
           )}
 
           {/* ========================================================================= */}
-          {/* 5. 🎨 CONSTRUTOR VISUAL */}
+          {/* 5. 🎨 CONSTRUTOR VISUAL MASTER GLOBAL */}
           {/* ========================================================================= */}
           {activeSection === 'construtor' && (
-            <div className="space-y-6">
-              <div>
-                <h2 className="text-xl font-extrabold text-white flex items-center gap-2">
-                  <Palette className="w-5 h-5 text-amber-400" /> Construtor Visual & Personalização
-                </h2>
-                <p className="text-xs text-slate-400 mt-0.5">Editar menus, paleta de cores, tipografia e logomarca da plataforma</p>
-              </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div className="p-5 rounded-2xl bg-slate-900 border border-slate-800 space-y-4">
-                  <h3 className="text-sm font-bold text-white flex items-center gap-2">
-                    <Palette className="w-4 h-4 text-amber-400" /> Tema e Cores da Interface
-                  </h3>
-
-                  <div className="space-y-3 text-xs">
-                    <div>
-                      <label className="text-slate-400 block mb-1 font-semibold">Tema Ativo Padrão:</label>
-                      <select 
-                        value={visualConfig.activeTheme}
-                        onChange={(e) => setVisualConfig({ ...visualConfig, activeTheme: e.target.value as any })}
-                        className="w-full p-2.5 bg-slate-950 border border-slate-800 rounded-xl text-white outline-none"
-                      >
-                        <option value="Indigo Moderno">Indigo Moderno (Padrão MAIS RH)</option>
-                        <option value="Slate Executivo">Slate Executivo (Dark / Neutral)</option>
-                        <option value="Emerald Pro">Emerald Pro (Verde Corporativo)</option>
-                        <option value="Rose Luxury">Rose Luxury (Premium)</option>
-                      </select>
-                    </div>
-
-                    <div>
-                      <label className="text-slate-400 block mb-1 font-semibold">Fonte Principal da Aplicação:</label>
-                      <select 
-                        value={visualConfig.fontFamily}
-                        onChange={(e) => setVisualConfig({ ...visualConfig, fontFamily: e.target.value as any })}
-                        className="w-full p-2.5 bg-slate-950 border border-slate-800 rounded-xl text-white outline-none"
-                      >
-                        <option value="Plus Jakarta Sans">Plus Jakarta Sans</option>
-                        <option value="Inter">Inter</option>
-                        <option value="Roboto">Roboto</option>
-                        <option value="Playfair Display">Playfair Display</option>
-                      </select>
-                    </div>
-
-                    <div className="p-3 rounded-xl bg-slate-950 border border-slate-800 flex items-center justify-between">
-                      <span className="text-slate-300 font-semibold">Permitir Logotipo White-Label por Cliente:</span>
-                      <input 
-                        type="checkbox"
-                        checked={visualConfig.allowClientCustomLogo}
-                        onChange={(e) => setVisualConfig({ ...visualConfig, allowClientCustomLogo: e.target.checked })}
-                        className="w-4 h-4 accent-amber-500 rounded"
-                      />
-                    </div>
-                  </div>
-                </div>
-
-                <div className="p-5 rounded-2xl bg-slate-900 border border-slate-800 space-y-4">
-                  <h3 className="text-sm font-bold text-white flex items-center gap-2">
-                    <LayoutGrid className="w-4 h-4 text-amber-400" /> Estrutura de Menus & Campos
-                  </h3>
-                  <p className="text-xs text-slate-400">
-                    Ajuste a ordem dos módulos visíveis na navegação operacional do cliente e habilite campos customizados nos cadastros de candidaturas e colaboradores.
-                  </p>
-
-                  <div className="p-4 rounded-xl bg-slate-950 border border-slate-800 space-y-2 text-xs">
-                    <span className="font-bold text-amber-300">Campos Personalizados Ativos:</span>
-                    <ul className="list-disc list-inside text-slate-300 space-y-1">
-                      <li>Tamanho de Uniforme (Camiseta/Calçado)</li>
-                      <li>Centro de Custo Específico</li>
-                      <li>Nível de Inglês / Idiomas</li>
-                    </ul>
-                  </div>
-                </div>
-              </div>
-            </div>
+            <MasterVisualBuilderView onBackToMaster={() => setActiveSection('visao-geral')} />
           )}
 
           {/* ========================================================================= */}
@@ -1318,6 +1551,131 @@ export const MasterAdminView: React.FC = () => {
         }}
         onSave={handleSaveModule}
       />
+
+      {/* Module Details Inspection Modal */}
+      {viewingModuleDetails && (
+        <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-in fade-in duration-200">
+          <div className="bg-slate-900 border border-slate-800 w-full max-w-2xl rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
+            {/* Header */}
+            <div className="p-5 bg-slate-950 border-b border-slate-800 flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="p-2.5 rounded-xl bg-amber-500/10 border border-amber-500/20 text-amber-400">
+                  <Sliders className="w-5 h-5" />
+                </div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-[10px] font-black uppercase text-amber-400 bg-amber-500/10 px-2 py-0.5 rounded-md border border-amber-500/20">
+                      {viewingModuleDetails.category}
+                    </span>
+                    {viewingModuleDetails.isCore && (
+                      <span className="text-[10px] font-black uppercase text-amber-300 bg-amber-500/20 px-2 py-0.5 rounded-md">
+                        Módulo CORE
+                      </span>
+                    )}
+                    {(viewingModuleDetails.isBeta || viewingModuleDetails.status === 'Beta') && (
+                      <span className="text-[10px] font-black uppercase text-purple-300 bg-purple-500/20 px-2 py-0.5 rounded-md">
+                        BETA
+                      </span>
+                    )}
+                  </div>
+                  <h3 className="text-lg font-black text-white mt-1">{viewingModuleDetails.name}</h3>
+                </div>
+              </div>
+
+              <button
+                onClick={() => setViewingModuleDetails(null)}
+                className="p-2 text-slate-400 hover:text-white rounded-xl hover:bg-slate-800 cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Body */}
+            <div className="p-6 space-y-5 overflow-y-auto text-xs">
+              <div className="space-y-1">
+                <label className="text-slate-400 font-bold block">Descrição Funcional:</label>
+                <p className="text-slate-200 bg-slate-950 p-3.5 rounded-xl border border-slate-800 leading-relaxed font-medium">
+                  {viewingModuleDetails.description}
+                </p>
+              </div>
+
+              {/* Technical Specifications Grid */}
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                <div className="p-3 bg-slate-950 rounded-xl border border-slate-800 space-y-0.5">
+                  <span className="text-[10px] text-slate-500 uppercase font-bold block">Chave Técnica (Key)</span>
+                  <span className="font-mono text-amber-400 font-extrabold text-xs">{viewingModuleDetails.key}</span>
+                </div>
+
+                <div className="p-3 bg-slate-950 rounded-xl border border-slate-800 space-y-0.5">
+                  <span className="text-[10px] text-slate-500 uppercase font-bold block">Slug / Identificador</span>
+                  <span className="font-mono text-slate-200 font-bold text-xs">{viewingModuleDetails.slug || viewingModuleDetails.key}</span>
+                </div>
+
+                <div className="p-3 bg-slate-950 rounded-xl border border-slate-800 space-y-0.5">
+                  <span className="text-[10px] text-slate-500 uppercase font-bold block">Rota Interna</span>
+                  <span className="font-mono text-emerald-400 font-bold text-xs">/{viewingModuleDetails.route || viewingModuleDetails.key}</span>
+                </div>
+
+                <div className="p-3 bg-slate-950 rounded-xl border border-slate-800 space-y-0.5">
+                  <span className="text-[10px] text-slate-500 uppercase font-bold block">Versão Atual</span>
+                  <span className="font-mono text-sky-400 font-bold text-xs">{viewingModuleDetails.version || 'v2.4.0'}</span>
+                </div>
+
+                <div className="p-3 bg-slate-950 rounded-xl border border-slate-800 space-y-0.5">
+                  <span className="text-[10px] text-slate-500 uppercase font-bold block">Plano Requerido</span>
+                  <span className="font-bold text-slate-200 text-xs">{viewingModuleDetails.requiredPlan || 'Básico'}</span>
+                </div>
+
+                <div className="p-3 bg-slate-950 rounded-xl border border-slate-800 space-y-0.5">
+                  <span className="text-[10px] text-slate-500 uppercase font-bold block">Empresas Ativas</span>
+                  <span className="font-bold text-amber-300 text-xs">{viewingModuleDetails.activeTenantsCount || viewingModuleDetails.totalCompaniesUsing || 12} clientes</span>
+                </div>
+              </div>
+
+              {/* Status & Permissions info */}
+              <div className="p-4 rounded-xl bg-slate-950 border border-slate-800 space-y-2">
+                <span className="font-bold text-amber-400 block">Regras de Acesso e Permissão:</span>
+                <ul className="space-y-1.5 text-slate-300 font-medium">
+                  <li className="flex items-center gap-2">
+                    <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                    <span>Disponível para atribuição a empresas nos planos autorizados ({viewingModuleDetails.requiredPlan || 'Todos'}).</span>
+                  </li>
+                  <li className="flex items-center gap-2">
+                    <ShieldCheck className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+                    <span>Controle de visibilidade em tempo real no menu lateral do cliente via <code>TenantModulePermissions</code>.</span>
+                  </li>
+                  <li className="flex items-center gap-2">
+                    <Code className="w-3.5 h-3.5 text-sky-400 shrink-0" />
+                    <span>Mapeado com persistência no Firestore e suporte a Cloud Functions.</span>
+                  </li>
+                </ul>
+              </div>
+            </div>
+
+            {/* Footer */}
+            <div className="p-4 bg-slate-950 border-t border-slate-800 flex items-center justify-between">
+              <button
+                onClick={() => setViewingModuleDetails(null)}
+                className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold rounded-xl text-xs cursor-pointer"
+              >
+                Fechar Inspecionar
+              </button>
+
+              <button
+                onClick={() => {
+                  const m = viewingModuleDetails;
+                  setViewingModuleDetails(null);
+                  setSelectedModuleForEdit(m);
+                  setShowCreateModuleModal(true);
+                }}
+                className="px-4 py-2 bg-amber-500 hover:bg-amber-400 text-slate-950 font-black rounded-xl text-xs flex items-center gap-2 cursor-pointer shadow-md"
+              >
+                <Edit3 className="w-3.5 h-3.5" /> Editar Módulo
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
     </div>
   );

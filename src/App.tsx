@@ -413,6 +413,7 @@ import {
   NotificationProvider, 
   SettingsProvider 
 } from './contexts';
+import { VisualBuilderProvider } from './visual-builder/context/VisualBuilderRuntimeContext';
 
 export default function App() {
   return (
@@ -423,7 +424,9 @@ export default function App() {
             <SubscriptionProvider>
               <NotificationProvider>
                 <SettingsProvider>
-                  <MainAppContent />
+                  <VisualBuilderProvider>
+                    <MainAppContent />
+                  </VisualBuilderProvider>
                 </SettingsProvider>
               </NotificationProvider>
             </SubscriptionProvider>

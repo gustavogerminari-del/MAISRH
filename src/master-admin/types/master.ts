@@ -129,17 +129,63 @@ export interface SaaSPlan {
   subscribersCount: number;
 }
 
-// 🧩 GERENCIADOR DE MÓDULOS
+// 🧩 GERENCIADOR DE MÓDULOS DA PLATAFORMA
+export type ModuleCategory = 
+  | 'Recrutamento' 
+  | 'Headhunter' 
+  | 'Departamento Pessoal' 
+  | 'Financeiro' 
+  | 'Portal' 
+  | 'IA' 
+  | 'Relatórios' 
+  | 'Ferramentas' 
+  | 'Integrações' 
+  | 'Segurança' 
+  | 'DP' 
+  | 'Ponto' 
+  | 'Folha' 
+  | 'Benefícios' 
+  | 'Gestão';
+
+export type ModuleStatus = 'Ativo' | 'Beta' | 'Em Desenvolvimento' | 'Desativado' | 'Inativo';
+
+export interface PlatformModuleAuditLog {
+  id: string;
+  moduleId: string;
+  action: string;
+  changedBy: string;
+  companyName?: string;
+  details: string;
+  timestamp: string;
+  ipAddress?: string;
+}
+
 export interface PlatformModule {
   id: string;
   key: string;
+  slug?: string;
   name: string;
-  category: 'Recrutamento' | 'DP' | 'Ponto' | 'Folha' | 'Benefícios' | 'Gestão';
+  category: ModuleCategory;
   description: string;
-  status: 'Ativo' | 'Beta' | 'Em Desenvolvimento' | 'Inativo';
+  status: ModuleStatus;
+  version?: string;
+  moduleType?: 'Core' | 'Opcional' | 'Beta' | 'Integração' | 'Addon';
   isCore: boolean;
+  isBeta?: boolean;
+  isVisible?: boolean;
+  isInstalled?: boolean;
+  allowActivation?: boolean;
+  allowDeactivation?: boolean;
+  requiredModules?: string[];
+  requiredPlan?: string;
+  totalCompaniesUsing?: number;
   activeTenantsCount: number;
+  displayOrder?: number;
   iconName: string;
+  route?: string;
+  createdAt?: string;
+  updatedAt?: string;
+  createdBy?: string;
 }
 
 // 🎨 CONSTRUTOR VISUAL
