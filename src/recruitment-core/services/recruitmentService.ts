@@ -8,6 +8,7 @@ import {
   where 
 } from 'firebase/firestore';
 import { db } from '../../lib/firebase';
+import { sanitizeFirestoreData } from '../../lib/firestoreUtils';
 import { 
   UnifiedJob, 
   UnifiedCandidate, 
@@ -105,7 +106,7 @@ export class RecruitmentService {
 
     // Persist to Firestore
     try {
-      await setDoc(doc(db, COLLECTIONS.JOBS, id), newJob, { merge: true });
+      await setDoc(doc(db, COLLECTIONS.JOBS, id), sanitizeFirestoreData(newJob), { merge: true });
     } catch (err) {
       console.error('Erro ao salvar vaga no Firestore:', err);
     }
@@ -143,7 +144,7 @@ export class RecruitmentService {
     candidatesCache = [newCandidate, ...candidatesCache.filter(c => c.id !== id)];
 
     try {
-      await setDoc(doc(db, COLLECTIONS.CANDIDATES, id), newCandidate, { merge: true });
+      await setDoc(doc(db, COLLECTIONS.CANDIDATES, id), sanitizeFirestoreData(newCandidate), { merge: true });
     } catch (err) {
       console.error('Erro ao salvar candidato no Firestore:', err);
     }
@@ -212,7 +213,7 @@ export class RecruitmentService {
     interviewsCache = [newInt, ...interviewsCache.filter(i => i.id !== id)];
 
     try {
-      await setDoc(doc(db, COLLECTIONS.INTERVIEWS, id), newInt, { merge: true });
+      await setDoc(doc(db, COLLECTIONS.INTERVIEWS, id), sanitizeFirestoreData(newInt), { merge: true });
     } catch (err) {
       console.error('Erro ao salvar entrevista no Firestore:', err);
     }
@@ -253,7 +254,7 @@ export class RecruitmentService {
     agendaCache = [newEvt, ...agendaCache.filter(e => e.id !== id)];
 
     try {
-      await setDoc(doc(db, COLLECTIONS.AGENDA, id), newEvt, { merge: true });
+      await setDoc(doc(db, COLLECTIONS.AGENDA, id), sanitizeFirestoreData(newEvt), { merge: true });
     } catch (err) {
       console.error('Erro ao salvar evento da agenda no Firestore:', err);
     }
@@ -282,7 +283,7 @@ export class RecruitmentService {
     hiringsCache = [newHir, ...hiringsCache.filter(h => h.id !== id)];
 
     try {
-      await setDoc(doc(db, COLLECTIONS.HIRINGS, id), newHir, { merge: true });
+      await setDoc(doc(db, COLLECTIONS.HIRINGS, id), sanitizeFirestoreData(newHir), { merge: true });
     } catch (err) {
       console.error('Erro ao salvar contratação no Firestore:', err);
     }

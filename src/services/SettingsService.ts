@@ -4,6 +4,7 @@ import {
   setDoc
 } from 'firebase/firestore';
 import { db } from '../lib/firebase';
+import { sanitizeFirestoreData } from '../lib/firestoreUtils';
 import { AuditService } from './AuditService';
 
 const COLLECTION_NAME = 'settings';
@@ -70,7 +71,7 @@ export class SettingsService {
     };
 
     try {
-      await setDoc(doc(db, COLLECTION_NAME, companyId), updatedData, { merge: true });
+      await setDoc(doc(db, COLLECTION_NAME, companyId), sanitizeFirestoreData(updatedData), { merge: true });
       await AuditService.log({
         action: 'UPDATE',
         description: `Configurações da empresa ${companyId} atualizadas`,

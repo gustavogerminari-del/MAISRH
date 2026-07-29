@@ -9,6 +9,7 @@ import {
   where 
 } from 'firebase/firestore';
 import { db, auth } from '../lib/firebase';
+import { sanitizeFirestoreData } from '../lib/firestoreUtils';
 import { HRDocument } from '../documents-signature/types';
 import { MOCK_DOCUMENTS } from '../documents-signature/mockData';
 import { AuditService } from './AuditService';
@@ -47,7 +48,7 @@ export class DocumentService {
     };
 
     try {
-      await setDoc(doc(db, COLLECTION_NAME, id), hrDoc, { merge: true });
+      await setDoc(doc(db, COLLECTION_NAME, id), sanitizeFirestoreData(hrDoc), { merge: true });
       await AuditService.log({
         action: 'CREATE',
         description: `Documento "${hrDoc.title}" enviado para assinatura`,
@@ -64,10 +65,10 @@ export class DocumentService {
 
   static async update(id: string, data: Partial<HRDocument>): Promise<void> {
     try {
-      await setDoc(doc(db, COLLECTION_NAME, id), {
+      await setDoc(doc(db, COLLECTION_NAME, id), sanitizeFirestoreData({
         ...data,
         updatedAt: new Date().toISOString()
-      }, { merge: true });
+      }), { merge: true });
 
       await AuditService.log({
         action: 'UPDATE',

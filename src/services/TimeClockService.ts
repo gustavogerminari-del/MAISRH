@@ -9,6 +9,7 @@ import {
   where 
 } from 'firebase/firestore';
 import { db, auth } from '../lib/firebase';
+import { sanitizeFirestoreData } from '../lib/firestoreUtils';
 import { RegistroPontoDoc } from '../ponto-digital/types/ponto';
 import { AuditService } from './AuditService';
 
@@ -42,7 +43,7 @@ export class TimeClockService {
     };
 
     try {
-      await setDoc(doc(db, COLLECTION_NAME, id), registro, { merge: true });
+      await setDoc(doc(db, COLLECTION_NAME, id), sanitizeFirestoreData(registro), { merge: true });
       await AuditService.log({
         action: 'CREATE',
         description: `Registro de ponto de ${registro.funcionarioNome} para ${registro.data} salvo`,
@@ -59,10 +60,10 @@ export class TimeClockService {
 
   static async update(id: string, data: Partial<RegistroPontoDoc>): Promise<void> {
     try {
-      await setDoc(doc(db, COLLECTION_NAME, id), {
+      await setDoc(doc(db, COLLECTION_NAME, id), sanitizeFirestoreData({
         ...data,
         updatedAt: new Date().toISOString()
-      }, { merge: true });
+      }), { merge: true });
 
       await AuditService.log({
         action: 'UPDATE',

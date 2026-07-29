@@ -9,6 +9,7 @@ import {
   where 
 } from 'firebase/firestore';
 import { db, auth } from './firebase';
+import { sanitizeFirestoreData } from './firestoreUtils';
 import { ClientTenant, PlatformModule, TenantModulePermissions } from '../master-admin/types/master';
 import { MOCK_TENANTS, MOCK_PLATFORM_MODULES } from '../master-admin/data/mockMasterData';
 
@@ -239,7 +240,7 @@ export async function saveEmpresaFirestore(tenantData: Partial<ClientTenant>): P
   };
 
   try {
-    await setDoc(empresaDocRef, docData, { merge: true });
+    await setDoc(empresaDocRef, sanitizeFirestoreData(docData), { merge: true });
     
     // Storing module mappings in `empresa_modulos`
     if (tenantData.modules) {
@@ -325,7 +326,7 @@ export async function saveModuloFirestore(moduleData: PlatformModule): Promise<v
   };
 
   try {
-    await setDoc(docRef, docData, { merge: true });
+    await setDoc(docRef, sanitizeFirestoreData(docData), { merge: true });
   } catch (err) {
     console.error('Erro ao salvar módulo no Firestore:', err);
   }
@@ -351,7 +352,7 @@ export async function saveEmpresaModuloFirestore(
   };
 
   try {
-    await setDoc(docRef, data, { merge: true });
+    await setDoc(docRef, sanitizeFirestoreData(data), { merge: true });
   } catch (err) {
     console.error('Erro ao salvar permissão de módulo no Firestore:', err);
   }
@@ -396,7 +397,7 @@ export async function fetchEmpresaModulosFirestore(empresaId: string): Promise<R
 export async function saveUsuarioFirestore(userDoc: UsuarioFirestoreDoc): Promise<void> {
   try {
     const docRef = doc(db, COLLECTIONS.USUARIOS, userDoc.uid);
-    await setDoc(docRef, userDoc, { merge: true });
+    await setDoc(docRef, sanitizeFirestoreData(userDoc), { merge: true });
   } catch (err) {
     handleFirestoreError(err, OperationType.WRITE, `${COLLECTIONS.USUARIOS}/${userDoc.uid}`);
   }

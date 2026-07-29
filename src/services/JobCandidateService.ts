@@ -9,6 +9,7 @@ import {
   where 
 } from 'firebase/firestore';
 import { db, auth } from '../lib/firebase';
+import { sanitizeFirestoreData } from '../lib/firestoreUtils';
 import { AuditService } from './AuditService';
 
 export interface InterviewData {
@@ -241,7 +242,7 @@ export class JobCandidateService {
     };
 
     try {
-      await setDoc(doc(db, COLLECTION_NAME, id), newApp, { merge: true });
+      await setDoc(doc(db, COLLECTION_NAME, id), sanitizeFirestoreData(newApp), { merge: true });
       await AuditService.log({
         action: 'CREATE',
         description: `Candidatura de ${newApp.name} criada para a vaga ${newApp.jobId}`,
@@ -273,11 +274,11 @@ export class JobCandidateService {
         }
       ];
 
-      await setDoc(doc(db, COLLECTION_NAME, id), {
+      await setDoc(doc(db, COLLECTION_NAME, id), sanitizeFirestoreData({
         status,
         timeline: updatedTimeline,
         updatedAt: now
-      }, { merge: true });
+      }), { merge: true });
 
       await AuditService.log({
         action: 'UPDATE',
@@ -312,12 +313,12 @@ export class JobCandidateService {
         }
       ];
 
-      await setDoc(doc(db, COLLECTION_NAME, id), {
+      await setDoc(doc(db, COLLECTION_NAME, id), sanitizeFirestoreData({
         status: 'Entrevista Agendada',
         interview: interviewObj,
         timeline: updatedTimeline,
         updatedAt: now
-      }, { merge: true });
+      }), { merge: true });
 
       await AuditService.log({
         action: 'UPDATE',
@@ -356,11 +357,11 @@ export class JobCandidateService {
         }
       ];
 
-      await setDoc(doc(db, COLLECTION_NAME, id), {
+      await setDoc(doc(db, COLLECTION_NAME, id), sanitizeFirestoreData({
         evaluations: updatedEvaluations,
         timeline: updatedTimeline,
         updatedAt: now
-      }, { merge: true });
+      }), { merge: true });
 
       await AuditService.log({
         action: 'UPDATE',
@@ -382,10 +383,10 @@ export class JobCandidateService {
       const formattedNote = `[${now.replace('T', ' ').substring(0, 16)}] ${auth.currentUser?.displayName || 'RH'}: ${note}`;
       const updatedNotes = [...(existing.notes || []), formattedNote];
 
-      await setDoc(doc(db, COLLECTION_NAME, id), {
+      await setDoc(doc(db, COLLECTION_NAME, id), sanitizeFirestoreData({
         notes: updatedNotes,
         updatedAt: now
-      }, { merge: true });
+      }), { merge: true });
     } catch (err) {
       console.warn('Erro ao adicionar nota no Firestore:', err);
     }

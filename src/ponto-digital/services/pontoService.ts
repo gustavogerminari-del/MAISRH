@@ -9,6 +9,7 @@ import {
   where 
 } from 'firebase/firestore';
 import { db, auth } from '../../lib/firebase';
+import { sanitizeFirestoreData } from '../../lib/firestoreUtils';
 import { 
   RegistroPontoDoc, 
   EscalaTrabalhoDoc, 
@@ -180,7 +181,7 @@ export async function fetchRegistrosPonto(empresaId: string, dataFiltro?: string
 export async function salvarRegistroPonto(registro: RegistroPontoDoc): Promise<void> {
   try {
     const docRef = doc(db, COLLECTIONS.REGISTROS, registro.id);
-    await setDoc(docRef, registro, { merge: true });
+    await setDoc(docRef, sanitizeFirestoreData(registro), { merge: true });
   } catch (err) {
     handleFirestoreError(err, 'write', COLLECTIONS.REGISTROS);
   }
@@ -220,7 +221,7 @@ export async function fetchEscalasPonto(empresaId: string): Promise<EscalaTrabal
 export async function salvarEscalaPonto(escala: EscalaTrabalhoDoc): Promise<void> {
   try {
     const docRef = doc(db, COLLECTIONS.ESCALAS, escala.id);
-    await setDoc(docRef, escala, { merge: true });
+    await setDoc(docRef, sanitizeFirestoreData(escala), { merge: true });
   } catch (err) {
     handleFirestoreError(err, 'write', COLLECTIONS.ESCALAS);
   }
@@ -259,7 +260,7 @@ export async function fetchAjustesPonto(empresaId: string): Promise<AjustePontoD
 export async function salvarAjustePonto(ajuste: AjustePontoDoc): Promise<void> {
   try {
     const docRef = doc(db, COLLECTIONS.AJUSTES, ajuste.id);
-    await setDoc(docRef, ajuste, { merge: true });
+    await setDoc(docRef, sanitizeFirestoreData(ajuste), { merge: true });
   } catch (err) {
     handleFirestoreError(err, 'write', COLLECTIONS.AJUSTES);
   }
@@ -329,7 +330,7 @@ export async function fetchBancoHoras(empresaId: string): Promise<BancoHorasDoc[
 export async function salvarBancoHoras(banco: BancoHorasDoc): Promise<void> {
   try {
     const docRef = doc(db, COLLECTIONS.BANCO, banco.id);
-    await setDoc(docRef, banco, { merge: true });
+    await setDoc(docRef, sanitizeFirestoreData(banco), { merge: true });
   } catch (err) {
     handleFirestoreError(err, 'write', COLLECTIONS.BANCO);
   }
@@ -368,7 +369,7 @@ export async function fetchFuncionariosPonto(empresaId: string): Promise<Funcion
 export async function salvarFuncionarioPonto(func: FuncionarioPontoInfo): Promise<void> {
   try {
     const docRef = doc(db, COLLECTIONS.FUNCIONARIOS, func.id);
-    await setDoc(docRef, func, { merge: true });
+    await setDoc(docRef, sanitizeFirestoreData(func), { merge: true });
   } catch (err) {
     handleFirestoreError(err, 'write', COLLECTIONS.FUNCIONARIOS);
   }
@@ -405,7 +406,7 @@ export async function fetchConfiguracoesPonto(empresaId: string): Promise<Config
 export async function salvarConfiguracoesPonto(config: ConfiguracoesPonto): Promise<void> {
   try {
     const docRef = doc(db, COLLECTIONS.CONFIG, config.empresaId);
-    await setDoc(docRef, config, { merge: true });
+    await setDoc(docRef, sanitizeFirestoreData(config), { merge: true });
   } catch (err) {
     handleFirestoreError(err, 'write', COLLECTIONS.CONFIG);
   }

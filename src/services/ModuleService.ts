@@ -9,6 +9,7 @@ import {
   where 
 } from 'firebase/firestore';
 import { db, auth } from '../lib/firebase';
+import { sanitizeFirestoreData } from '../lib/firestoreUtils';
 import { PlatformModule } from '../master-admin/types/master';
 import { MOCK_PLATFORM_MODULES } from '../master-admin/data/mockMasterData';
 import { AuditService } from './AuditService';
@@ -57,7 +58,7 @@ export class ModuleService {
     };
 
     try {
-      await setDoc(doc(db, COLLECTION_NAME, id), mod, { merge: true });
+      await setDoc(doc(db, COLLECTION_NAME, id), sanitizeFirestoreData(mod), { merge: true });
       await AuditService.log({
         action: 'CREATE',
         description: `Módulo de plataforma ${mod.name} (${mod.key}) criado`,
@@ -73,10 +74,10 @@ export class ModuleService {
 
   static async update(id: string, data: Partial<PlatformModule>): Promise<void> {
     try {
-      await setDoc(doc(db, COLLECTION_NAME, id), {
+      await setDoc(doc(db, COLLECTION_NAME, id), sanitizeFirestoreData({
         ...data,
         updatedAt: new Date().toISOString()
-      }, { merge: true });
+      }), { merge: true });
 
       await AuditService.log({
         action: 'UPDATE',
@@ -176,7 +177,7 @@ export class ModuleService {
     };
 
     try {
-      await setDoc(doc(db, COMPANY_MODULES_COLLECTION, bindingId), binding, { merge: true });
+      await setDoc(doc(db, COMPANY_MODULES_COLLECTION, bindingId), sanitizeFirestoreData(binding), { merge: true });
       await AuditService.log({
         action: 'PERMISSION_CHANGE',
         description: `Módulo ${moduleId} ${active ? 'ativado' : 'desativado'} para a empresa ${companyId}`,

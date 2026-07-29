@@ -9,6 +9,7 @@ import {
   where 
 } from 'firebase/firestore';
 import { db, auth } from '../lib/firebase';
+import { sanitizeFirestoreData } from '../lib/firestoreUtils';
 import { ClientTenant } from '../master-admin/types/master';
 import { MOCK_TENANTS } from '../master-admin/data/mockMasterData';
 import { AuditService } from './AuditService';
@@ -78,7 +79,7 @@ export class CompanyService {
     };
 
     try {
-      await setDoc(doc(db, COLLECTION_NAME, id), companyDoc, { merge: true });
+      await setDoc(doc(db, COLLECTION_NAME, id), sanitizeFirestoreData(companyDoc), { merge: true });
       await AuditService.log({
         action: 'CREATE',
         description: `Empresa ${companyDoc.companyName} (${companyDoc.cnpj}) cadastrada`,
@@ -95,10 +96,10 @@ export class CompanyService {
 
   static async update(id: string, data: Partial<ClientTenant>): Promise<void> {
     try {
-      await setDoc(doc(db, COLLECTION_NAME, id), {
+      await setDoc(doc(db, COLLECTION_NAME, id), sanitizeFirestoreData({
         ...data,
         updatedAt: new Date().toISOString()
-      }, { merge: true });
+      }), { merge: true });
 
       await AuditService.log({
         action: 'UPDATE',

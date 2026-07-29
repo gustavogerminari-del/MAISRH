@@ -13,6 +13,7 @@ import {
   serverTimestamp 
 } from 'firebase/firestore';
 import { db } from '../../lib/firebase';
+import { sanitizeFirestoreData } from '../../lib/firestoreUtils';
 import { 
   ColaboradorCompleto, 
   ItemBeneficio, 
@@ -80,7 +81,7 @@ export async function getColaboradoresFirestore(companyId: string): Promise<Cola
         companyId: empId
       }));
       for (const colab of initialForCompany) {
-        await setDoc(doc(db, DP_COLLECTIONS.COLABORADORES, colab.id), colab);
+        await setDoc(doc(db, DP_COLLECTIONS.COLABORADORES, colab.id), sanitizeFirestoreData(colab));
       }
       return initialForCompany;
     }
@@ -99,10 +100,10 @@ export async function getColaboradoresFirestore(companyId: string): Promise<Cola
 export async function saveColaboradorFirestore(colaborador: ColaboradorCompleto): Promise<void> {
   try {
     const docRef = doc(db, DP_COLLECTIONS.COLABORADORES, colaborador.id);
-    await setDoc(docRef, {
+    await setDoc(docRef, sanitizeFirestoreData({
       ...colaborador,
       updatedAt: new Date().toISOString()
-    }, { merge: true });
+    }), { merge: true });
 
     // Registra evento no Histórico Único
     await addHistoricoEventoFirestore({
@@ -159,7 +160,7 @@ export async function getAdmissoesPendenteFirestore(companyId: string): Promise<
         }
       ];
       for (const adm of defaultAdmissoes) {
-        await setDoc(doc(db, DP_COLLECTIONS.ADMISSOES, adm.id), adm);
+        await setDoc(doc(db, DP_COLLECTIONS.ADMISSOES, adm.id), sanitizeFirestoreData(adm));
       }
       return defaultAdmissoes;
     }
@@ -273,7 +274,7 @@ export async function concluirEfetivacaoAdmissao(
   await saveColaboradorFirestore(novoColaborador);
 
   // 4. Salva o Contrato de Trabalho
-  await setDoc(doc(db, DP_COLLECTIONS.CONTRATOS, contratoId), {
+  await setDoc(doc(db, DP_COLLECTIONS.CONTRATOS, contratoId), sanitizeFirestoreData({
     id: contratoId,
     empresaId: companyId,
     colaboradorId: novoId,
@@ -283,15 +284,15 @@ export async function concluirEfetivacaoAdmissao(
     cargo: admissao.cargo,
     departamento: admissao.departamento,
     createdAt: new Date().toISOString()
-  });
+  }));
 
   // 5. Atualiza o status da Admissão para 'Efetivado'
-  await setDoc(doc(db, DP_COLLECTIONS.ADMISSOES, admissao.id), {
+  await setDoc(doc(db, DP_COLLECTIONS.ADMISSOES, admissao.id), sanitizeFirestoreData({
     ...admissao,
     status: 'Efetivado',
     colaboradorIdCriado: novoId,
     dataEfetivacao: new Date().toISOString()
-  }, { merge: true });
+  }), { merge: true });
 
   return novoColaborador;
 }
@@ -312,7 +313,7 @@ export async function getBeneficiosFirestore(companyId: string): Promise<ItemBen
     if (snapshot.empty) {
       const initialForCompany = INITIAL_BENEFICIOS.map(b => ({ ...b, companyId: empId }));
       for (const ben of initialForCompany) {
-        await setDoc(doc(db, DP_COLLECTIONS.BENEFICIOS, ben.id), ben);
+        await setDoc(doc(db, DP_COLLECTIONS.BENEFICIOS, ben.id), sanitizeFirestoreData(ben));
       }
       return initialForCompany;
     }
@@ -331,7 +332,7 @@ export async function getBeneficiosFirestore(companyId: string): Promise<ItemBen
 export async function saveBeneficioFirestore(beneficio: ItemBeneficio): Promise<void> {
   try {
     const docRef = doc(db, DP_COLLECTIONS.BENEFICIOS, beneficio.id);
-    await setDoc(docRef, beneficio, { merge: true });
+    await setDoc(docRef, sanitizeFirestoreData(beneficio), { merge: true });
   } catch (error) {
     console.error('[DP Firestore] Erro ao salvar benefício:', error);
   }
@@ -353,7 +354,7 @@ export async function getFeriasFirestore(companyId: string): Promise<RegistroFer
     if (snapshot.empty) {
       const initialForCompany = INITIAL_FERIAS.map(f => ({ ...f, companyId: empId }));
       for (const fer of initialForCompany) {
-        await setDoc(doc(db, DP_COLLECTIONS.FERIAS, fer.id), fer);
+        await setDoc(doc(db, DP_COLLECTIONS.FERIAS, fer.id), sanitizeFirestoreData(fer));
       }
       return initialForCompany;
     }
@@ -372,7 +373,7 @@ export async function getFeriasFirestore(companyId: string): Promise<RegistroFer
 export async function saveFeriasFirestore(ferias: RegistroFeriasColaborador): Promise<void> {
   try {
     const docRef = doc(db, DP_COLLECTIONS.FERIAS, ferias.id);
-    await setDoc(docRef, ferias, { merge: true });
+    await setDoc(docRef, sanitizeFirestoreData(ferias), { merge: true });
 
     // Registra evento no Histórico do Colaborador
     if (ferias.colaboradorId) {
@@ -422,7 +423,7 @@ export async function getAfastamentosFirestore(companyId: string): Promise<Afast
         }
       ];
       for (const af of mockAfastamentos) {
-        await setDoc(doc(db, DP_COLLECTIONS.AFASTAMENTOS, af.id), af);
+        await setDoc(doc(db, DP_COLLECTIONS.AFASTAMENTOS, af.id), sanitizeFirestoreData(af));
       }
       return mockAfastamentos;
     }
@@ -441,7 +442,7 @@ export async function getAfastamentosFirestore(companyId: string): Promise<Afast
 export async function saveAfastamentoFirestore(afastamento: AfastamentoColaborador): Promise<void> {
   try {
     const docRef = doc(db, DP_COLLECTIONS.AFASTAMENTOS, afastamento.id);
-    await setDoc(docRef, afastamento, { merge: true });
+    await setDoc(docRef, sanitizeFirestoreData(afastamento), { merge: true });
 
     // Atualiza status do colaborador para 'Afastado' se for afastamento ativo
     if (afastamento.status === 'Ativo') {
@@ -449,13 +450,13 @@ export async function saveAfastamentoFirestore(afastamento: AfastamentoColaborad
       const colabSnap = await getDoc(colabRef);
       if (colabSnap.exists()) {
         const cData = colabSnap.data() as ColaboradorCompleto;
-        await setDoc(colabRef, {
+        await setDoc(colabRef, sanitizeFirestoreData({
           ...cData,
           profissionais: {
             ...cData.profissionais,
             status: 'Afastado'
           }
-        }, { merge: true });
+        }), { merge: true });
       }
     }
 
@@ -522,7 +523,7 @@ export async function getDocumentosFirestore(companyId: string, colaboradorId?: 
         }
       ];
       for (const d of initialDocs) {
-        await setDoc(doc(db, DP_COLLECTIONS.DOCUMENTOS, d.id), d);
+        await setDoc(doc(db, DP_COLLECTIONS.DOCUMENTOS, d.id), sanitizeFirestoreData(d));
       }
       return initialDocs.filter(d => !colaboradorId || d.colaboradorId === colaboradorId);
     }
@@ -541,7 +542,7 @@ export async function getDocumentosFirestore(companyId: string, colaboradorId?: 
 export async function saveDocumentoFirestore(docData: DocumentoColaborador): Promise<void> {
   try {
     const docRef = doc(db, DP_COLLECTIONS.DOCUMENTOS, docData.id);
-    await setDoc(docRef, docData, { merge: true });
+    await setDoc(docRef, sanitizeFirestoreData(docData), { merge: true });
 
     await addHistoricoEventoFirestore({
       empresaId: docData.empresaId,
@@ -585,7 +586,7 @@ export async function getAjustesPontoFirestore(companyId: string): Promise<Ajust
         }
       ];
       for (const aj of mockAjustes) {
-        await setDoc(doc(db, DP_COLLECTIONS.AJUSTES_PONTO, aj.id), aj);
+        await setDoc(doc(db, DP_COLLECTIONS.AJUSTES_PONTO, aj.id), sanitizeFirestoreData(aj));
       }
       return mockAjustes;
     }
@@ -604,7 +605,7 @@ export async function getAjustesPontoFirestore(companyId: string): Promise<Ajust
 export async function saveAjustePontoFirestore(ajuste: AjustePontoColaborador): Promise<void> {
   try {
     const docRef = doc(db, DP_COLLECTIONS.AJUSTES_PONTO, ajuste.id);
-    await setDoc(docRef, ajuste, { merge: true });
+    await setDoc(docRef, sanitizeFirestoreData(ajuste), { merge: true });
 
     await addHistoricoEventoFirestore({
       empresaId: ajuste.empresaId,
@@ -636,7 +637,7 @@ export async function getRescisoesFirestore(companyId: string): Promise<CalculoR
       const initialForCompany = INITIAL_RESCISOES.map(r => ({ ...r, companyId: empId }));
       for (const res of initialForCompany) {
         if (res.id) {
-          await setDoc(doc(db, DP_COLLECTIONS.RESCISOES, res.id), res);
+          await setDoc(doc(db, DP_COLLECTIONS.RESCISOES, res.id), sanitizeFirestoreData(res));
         }
       }
       return initialForCompany;
@@ -659,11 +660,11 @@ export async function concluirRescisaoEBloquearColaborador(rescisao: CalculoResc
 
   try {
     // 1. Salva a Rescisão no Firestore
-    await setDoc(doc(db, DP_COLLECTIONS.RESCISOES, resId), {
+    await setDoc(doc(db, DP_COLLECTIONS.RESCISOES, resId), sanitizeFirestoreData({
       ...rescisao,
       id: resId,
       status: 'Homologado'
-    }, { merge: true });
+    }), { merge: true });
 
     // 2. Atualiza o status do Colaborador para 'Rescindido' e Bloqueia Acesso ao Portal
     const colabRef = doc(db, DP_COLLECTIONS.COLABORADORES, rescisao.colaboradorId);
@@ -685,18 +686,18 @@ export async function concluirRescisaoEBloquearColaborador(rescisao: CalculoResc
         updatedAt: new Date().toISOString()
       };
 
-      await setDoc(colabRef, colabAtualizado, { merge: true });
+      await setDoc(colabRef, sanitizeFirestoreData(colabAtualizado), { merge: true });
     }
 
     // 3. Encerra Benefícios Ativos do Colaborador no Firestore
     const benList = await getBeneficiosFirestore(companyId);
     const colabBen = benList.filter(b => b.companyId === companyId && b.ativo);
     for (const b of colabBen) {
-      await setDoc(doc(db, DP_COLLECTIONS.BENEFICIOS, b.id), {
+      await setDoc(doc(db, DP_COLLECTIONS.BENEFICIOS, b.id), sanitizeFirestoreData({
         ...b,
         ativo: false,
         observacoes: `Encerrado automaticamente devido a desligamento em ${rescisao.dataDesligamento}`
-      }, { merge: true });
+      }), { merge: true });
     }
 
     // 4. Registra no Histórico Único do Colaborador
@@ -745,7 +746,7 @@ export async function addHistoricoEventoFirestore(evento: {
       usuarioNome: evento.usuarioNome || 'Analista DP',
       dataHora: evento.dataHora || new Date().toISOString()
     };
-    await setDoc(doc(db, DP_COLLECTIONS.HISTORICO, id), eventDoc);
+    await setDoc(doc(db, DP_COLLECTIONS.HISTORICO, id), sanitizeFirestoreData(eventDoc));
   } catch (error) {
     console.error('[DP Firestore] Erro ao registrar histórico:', error);
   }
@@ -791,7 +792,7 @@ export async function getConfigTrabalhistaFirestore(companyId: string): Promise<
         ...DEFAULT_CONFIG_TRABALHISTA,
         companyId: empId
       };
-      await setDoc(docRef, defaultConfig);
+      await setDoc(docRef, sanitizeFirestoreData(defaultConfig));
       return defaultConfig;
     }
   } catch (error) {
@@ -803,7 +804,7 @@ export async function getConfigTrabalhistaFirestore(companyId: string): Promise<
 export async function saveConfigTrabalhistaFirestore(config: ConfiguracoesTrabalhistas): Promise<void> {
   try {
     const docRef = doc(db, DP_COLLECTIONS.CONFIGURACÕES, config.companyId);
-    await setDoc(docRef, config, { merge: true });
+    await setDoc(docRef, sanitizeFirestoreData(config), { merge: true });
   } catch (error) {
     console.error('[DP Firestore] Erro ao salvar configurações:', error);
   }

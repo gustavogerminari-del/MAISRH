@@ -11,6 +11,7 @@ import {
   limit 
 } from 'firebase/firestore';
 import { db, auth } from '../lib/firebase';
+import { sanitizeFirestoreData } from '../lib/firestoreUtils';
 import { AuditLogEntry, AuditActionType, AuditSeverity } from '../audit-logs/types';
 import { MOCK_AUDIT_LOGS } from '../audit-logs/mockData';
 
@@ -55,7 +56,7 @@ export class AuditService {
 
     try {
       const docRef = doc(db, COLLECTION_NAME, id);
-      await setDoc(docRef, entry, { merge: true });
+      await setDoc(docRef, sanitizeFirestoreData(entry), { merge: true });
     } catch (err) {
       console.warn('Erro ao salvar audit log no Firestore:', err);
     }
@@ -86,7 +87,7 @@ export class AuditService {
     };
 
     try {
-      await setDoc(doc(db, COLLECTION_NAME, id), entry, { merge: true });
+      await setDoc(doc(db, COLLECTION_NAME, id), sanitizeFirestoreData(entry), { merge: true });
     } catch (err) {
       console.warn('Erro em AuditService.create:', err);
     }
@@ -95,10 +96,10 @@ export class AuditService {
 
   static async update(id: string, data: Partial<AuditLogEntry>): Promise<void> {
     try {
-      await setDoc(doc(db, COLLECTION_NAME, id), {
+      await setDoc(doc(db, COLLECTION_NAME, id), sanitizeFirestoreData({
         ...data,
         updatedAt: new Date().toISOString()
-      }, { merge: true });
+      }), { merge: true });
     } catch (err) {
       console.warn('Erro em AuditService.update:', err);
     }

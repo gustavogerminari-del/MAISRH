@@ -9,6 +9,7 @@ import {
   where 
 } from 'firebase/firestore';
 import { db, auth } from '../lib/firebase';
+import { sanitizeFirestoreData } from '../lib/firestoreUtils';
 import { Job } from '../types/rh';
 import { INITIAL_JOBS } from '../data/initialData';
 import { AuditService } from './AuditService';
@@ -44,7 +45,7 @@ export class JobService {
     };
 
     try {
-      await setDoc(doc(db, COLLECTION_NAME, id), job, { merge: true });
+      await setDoc(doc(db, COLLECTION_NAME, id), sanitizeFirestoreData(job), { merge: true });
       await AuditService.log({
         action: 'CREATE',
         description: `Vaga "${job.title}" criada no departamento ${job.department}`,
@@ -61,10 +62,10 @@ export class JobService {
 
   static async update(id: string, data: Partial<Job>): Promise<void> {
     try {
-      await setDoc(doc(db, COLLECTION_NAME, id), {
+      await setDoc(doc(db, COLLECTION_NAME, id), sanitizeFirestoreData({
         ...data,
         updatedAt: new Date().toISOString()
-      }, { merge: true });
+      }), { merge: true });
 
       await AuditService.log({
         action: 'UPDATE',

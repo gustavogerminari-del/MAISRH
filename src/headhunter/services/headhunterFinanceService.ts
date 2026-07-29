@@ -8,6 +8,7 @@ import {
   where 
 } from 'firebase/firestore';
 import { db } from '../../lib/firebase';
+import { sanitizeFirestoreData } from '../../lib/firestoreUtils';
 import { 
   HeadhunterReceita, 
   HeadhunterExpense, 
@@ -285,7 +286,7 @@ export class HeadhunterFinanceService {
     receitasCache = [newReceita, ...receitasCache.filter(r => r.id !== id)];
 
     try {
-      await setDoc(doc(db, COLLECTIONS.RECEITAS, id), newReceita, { merge: true });
+      await setDoc(doc(db, COLLECTIONS.RECEITAS, id), sanitizeFirestoreData(newReceita), { merge: true });
     } catch (err) {
       console.error('Error saving receita in Firestore:', err);
     }
@@ -366,7 +367,7 @@ export class HeadhunterFinanceService {
     despesasCache = [newExpense, ...despesasCache.filter(d => d.id !== id)];
 
     try {
-      await setDoc(doc(db, COLLECTIONS.DESPESAS, id), newExpense, { merge: true });
+      await setDoc(doc(db, COLLECTIONS.DESPESAS, id), sanitizeFirestoreData(newExpense), { merge: true });
     } catch (err) {
       console.error('Error saving expense in Firestore:', err);
     }
@@ -391,7 +392,7 @@ export class HeadhunterFinanceService {
     comissoesCache = [newCom, ...comissoesCache.filter(c => c.id !== id)];
 
     try {
-      await setDoc(doc(db, COLLECTIONS.COMISSOES, id), newCom, { merge: true });
+      await setDoc(doc(db, COLLECTIONS.COMISSOES, id), sanitizeFirestoreData(newCom), { merge: true });
     } catch (err) {
       console.error('Error saving commission in Firestore:', err);
     }
@@ -474,7 +475,7 @@ export class HeadhunterFinanceService {
     garantiasCache = [newGar, ...garantiasCache.filter(g => g.id !== id)];
 
     try {
-      await setDoc(doc(db, COLLECTIONS.GARANTIAS, id), newGar, { merge: true });
+      await setDoc(doc(db, COLLECTIONS.GARANTIAS, id), sanitizeFirestoreData(newGar), { merge: true });
     } catch (err) {
       console.error('Error saving garantia in Firestore:', err);
     }

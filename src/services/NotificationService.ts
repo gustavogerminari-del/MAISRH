@@ -9,6 +9,7 @@ import {
   where 
 } from 'firebase/firestore';
 import { db, auth } from '../lib/firebase';
+import { sanitizeFirestoreData } from '../lib/firestoreUtils';
 import { AuditService } from './AuditService';
 
 const COLLECTION_NAME = 'notifications';
@@ -56,7 +57,7 @@ export class NotificationService {
     };
 
     try {
-      await setDoc(doc(db, COLLECTION_NAME, id), notif, { merge: true });
+      await setDoc(doc(db, COLLECTION_NAME, id), sanitizeFirestoreData(notif), { merge: true });
     } catch (err) {
       console.warn('Erro ao salvar notificação no Firestore:', err);
     }
@@ -66,10 +67,10 @@ export class NotificationService {
 
   static async update(id: string, data: Partial<NotificationDoc>): Promise<void> {
     try {
-      await setDoc(doc(db, COLLECTION_NAME, id), {
+      await setDoc(doc(db, COLLECTION_NAME, id), sanitizeFirestoreData({
         ...data,
         updatedAt: new Date().toISOString()
-      }, { merge: true });
+      }), { merge: true });
     } catch (err) {
       console.warn('Erro ao atualizar notificação no Firestore:', err);
     }

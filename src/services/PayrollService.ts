@@ -9,6 +9,7 @@ import {
   where 
 } from 'firebase/firestore';
 import { db, auth } from '../lib/firebase';
+import { sanitizeFirestoreData } from '../lib/firestoreUtils';
 import { Paystub, PayrollPeriod } from '../payroll/types/payroll';
 import { AuditService } from './AuditService';
 
@@ -60,7 +61,7 @@ export class PayrollService {
     };
 
     try {
-      await setDoc(doc(db, COLLECTION_NAME, id), holerite, { merge: true });
+      await setDoc(doc(db, COLLECTION_NAME, id), sanitizeFirestoreData(holerite), { merge: true });
       await AuditService.log({
         action: 'CREATE',
         description: `Holerite de ${holerite.employeeName} gerado`,
@@ -77,10 +78,10 @@ export class PayrollService {
 
   static async update(id: string, data: Partial<Paystub>): Promise<void> {
     try {
-      await setDoc(doc(db, COLLECTION_NAME, id), {
+      await setDoc(doc(db, COLLECTION_NAME, id), sanitizeFirestoreData({
         ...data,
         updatedAt: new Date().toISOString()
-      }, { merge: true });
+      }), { merge: true });
 
       await AuditService.log({
         action: 'UPDATE',

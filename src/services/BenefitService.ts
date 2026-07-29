@@ -9,6 +9,7 @@ import {
   where 
 } from 'firebase/firestore';
 import { db, auth } from '../lib/firebase';
+import { sanitizeFirestoreData } from '../lib/firestoreUtils';
 import { BenefitItem, LeaveRequest, EmployeeLeaveBalance } from '../benefits-leaves/types';
 import { MOCK_BENEFITS, MOCK_LEAVE_REQUESTS, MOCK_LEAVE_BALANCES } from '../benefits-leaves/mockData';
 import { AuditService } from './AuditService';
@@ -41,7 +42,7 @@ export class BenefitService {
     };
 
     try {
-      await setDoc(doc(db, COLLECTION_NAME, id), benefit, { merge: true });
+      await setDoc(doc(db, COLLECTION_NAME, id), sanitizeFirestoreData(benefit), { merge: true });
       await AuditService.log({
         action: 'CREATE',
         description: `Benefício ${benefit.title} (${benefit.category}) cadastrado`,
@@ -58,10 +59,10 @@ export class BenefitService {
 
   static async update(id: string, data: Partial<BenefitItem>): Promise<void> {
     try {
-      await setDoc(doc(db, COLLECTION_NAME, id), {
+      await setDoc(doc(db, COLLECTION_NAME, id), sanitizeFirestoreData({
         ...data,
         updatedAt: new Date().toISOString()
-      }, { merge: true });
+      }), { merge: true });
 
       await AuditService.log({
         action: 'UPDATE',
@@ -172,7 +173,7 @@ export class BenefitService {
     };
 
     try {
-      await setDoc(doc(db, LEAVES_COLLECTION, id), leaveDoc, { merge: true });
+      await setDoc(doc(db, LEAVES_COLLECTION, id), sanitizeFirestoreData(leaveDoc), { merge: true });
       await AuditService.log({
         action: 'CREATE',
         description: `Solicitação de ${leaveDoc.type} (${leaveDoc.totalDays} dias) para ${leaveDoc.employeeName} enviada`,

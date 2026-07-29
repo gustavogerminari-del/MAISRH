@@ -9,6 +9,7 @@ import {
   where 
 } from 'firebase/firestore';
 import { db, auth } from '../lib/firebase';
+import { sanitizeFirestoreData } from '../lib/firestoreUtils';
 import { ClientSubscription } from '../subscriptions/types';
 import { SaaSPlan } from '../master-admin/types/master';
 import { MOCK_SUBSCRIPTIONS } from '../subscriptions/mockData';
@@ -59,7 +60,7 @@ export class SubscriptionService {
     };
 
     try {
-      await setDoc(doc(db, COLLECTION_NAME, id), subscription, { merge: true });
+      await setDoc(doc(db, COLLECTION_NAME, id), sanitizeFirestoreData(subscription), { merge: true });
       await AuditService.log({
         action: 'CREATE',
         description: `Assinatura ${subscription.planTier} para ${subscription.companyName} ativada`,
@@ -76,10 +77,10 @@ export class SubscriptionService {
 
   static async update(id: string, data: Partial<ClientSubscription>): Promise<void> {
     try {
-      await setDoc(doc(db, COLLECTION_NAME, id), {
+      await setDoc(doc(db, COLLECTION_NAME, id), sanitizeFirestoreData({
         ...data,
         updatedAt: new Date().toISOString()
-      }, { merge: true });
+      }), { merge: true });
 
       await AuditService.log({
         action: 'UPDATE',

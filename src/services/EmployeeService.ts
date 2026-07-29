@@ -9,6 +9,7 @@ import {
   where 
 } from 'firebase/firestore';
 import { db, auth } from '../lib/firebase';
+import { sanitizeFirestoreData } from '../lib/firestoreUtils';
 import { InternalTeamMember } from '../internal-team/types/team';
 import { INITIAL_INTERNAL_TEAM } from '../internal-team/data/mockTeamData';
 import { AuditService } from './AuditService';
@@ -66,7 +67,7 @@ export class EmployeeService {
     };
 
     try {
-      await setDoc(doc(db, COLLECTION_NAME, id), employee, { merge: true });
+      await setDoc(doc(db, COLLECTION_NAME, id), sanitizeFirestoreData(employee), { merge: true });
       await AuditService.log({
         action: 'CREATE',
         description: `Colaborador ${employee.name} admitido no departamento ${employee.departmentName}`,
@@ -83,10 +84,10 @@ export class EmployeeService {
 
   static async update(id: string, data: Partial<InternalTeamMember>): Promise<void> {
     try {
-      await setDoc(doc(db, COLLECTION_NAME, id), {
+      await setDoc(doc(db, COLLECTION_NAME, id), sanitizeFirestoreData({
         ...data,
         updatedAt: new Date().toISOString()
-      }, { merge: true });
+      }), { merge: true });
 
       await AuditService.log({
         action: 'UPDATE',

@@ -9,6 +9,7 @@ import {
   where 
 } from 'firebase/firestore';
 import { db, auth } from '../lib/firebase';
+import { sanitizeFirestoreData } from '../lib/firestoreUtils';
 import { AuditService } from './AuditService';
 
 const COLLECTION_NAME = 'users';
@@ -48,7 +49,7 @@ export class UserService {
     };
 
     try {
-      await setDoc(doc(db, COLLECTION_NAME, uid), profile, { merge: true });
+      await setDoc(doc(db, COLLECTION_NAME, uid), sanitizeFirestoreData(profile), { merge: true });
       await AuditService.log({
         action: 'CREATE',
         description: `Usuário ${profile.displayName} (${profile.email}) criado`,
@@ -65,10 +66,10 @@ export class UserService {
 
   static async update(uid: string, data: Partial<UserProfile>): Promise<void> {
     try {
-      await setDoc(doc(db, COLLECTION_NAME, uid), {
+      await setDoc(doc(db, COLLECTION_NAME, uid), sanitizeFirestoreData({
         ...data,
         updatedAt: new Date().toISOString()
-      }, { merge: true });
+      }), { merge: true });
 
       await AuditService.log({
         action: 'UPDATE',

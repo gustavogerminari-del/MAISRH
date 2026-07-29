@@ -9,6 +9,7 @@ import {
   where 
 } from 'firebase/firestore';
 import { db, auth } from '../lib/firebase';
+import { sanitizeFirestoreData } from '../lib/firestoreUtils';
 import { Candidate } from '../types/rh';
 import { INITIAL_CANDIDATES } from '../data/initialData';
 import { AuditService } from './AuditService';
@@ -62,7 +63,7 @@ export class CandidateService {
     };
 
     try {
-      await setDoc(doc(db, COLLECTION_NAME, id), candidate, { merge: true });
+      await setDoc(doc(db, COLLECTION_NAME, id), sanitizeFirestoreData(candidate), { merge: true });
       await AuditService.log({
         action: 'CREATE',
         description: `Candidato ${candidate.name} cadastrado no Banco de Talentos`,
@@ -79,10 +80,10 @@ export class CandidateService {
 
   static async update(id: string, data: Partial<Candidate>): Promise<void> {
     try {
-      await setDoc(doc(db, COLLECTION_NAME, id), {
+      await setDoc(doc(db, COLLECTION_NAME, id), sanitizeFirestoreData({
         ...data,
         updatedAt: new Date().toISOString()
-      }, { merge: true });
+      }), { merge: true });
 
       await AuditService.log({
         action: 'UPDATE',
@@ -188,7 +189,7 @@ export class CandidateService {
     };
 
     try {
-      await setDoc(doc(db, APPLICATIONS_COLLECTION, id), applicationDoc, { merge: true });
+      await setDoc(doc(db, APPLICATIONS_COLLECTION, id), sanitizeFirestoreData(applicationDoc), { merge: true });
     } catch (err) {
       console.warn('Erro ao salvar candidatura no Firestore:', err);
     }
