@@ -1,353 +1,394 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   FileText, 
   PenTool, 
-  Upload, 
-  Download, 
-  CheckCircle2, 
-  Clock, 
   ShieldCheck, 
-  Search, 
-  Filter, 
-  Lock, 
-  Trash2, 
+  Briefcase, 
+  Sparkles, 
+  PlusCircle, 
+  Clock, 
+  AlertTriangle, 
+  History, 
+  FileCode, 
   Eye, 
-  UserCheck, 
-  FilePlus, 
-  Sparkles,
-  ExternalLink
+  Download, 
+  Trash2, 
+  CheckCircle2, 
+  RefreshCw,
+  FilePlus,
+  X
 } from 'lucide-react';
 import { HRDocument, DocumentCategory } from './types';
-import { MOCK_DOCUMENTS } from './mockData';
 import { DocumentService } from '../services/DocumentService';
+import { getColaboradoresFirestore } from '../departamento-pessoal/services/dpFirestoreService';
+import { ColaboradorCompleto } from '../departamento-pessoal/types/dp';
+import { useAuth } from '../auth';
+
+// Subcomponents
+import { CentralDocumentos } from './components/CentralDocumentos';
+import { GestaoContratos } from './components/GestaoContratos';
+import { ModelosGerador } from './components/ModelosGerador';
+import { AssinaturaDigitalHub } from './components/AssinaturaDigitalHub';
+import { ValidadesAlertas } from './components/ValidadesAlertas';
+import { HistoricoAuditoria } from './components/HistoricoAuditoria';
+
 import { ContextualAiModal } from '../ai/components/ContextualAiModal';
 import { documentsAiService } from '../ai/services/aiService';
 
+export type DocSubTab = 
+  | 'central' 
+  | 'contratos' 
+  | 'modelos' 
+  | 'assinatura' 
+  | 'validades' 
+  | 'auditoria';
+
 export const DocumentsSignatureView: React.FC = () => {
-  const [documents, setDocuments] = useState<HRDocument[]>(MOCK_DOCUMENTS);
+  const { user } = useAuth();
+  const companyId = user?.companyId || user?.empresaId || user?.tenantId || 'emp-001';
+
+  const [activeSubTab, setActiveSubTab] = useState<DocSubTab>('central');
+  const [documents, setDocuments] = useState<HRDocument[]>([]);
+  const [colaboradores, setColaboradores] = useState<ColaboradorCompleto[]>([]);
   const [loading, setLoading] = useState(true);
-  const [searchTerm, setSearchTerm] = useState('');
-  const [selectedCategory, setSelectedCategory] = useState<string>('Todas');
-  const [selectedDocForSigning, setSelectedDocForSigning] = useState<HRDocument | null>(null);
+
+  // Modals state
   const [showAiModal, setShowAiModal] = useState(false);
-  
-  // New Document Upload Modal State
   const [showUploadModal, setShowUploadModal] = useState(false);
+  const [selectedDocForSigningId, setSelectedDocForSigningId] = useState<string | undefined>(undefined);
+
+  // View Document Content Modal State
+  const [viewingDoc, setViewingDoc] = useState<HRDocument | null>(null);
+
+  // Upload Form State
   const [newTitle, setNewTitle] = useState('');
   const [newCategory, setNewCategory] = useState<DocumentCategory>('Contrato de Trabalho');
   const [newEntityName, setNewEntityName] = useState('');
   const [newEntityType, setNewEntityType] = useState<'Colaborador' | 'Candidato' | 'Vaga' | 'Empresa'>('Colaborador');
+  const [newExpirationDate, setNewExpirationDate] = useState('');
   const [fileObj, setFileObj] = useState<File | null>(null);
 
-  React.useEffect(() => {
-    let isMounted = true;
-    DocumentService.list().then(data => {
-      if (isMounted) {
-        if (data && data.length > 0) setDocuments(data);
-        setLoading(false);
-      }
-    }).catch(err => {
-      console.warn('Erro ao carregar documentos do Firestore:', err);
-      if (isMounted) setLoading(false);
-    });
-    return () => { isMounted = false; };
-  }, []);
-
-  // Digital Signature Simulator
-  const handleSimulateDigitalSignature = async (docId: string) => {
-    const targetDoc = documents.find(d => d.id === docId);
-    if (targetDoc) {
-      const updatedSigners = targetDoc.signers.map(s => ({
-        ...s,
-        hasSigned: true,
-        signedAt: new Date().toISOString().replace('T', ' ').substring(0, 16)
-      }));
-      await DocumentService.update(docId, {
-        signatureStatus: 'Assinado Digitalmente',
-        signers: updatedSigners
-      });
-
-      setDocuments(documents.map(d => {
-        if (d.id === docId) {
-          return {
-            ...d,
-            signatureStatus: 'Assinado Digitalmente',
-            signers: updatedSigners
-          };
-        }
-        return d;
-      }));
+  // Load Firestore Data
+  const loadData = async () => {
+    setLoading(true);
+    try {
+      const [docsData, colabsData] = await Promise.all([
+        DocumentService.list(companyId),
+        getColaboradoresFirestore(companyId)
+      ]);
+      setDocuments(docsData);
+      setColaboradores(colabsData);
+    } catch (err) {
+      console.warn('[Documentos] Erro ao carregar dados do Firestore:', err);
+    } finally {
+      setLoading(false);
     }
-    setSelectedDocForSigning(null);
   };
 
+  useEffect(() => {
+    loadData();
+  }, [companyId]);
+
+  // Upload Submit Handler
   const handleUploadSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newTitle || !newEntityName) return;
 
     const newDocData: Partial<HRDocument> = {
+      companyId,
       title: newTitle,
-      fileName: fileObj ? fileObj.name : 'documento_novo.pdf',
-      fileSize: fileObj ? `${(fileObj.size / (1024 * 1024)).toFixed(1)} MB` : '1.1 MB',
+      fileName: fileObj ? fileObj.name : `${newCategory.toLowerCase().replace(/\s+/g, '_')}_${Date.now()}.pdf`,
+      fileSize: fileObj ? `${(fileObj.size / (1024 * 1024)).toFixed(1)} MB` : '1.2 MB',
       category: newCategory,
       linkedEntityName: newEntityName,
       linkedType: newEntityType,
+      expirationDate: newExpirationDate || undefined,
+      validityStatus: newExpirationDate ? 'Válido' : 'Sem Validade',
       signatureStatus: 'Pendente de Assinatura',
       signers: [
-        { name: newEntityName, email: 'usuario@dominio.com.br', role: 'Colaborador', hasSigned: false }
+        { name: newEntityName, email: 'colaborador@email.com', role: 'Colaborador', hasSigned: false },
+        { name: 'Representante Legal RH', email: 'rh@maisrh.com.br', role: 'Representante Legal RH', hasSigned: false }
       ],
-      accessPermissions: { canView: true, canSign: true, canDownload: true, canDelete: true }
+      accessPermissions: { canView: true, canSign: true, canDownload: true, canDelete: true },
+      content: `DOCUMENTO: ${newTitle}\nCATEGORIA: ${newCategory}\nVÍNCULO: ${newEntityName}\nDATA: ${new Date().toLocaleDateString('pt-BR')}\n\nEste documento foi enviado para o repositório oficial da empresa e aguarda a coleta de assinaturas digitais dos signatários.`
     };
 
-    const savedDoc = await DocumentService.create(newDocData);
+    await DocumentService.create(newDocData);
 
-    setDocuments([savedDoc, ...documents]);
     setShowUploadModal(false);
     setNewTitle('');
     setNewEntityName('');
+    setNewExpirationDate('');
     setFileObj(null);
+    await loadData();
   };
 
-  const filteredDocs = documents.filter(d => {
-    const matchesSearch = d.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                          d.linkedEntityName.toLowerCase().includes(searchTerm.toLowerCase());
-    const matchesCat = selectedCategory === 'Todas' || d.category === selectedCategory;
-    return matchesSearch && matchesCat;
-  });
+  // KPIs
+  const totalDocs = documents.length;
+  const signedCount = documents.filter(d => d.signatureStatus === 'Assinado Digitalmente').length;
+  const pendingCount = documents.filter(d => d.signatureStatus === 'Pendente de Assinatura').length;
+  const expiredOrExpiringCount = documents.filter(d => d.validityStatus === 'Vencido' || d.validityStatus === 'A Vencer').length;
 
   return (
     <div className="space-y-6">
-      {/* Top Banner */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 bg-white p-6 rounded-2xl border border-slate-200 shadow-2xs">
-        <div>
-          <div className="inline-flex items-center gap-2 px-2.5 py-1 rounded-full bg-indigo-50 text-indigo-700 text-xs font-semibold mb-2">
-            <ShieldCheck className="w-3.5 h-3.5 text-indigo-600" />
-            Assinatura Digital & Criptografia ICP-Brasil
+      {/* Top Banner & KPI Header */}
+      <div className="bg-white p-6 rounded-2xl border border-slate-200/80 shadow-2xs space-y-4">
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+          <div>
+            <div className="inline-flex items-center gap-2 px-2.5 py-1 rounded-full bg-indigo-50 text-indigo-700 text-xs font-semibold mb-2">
+              <ShieldCheck className="w-3.5 h-3.5 text-indigo-600" />
+              Gestão Eletrônica de Documentos & Validação ICP-Brasil
+            </div>
+            <h2 className="text-2xl font-black text-slate-900 tracking-tight">
+              Central de Documentos, Contratos & Assinatura Digital
+            </h2>
+            <p className="text-xs text-slate-500 mt-1">
+              Repositório unificado, minutas automáticas, renovação contratual, controle de validades e auditoria completa.
+            </p>
           </div>
-          <h2 className="text-2xl font-bold text-slate-900">Gestão Eletrônica de Documentos & Contratos</h2>
-          <p className="text-xs text-slate-500 mt-0.5">
-            Repositório seguro de NDAs, contratos de admissão e termos com validação jurídica e controle granular de permissões.
-          </p>
-        </div>
 
-        <div className="flex items-center gap-2 self-start sm:self-center">
-          <button
-            onClick={() => setShowAiModal(true)}
-            className="inline-flex items-center gap-2 px-3.5 py-2.5 bg-amber-500 hover:bg-amber-600 text-slate-950 text-xs font-bold rounded-xl shadow-xs transition-all cursor-pointer"
-          >
-            <Sparkles className="w-4 h-4" />
-            <span>Identificar Vencimentos com IA</span>
-          </button>
-          <button
-            onClick={() => setShowUploadModal(true)}
-            className="inline-flex items-center gap-2 px-4 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-xl shadow-md transition-all cursor-pointer"
-          >
-            <FilePlus className="w-4 h-4" />
-            <span>Novo Documento / Contrato</span>
-          </button>
-        </div>
-      </div>
-
-      {/* Filters Bar */}
-      <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-2xs flex flex-col md:flex-row items-center justify-between gap-4">
-        <div className="relative w-full md:w-80">
-          <Search className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
-          <input
-            type="text"
-            placeholder="Buscar por título ou pessoa..."
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            className="w-full pl-9 pr-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500"
-          />
-        </div>
-
-        <div className="flex items-center gap-2 w-full md:w-auto overflow-x-auto pb-2 md:pb-0">
-          <span className="text-xs font-semibold text-slate-500 whitespace-nowrap">Categoria:</span>
-          {['Todas', 'Contrato de Trabalho', 'NDA / Sigilo', 'Declaração de Benefícios'].map(cat => (
+          <div className="flex items-center gap-2">
             <button
-              key={cat}
-              onClick={() => setSelectedCategory(cat)}
-              className={`px-3 py-1.5 text-xs font-semibold rounded-xl whitespace-nowrap transition-all ${
-                selectedCategory === cat 
-                  ? 'bg-indigo-600 text-white' 
-                  : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-              }`}
+              onClick={() => setShowAiModal(true)}
+              className="px-3.5 py-2.5 bg-amber-500 hover:bg-amber-600 text-slate-950 text-xs font-bold rounded-xl shadow-xs transition-all cursor-pointer flex items-center gap-1.5"
             >
-              {cat}
+              <Sparkles className="w-4 h-4" />
+              <span>Analisar Vencimentos com IA</span>
             </button>
-          ))}
+            <button
+              onClick={() => setShowUploadModal(true)}
+              className="px-4 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-xl shadow-sm transition-all cursor-pointer flex items-center gap-1.5"
+            >
+              <FilePlus className="w-4 h-4" />
+              <span>Novo Documento / Contrato</span>
+            </button>
+          </div>
+        </div>
+
+        {/* KPI Summary Grid */}
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 pt-2 border-t border-slate-100">
+          <div className="bg-slate-50 p-3.5 rounded-xl border border-slate-200/60">
+            <span className="text-[11px] font-bold text-slate-500 uppercase">Total de Documentos</span>
+            <div className="text-xl font-black text-slate-900 mt-0.5">{totalDocs}</div>
+          </div>
+
+          <div className="bg-emerald-50/70 p-3.5 rounded-xl border border-emerald-100">
+            <span className="text-[11px] font-bold text-emerald-700 uppercase">Assinados Digitalmente</span>
+            <div className="text-xl font-black text-emerald-950 mt-0.5">{signedCount}</div>
+          </div>
+
+          <div className="bg-amber-50/70 p-3.5 rounded-xl border border-amber-100">
+            <span className="text-[11px] font-bold text-amber-700 uppercase">Pendentes de Assinatura</span>
+            <div className="text-xl font-black text-amber-950 mt-0.5">{pendingCount}</div>
+          </div>
+
+          <div className="bg-rose-50/70 p-3.5 rounded-xl border border-rose-100">
+            <span className="text-[11px] font-bold text-rose-700 uppercase">A Vencer / Vencidos</span>
+            <div className="text-xl font-black text-rose-950 mt-0.5">{expiredOrExpiringCount}</div>
+          </div>
         </div>
       </div>
 
-      {/* Document Grid / Table */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {filteredDocs.map((doc) => (
-          <div key={doc.id} className="bg-white rounded-2xl p-6 border border-slate-200 shadow-2xs space-y-4 flex flex-col justify-between hover:border-indigo-300 transition-all">
-            <div className="space-y-3">
-              <div className="flex items-center justify-between">
-                <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-indigo-50 text-indigo-700">
-                  {doc.category}
-                </span>
-                <span className={`inline-flex items-center gap-1 text-[10px] font-bold px-2.5 py-0.5 rounded-full ${
-                  doc.signatureStatus === 'Assinado Digitalmente' 
-                    ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' 
-                    : 'bg-amber-50 text-amber-700 border border-amber-200'
-                }`}>
-                  {doc.signatureStatus === 'Assinado Digitalmente' ? <CheckCircle2 className="w-3 h-3" /> : <Clock className="w-3 h-3" />}
-                  {doc.signatureStatus}
-                </span>
-              </div>
+      {/* Sub-Tab Navigation Bar */}
+      <div className="bg-white p-2 rounded-2xl border border-slate-200/80 shadow-2xs overflow-x-auto">
+        <div className="flex items-center gap-1 min-w-max">
+          {[
+            { id: 'central', label: 'Central de Documentos', icon: FileText },
+            { id: 'contratos', label: 'Gestão de Contratos', icon: Briefcase },
+            { id: 'modelos', label: 'Modelos & Geração Automática', icon: FileCode },
+            { id: 'assinatura', label: 'Assinatura Digital', icon: PenTool },
+            { id: 'validades', label: 'Validades & Alertas', icon: Clock },
+            { id: 'auditoria', label: 'Histórico & Auditoria', icon: History },
+          ].map(tab => {
+            const Icon = tab.icon;
+            const isActive = activeSubTab === tab.id;
+            return (
+              <button
+                key={tab.id}
+                onClick={() => setActiveSubTab(tab.id as DocSubTab)}
+                className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${
+                  isActive
+                    ? 'bg-indigo-600 text-white shadow-xs'
+                    : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
+                }`}
+              >
+                <Icon className="w-3.5 h-3.5" />
+                <span>{tab.label}</span>
+              </button>
+            );
+          })}
+        </div>
+      </div>
 
+      {/* Syncing Indicator */}
+      {loading && (
+        <div className="flex items-center justify-center p-3 bg-indigo-50 border border-indigo-100 rounded-2xl text-xs text-indigo-900 font-bold gap-2">
+          <RefreshCw className="w-4 h-4 animate-spin text-indigo-600" />
+          <span>Sincronizando Repositório de Documentos com Firebase...</span>
+        </div>
+      )}
+
+      {/* View Router */}
+      <div>
+        {activeSubTab === 'central' && (
+          <CentralDocumentos
+            documents={documents}
+            colaboradores={colaboradores}
+            onRefresh={loadData}
+            onOpenUploadModal={() => setShowUploadModal(true)}
+            onSelectDocForSigning={(doc) => {
+              setSelectedDocForSigningId(doc.id);
+              setActiveSubTab('assinatura');
+            }}
+            onOpenViewModal={(doc) => setViewingDoc(doc)}
+          />
+        )}
+
+        {activeSubTab === 'contratos' && (
+          <GestaoContratos
+            documents={documents}
+            colaboradores={colaboradores}
+            onRefresh={loadData}
+            onOpenCreateContractModal={() => {
+              setNewCategory('Contrato de Trabalho');
+              setShowUploadModal(true);
+            }}
+          />
+        )}
+
+        {activeSubTab === 'modelos' && (
+          <ModelosGerador
+            companyId={companyId}
+            colaboradores={colaboradores}
+            onDocumentGenerated={() => {
+              loadData();
+              setActiveSubTab('central');
+            }}
+          />
+        )}
+
+        {activeSubTab === 'assinatura' && (
+          <AssinaturaDigitalHub
+            documents={documents}
+            onRefresh={loadData}
+            selectedDocIdForSigning={selectedDocForSigningId}
+          />
+        )}
+
+        {activeSubTab === 'validades' && (
+          <ValidadesAlertas
+            documents={documents}
+            onOpenDocument={(doc) => setViewingDoc(doc)}
+          />
+        )}
+
+        {activeSubTab === 'auditoria' && (
+          <HistoricoAuditoria
+            documents={documents}
+          />
+        )}
+      </div>
+
+      {/* Modal: View Full Document Content */}
+      {viewingDoc && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-2xl max-w-2xl w-full p-6 space-y-6 shadow-xl border border-slate-200 animate-in fade-in zoom-in-95">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-4">
               <div>
-                <h4 className="text-sm font-bold text-slate-900 leading-snug line-clamp-2">{doc.title}</h4>
-                <p className="text-xs text-slate-500 mt-1">
-                  Vínculo: <strong>{doc.linkedEntityName}</strong> ({doc.linkedType})
-                </p>
+                <span className="text-[10px] font-bold px-2.5 py-0.5 rounded-md bg-indigo-50 text-indigo-700">
+                  {viewingDoc.category}
+                </span>
+                <h3 className="text-base font-bold text-slate-900 mt-1">{viewingDoc.title}</h3>
+                <p className="text-xs text-slate-500">Vínculo: {viewingDoc.linkedEntityName} ({viewingDoc.linkedType})</p>
               </div>
+              <button onClick={() => setViewingDoc(null)} className="text-slate-400 hover:text-slate-600 font-bold cursor-pointer">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
 
-              <div className="bg-slate-50 p-3 rounded-xl border border-slate-100 space-y-1.5 text-[11px] text-slate-600">
-                <div className="flex justify-between">
-                  <span>Arquivo:</span>
-                  <strong className="text-slate-800">{doc.fileName}</strong>
-                </div>
-                <div className="flex justify-between">
-                  <span>Tamanho:</span>
-                  <span>{doc.fileSize}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span>Enviado em:</span>
-                  <span>{doc.uploadedAt}</span>
-                </div>
-              </div>
+            <div className="bg-slate-50 p-5 rounded-xl border border-slate-200 font-mono text-xs text-slate-800 leading-relaxed max-h-72 overflow-y-auto whitespace-pre-wrap shadow-inner">
+              {viewingDoc.content || `DOCUMENTO OFICIAL: ${viewingDoc.title}\n\nO conteúdo do arquivo ${viewingDoc.fileName} foi importado e validado.`}
+            </div>
 
-              {/* Signers Status */}
-              <div className="space-y-1 pt-1">
-                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Assinantes do Documento:</span>
-                {doc.signers.map((s, idx) => (
-                  <div key={idx} className="flex items-center justify-between text-xs bg-white p-2 rounded-lg border border-slate-100">
-                    <span className="font-semibold text-slate-800">{s.name} ({s.role})</span>
+            <div className="space-y-2 text-xs">
+              <h4 className="font-bold text-slate-800">Signatários & Validação ICP:</h4>
+              <div className="space-y-1">
+                {viewingDoc.signers.map((s, idx) => (
+                  <div key={idx} className="bg-slate-50 p-2.5 rounded-lg border border-slate-100 flex items-center justify-between">
+                    <span>{s.name} ({s.role})</span>
                     {s.hasSigned ? (
-                      <span className="text-emerald-600 text-[10px] font-bold flex items-center gap-1">
-                        ✓ Assinado
+                      <span className="text-emerald-600 font-bold flex items-center gap-1">
+                        ✓ Assinado em {s.signedAt}
                       </span>
                     ) : (
-                      <span className="text-amber-600 text-[10px] font-bold">Pendente</span>
+                      <span className="text-amber-600 font-bold">Pendente</span>
                     )}
                   </div>
                 ))}
               </div>
             </div>
 
-            {/* Document Actions */}
-            <div className="pt-4 border-t border-slate-100 flex items-center justify-between gap-2">
-              <div className="flex items-center gap-1 text-slate-400">
-                <Eye className="w-4 h-4 hover:text-indigo-600 cursor-pointer" title="Visualizar Documento" />
-                <Download className="w-4 h-4 hover:text-indigo-600 cursor-pointer" title="Baixar PDF" />
-              </div>
-
-              {doc.signatureStatus === 'Pendente de Assinatura' ? (
-                <button
-                  onClick={() => setSelectedDocForSigning(doc)}
-                  className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-xl shadow-2xs flex items-center gap-1 transition-all"
-                >
-                  <PenTool className="w-3.5 h-3.5" />
-                  Assinar Digitalmente
-                </button>
-              ) : (
-                <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 px-2 py-1 rounded-md border border-emerald-200">
-                  Validação ICP OK
-                </span>
-              )}
-            </div>
-          </div>
-        ))}
-      </div>
-
-      {/* MODAL: ASSINATURA DIGITAL SIMULADA */}
-      {selectedDocForSigning && (
-        <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-xs z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl p-6 max-w-md w-full shadow-2xl space-y-4">
-            <div className="flex items-center gap-3 border-b border-slate-100 pb-3">
-              <div className="p-2 bg-indigo-50 text-indigo-600 rounded-xl">
-                <PenTool className="w-5 h-5" />
-              </div>
-              <div>
-                <h3 className="text-base font-bold text-slate-900">Coletar Assinatura Digital</h3>
-                <p className="text-xs text-slate-500">Certificado Digital & Carimbo do Tempo ICP-Brasil</p>
-              </div>
-            </div>
-
-            <p className="text-xs text-slate-600 leading-relaxed">
-              Você está prestes a assinar o documento <strong>"{selectedDocForSigning.title}"</strong> vinculado a <strong>{selectedDocForSigning.linkedEntityName}</strong>.
-            </p>
-
-            <div className="bg-slate-50 p-3 rounded-xl border border-slate-200 text-[11px] font-mono text-slate-700 space-y-1">
-              <div><strong>HASH SHA-256:</strong> e3b0c44298fc1c149afbf4c8996fb924...719c8f00</div>
-              <div><strong>IP REGISTRADO:</strong> 187.32.109.12 (Autenticado)</div>
-            </div>
-
-            <div className="flex items-center justify-end gap-2 pt-3 border-t border-slate-100">
+            <div className="pt-4 border-t border-slate-100 flex items-center justify-end gap-3">
               <button
-                type="button"
-                onClick={() => setSelectedDocForSigning(null)}
-                className="px-4 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-100 rounded-xl"
+                onClick={() => setViewingDoc(null)}
+                className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold rounded-xl cursor-pointer"
               >
-                Cancelar
-              </button>
-              <button
-                type="button"
-                onClick={() => handleSimulateDigitalSignature(selectedDocForSigning.id)}
-                className="px-4 py-2 text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-700 rounded-xl shadow-md flex items-center gap-1.5"
-              >
-                <CheckCircle2 className="w-4 h-4" />
-                Confirmar Assinatura Eletrônica
+                Fechar
               </button>
             </div>
           </div>
         </div>
       )}
 
-      {/* MODAL: UPLOAD NOVO DOCUMENTO */}
+      {/* Modal: Upload New Document */}
       {showUploadModal && (
-        <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-xs z-50 flex items-center justify-center p-4">
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-50 flex items-center justify-center p-4">
           <div className="bg-white rounded-2xl p-6 max-w-md w-full shadow-2xl space-y-4">
-            <h3 className="text-base font-bold text-slate-900">Novo Documento / Contrato para Assinatura</h3>
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+              <h3 className="text-base font-bold text-slate-900">Novo Documento / Contrato</h3>
+              <button onClick={() => setShowUploadModal(false)} className="text-slate-400 hover:text-slate-600 font-bold cursor-pointer">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
 
-            <form onSubmit={handleUploadSubmit} className="space-y-3">
+            <form onSubmit={handleUploadSubmit} className="space-y-3 text-xs">
               <div>
-                <label className="block text-xs font-semibold text-slate-700 mb-1">Título do Documento *</label>
+                <label className="block font-bold text-slate-700 mb-1">Título do Documento *</label>
                 <input
                   type="text"
                   required
                   value={newTitle}
                   onChange={(e) => setNewTitle(e.target.value)}
-                  placeholder="Ex: Contrato de Trabalho CLT - João Santos"
-                  className="w-full text-xs px-3 py-2 border border-slate-200 rounded-lg"
+                  placeholder="Ex: Contrato Individual CLT - Mariana Siqueira"
+                  className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none"
                 />
               </div>
 
               <div>
-                <label className="block text-xs font-semibold text-slate-700 mb-1">Categoria *</label>
+                <label className="block font-bold text-slate-700 mb-1">Categoria *</label>
                 <select
                   value={newCategory}
-                  onChange={(e) => setNewCategory(e.target.value as any)}
-                  className="w-full text-xs px-3 py-2 border border-slate-200 rounded-lg"
+                  onChange={(e) => setNewCategory(e.target.value as DocumentCategory)}
+                  className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none font-semibold"
                 >
                   <option value="Contrato de Trabalho">Contrato de Trabalho</option>
+                  <option value="Termo de Admissão">Termo de Admissão</option>
                   <option value="NDA / Sigilo">NDA / Sigilo</option>
                   <option value="Declaração de Benefícios">Declaração de Benefícios</option>
-                  <option value="Termo de Admissão">Termo de Admissão</option>
                   <option value="Atestado / Laudo">Atestado / Laudo</option>
+                  <option value="Termo de Equipamentos">Termo de Equipamentos</option>
+                  <option value="Aditivo Contratual">Aditivo Contratual</option>
+                  <option value="Outros">Outros</option>
                 </select>
               </div>
 
               <div className="grid grid-cols-2 gap-2">
                 <div>
-                  <label className="block text-xs font-semibold text-slate-700 mb-1">Vínculo com *</label>
+                  <label className="block font-bold text-slate-700 mb-1">Vínculo com *</label>
                   <select
                     value={newEntityType}
                     onChange={(e) => setNewEntityType(e.target.value as any)}
-                    className="w-full text-xs px-3 py-2 border border-slate-200 rounded-lg"
+                    className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none font-semibold"
                   >
                     <option value="Colaborador">Colaborador</option>
                     <option value="Candidato">Candidato</option>
@@ -357,25 +398,35 @@ export const DocumentsSignatureView: React.FC = () => {
                 </div>
 
                 <div>
-                  <label className="block text-xs font-semibold text-slate-700 mb-1">Nome da Pessoa / Entidade *</label>
+                  <label className="block font-bold text-slate-700 mb-1">Pessoa / Entidade *</label>
                   <input
                     type="text"
                     required
                     value={newEntityName}
                     onChange={(e) => setNewEntityName(e.target.value)}
-                    placeholder="Ex: Gabriel Lima"
-                    className="w-full text-xs px-3 py-2 border border-slate-200 rounded-lg"
+                    placeholder="Ex: Mariana Costa Siqueira"
+                    className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none"
                   />
                 </div>
               </div>
 
               <div>
-                <label className="block text-xs font-semibold text-slate-700 mb-1">Anexar Arquivo PDF *</label>
+                <label className="block font-bold text-slate-700 mb-1">Data de Validade (Opcional):</label>
+                <input
+                  type="date"
+                  value={newExpirationDate}
+                  onChange={(e) => setNewExpirationDate(e.target.value)}
+                  className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none"
+                />
+              </div>
+
+              <div>
+                <label className="block font-bold text-slate-700 mb-1">Anexar Arquivo (PDF / Texto) *</label>
                 <input
                   type="file"
-                  accept=".pdf"
+                  accept=".pdf,.txt,.doc,.docx"
                   onChange={(e) => setFileObj(e.target.files?.[0] || null)}
-                  className="w-full text-xs text-slate-500"
+                  className="w-full p-2 text-slate-500"
                 />
               </div>
 
@@ -383,15 +434,15 @@ export const DocumentsSignatureView: React.FC = () => {
                 <button
                   type="button"
                   onClick={() => setShowUploadModal(false)}
-                  className="px-4 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-100 rounded-xl"
+                  className="px-4 py-2 text-slate-600 hover:bg-slate-100 rounded-xl font-bold cursor-pointer"
                 >
                   Cancelar
                 </button>
                 <button
                   type="submit"
-                  className="px-4 py-2 text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-700 rounded-xl"
+                  className="px-5 py-2 font-bold text-white bg-indigo-600 hover:bg-indigo-700 rounded-xl shadow-xs cursor-pointer"
                 >
-                  Enviar Documento
+                  Salvar e Cadastrar
                 </button>
               </div>
             </form>
@@ -399,6 +450,7 @@ export const DocumentsSignatureView: React.FC = () => {
         </div>
       )}
 
+      {/* AI Assistant Modal */}
       <ContextualAiModal
         isOpen={showAiModal}
         onClose={() => setShowAiModal(false)}

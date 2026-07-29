@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   Calculator, 
   FileText, 
@@ -20,30 +20,63 @@ import {
   AlertTriangle,
   FileCheck,
   Zap,
-  Sliders
+  Sliders,
+  RefreshCw,
+  FileCode,
+  Percent,
+  Shield
 } from 'lucide-react';
 import { useAuth } from '../auth';
-import { PayrollPeriod, Paystub, PayrollType } from './types/payroll';
 import { 
-  getPayrollPeriods, 
-  getPaystubs, 
-  closePayrollPeriod, 
-  reopenPayrollPeriod, 
-  createNewPayrollPeriod,
-  updatePeriodCounters 
-} from './services/payrollStore';
+  PayrollPeriod, 
+  Paystub, 
+  PayrollType, 
+  RubricDefinition, 
+  TaxTableVersion, 
+  PayrollAuditLog,
+  PayrollValidationResult 
+} from './types/payroll';
+import { 
+  getPayrollPeriodsFirestore, 
+  savePayrollPeriodFirestore, 
+  closePayrollPeriodFirestore, 
+  reopenPayrollPeriodFirestore, 
+  getPaystubsFirestore, 
+  savePaystubFirestore, 
+  getRubricCatalogFirestore, 
+  saveRubricFirestore, 
+  getTaxTablesFirestore, 
+  saveTaxTableFirestore, 
+  getPayrollAuditLogsFirestore, 
+  processBatchPayrollFirestore, 
+  validatePayrollPeriodFirestore,
+  DEFAULT_TAX_TABLE_2026,
+  DEFAULT_RUBRICS 
+} from './services/payrollFirestoreService';
 import { PaystubModal } from './components/PaystubModal';
 import { PayrollSimulatorModal } from './components/PayrollSimulatorModal';
 import { ESocialModule } from './components/ESocialModule';
 import { ReopenPeriodModal } from './components/ReopenPeriodModal';
+import { RubricsAndTaxesModule } from './components/RubricsAndTaxesModule';
+import { PayrollAuditTab } from './components/PayrollAuditTab';
 
 export const PayrollView: React.FC = () => {
   const { user } = useAuth();
-  const [periods, setPeriods] = useState<PayrollPeriod[]>(() => getPayrollPeriods());
-  const [paystubs, setPaystubs] = useState<Paystub[]>(() => getPaystubs());
-  const [activePeriodId, setActivePeriodId] = useState<string>(periods[0]?.id || 'per-2026-07');
+  const companyId = user?.companyId || user?.empresaId || user?.tenantId || 'emp-001';
+
+  const [loading, setLoading] = useState(true);
+  const [processingBatch, setProcessingBatch] = useState(false);
+
+  // Firestore State
+  const [periods, setPeriods] = useState<PayrollPeriod[]>([]);
+  const [paystubs, setPaystubs] = useState<Paystub[]>([]);
+  const [rubrics, setRubrics] = useState<RubricDefinition[]>([]);
+  const [taxTable, setTaxTable] = useState<TaxTableVersion>(DEFAULT_TAX_TABLE_2026);
+  const [auditLogs, setAuditLogs] = useState<PayrollAuditLog[]>([]);
+
+  const [activePeriodId, setActivePeriodId] = useState<string>('per-2026-07');
+  const [activeTab, setActiveTab] = useState<'gestao' | 'rubricas' | 'esocial' | 'auditoria' | 'portal'>('gestao');
   
-  const [activeTab, setActiveTab] = useState<'gestao' | 'esocial' | 'portal'>('gestao');
   const [searchTerm, setSearchTerm] = useState('');
   const [departmentFilter, setDepartmentFilter] = useState('Todos');
   const [signatureFilter, setSignatureFilter] = useState<'Todos' | 'Pendente' | 'Assinado Digitalmente'>('Todos');
@@ -51,13 +84,56 @@ export const PayrollView: React.FC = () => {
   const [selectedPaystub, setSelectedPaystub] = useState<Paystub | null>(null);
   const [showSimulatorModal, setShowSimulatorModal] = useState(false);
   const [showReopenModal, setShowReopenModal] = useState(false);
+  const [showValidationModal, setShowValidationModal] = useState(false);
+  const [validationResult, setValidationResult] = useState<PayrollValidationResult | null>(null);
 
   const [showNewPeriodModal, setShowNewPeriodModal] = useState(false);
   const [newPeriodMonth, setNewPeriodMonth] = useState('2026-08');
   const [newPeriodType, setNewPeriodType] = useState<PayrollType>('Mensal');
 
   const isMasterOrAdmin = user?.role === 'Super Administrador' || user?.role === 'Administrador' || user?.tipoUsuario === 'MASTER' || user?.department === 'Gente & Gestão';
-  const isEmployee = user?.tipoUsuario === 'FUNCIONARIO' || !isMasterOrAdmin;
+  const isEmployee = user?.tipoUsuario === 'FUNCIONARIO' || (!isMasterOrAdmin && user?.role === 'Colaborador');
+
+  // Load all Payroll Data from Firestore on mount
+  useEffect(() => {
+    let isMounted = true;
+    async function loadPayrollData() {
+      setLoading(true);
+      try {
+        const [
+          periodsData,
+          paystubsData,
+          rubricsData,
+          taxTablesData,
+          auditData
+        ] = await Promise.all([
+          getPayrollPeriodsFirestore(companyId),
+          getPaystubsFirestore(companyId),
+          getRubricCatalogFirestore(companyId),
+          getTaxTablesFirestore(companyId),
+          getPayrollAuditLogsFirestore(companyId)
+        ]);
+
+        if (isMounted) {
+          setPeriods(periodsData);
+          setPaystubs(paystubsData);
+          setRubrics(rubricsData);
+          if (taxTablesData.length > 0) setTaxTable(taxTablesData[0]);
+          setAuditLogs(auditData);
+
+          if (periodsData.length > 0 && !activePeriodId) {
+            setActivePeriodId(periodsData[0].id);
+          }
+        }
+      } catch (err) {
+        console.error('[Payroll] Erro ao carregar dados do Firebase:', err);
+      } finally {
+        if (isMounted) setLoading(false);
+      }
+    }
+
+    loadPayrollData();
+  }, [companyId]);
 
   const currentPeriod = periods.find(p => p.id === activePeriodId) || periods[0];
   const isClosedPeriod = currentPeriod?.status === 'Fechado';
@@ -81,36 +157,104 @@ export const PayrollView: React.FC = () => {
     return true;
   });
 
-  const handleUpdatePaystubs = () => {
-    const freshStubs = getPaystubs();
+  const handleRefreshData = async () => {
+    const freshStubs = await getPaystubsFirestore(companyId);
     setPaystubs(freshStubs);
-    const freshPeriods = getPayrollPeriods();
+    const freshPeriods = await getPayrollPeriodsFirestore(companyId);
     setPeriods(freshPeriods);
+    const freshLogs = await getPayrollAuditLogsFirestore(companyId);
+    setAuditLogs(freshLogs);
   };
 
-  const handleClosePeriod = () => {
-    if (!currentPeriod) return;
-    const updated = closePayrollPeriod(currentPeriod.id, user?.name || 'Administrador DP');
-    setPeriods(updated);
+  const handleReprocessPayroll = async () => {
+    if (!currentPeriod || isClosedPeriod) return;
+    setProcessingBatch(true);
+    try {
+      const { period, paystubs: updatedStubs } = await processBatchPayrollFirestore(
+        companyId,
+        currentPeriod.referenceMonth,
+        currentPeriod.type,
+        user?.name || 'Administrador DP',
+        user?.email || 'dp@maisrh.com.br'
+      );
+
+      await handleRefreshData();
+    } catch (err) {
+      console.error('[Payroll] Erro ao reprocessar folha:', err);
+    } finally {
+      setProcessingBatch(false);
+    }
   };
 
-  const handleReopenPeriod = (reason: string) => {
+  const handleClosePeriod = async () => {
     if (!currentPeriod) return;
-    const updated = reopenPayrollPeriod(currentPeriod.id, user?.name || 'Administrador DP', reason);
-    setPeriods(updated);
+
+    // Run pre-closure validation
+    const val = await validatePayrollPeriodFirestore(companyId, currentPeriod.id);
+    setValidationResult(val);
+
+    if (!val.valid) {
+      setShowValidationModal(true);
+      return;
+    }
+
+    await closePayrollPeriodFirestore(
+      companyId,
+      currentPeriod.id,
+      user?.name || 'Administrador DP',
+      user?.email || 'dp@maisrh.com.br'
+    );
+    await handleRefreshData();
+  };
+
+  const handleReopenPeriod = async (reason: string) => {
+    if (!currentPeriod) return;
+    await reopenPayrollPeriodFirestore(
+      companyId,
+      currentPeriod.id,
+      user?.name || 'Administrador DP',
+      user?.email || 'dp@maisrh.com.br',
+      reason
+    );
+    await handleRefreshData();
     setShowReopenModal(false);
   };
 
-  const handleCreatePeriod = (e: React.FormEvent) => {
+  const handleCreatePeriod = async (e: React.FormEvent) => {
     e.preventDefault();
-    const updatedPeriods = createNewPayrollPeriod(newPeriodMonth, newPeriodType);
-    setPeriods(updatedPeriods);
-    setPaystubs(getPaystubs());
-    setActivePeriodId(`per-${newPeriodMonth}`);
-    setShowNewPeriodModal(false);
+    setProcessingBatch(true);
+    try {
+      const { period } = await processBatchPayrollFirestore(
+        companyId,
+        newPeriodMonth,
+        newPeriodType,
+        user?.name || 'Administrador DP',
+        user?.email || 'dp@maisrh.com.br'
+      );
+      
+      await handleRefreshData();
+      setActivePeriodId(period.id);
+      setShowNewPeriodModal(false);
+    } catch (err) {
+      console.error('[Payroll] Erro ao criar nova competência:', err);
+    } finally {
+      setProcessingBatch(false);
+    }
   };
 
-  // If employee access only
+  const handleSaveRubric = async (rubric: RubricDefinition) => {
+    await saveRubricFirestore(companyId, rubric);
+    const updated = await getRubricCatalogFirestore(companyId);
+    setRubrics(updated);
+  };
+
+  const handleSaveTaxTable = async (table: TaxTableVersion) => {
+    await saveTaxTableFirestore(companyId, table);
+    const updated = await getTaxTablesFirestore(companyId);
+    if (updated.length > 0) setTaxTable(updated[0]);
+  };
+
+  // Employee Portal View
   if (isEmployee) {
     return (
       <div className="space-y-6">
@@ -180,7 +324,7 @@ export const PayrollView: React.FC = () => {
             isClosedPeriod={false}
             canEdit={false}
             onClose={() => setSelectedPaystub(null)}
-            onUpdate={handleUpdatePaystubs}
+            onUpdate={handleRefreshData}
           />
         )}
       </div>
@@ -195,16 +339,16 @@ export const PayrollView: React.FC = () => {
         <div>
           <div className="flex items-center gap-2">
             <span className="px-2.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 text-[10px] font-black uppercase tracking-wider border border-emerald-400/30">
-              Módulo Gestão Trabalhista CLT 2026
+              Módulo Folha de Pagamento Automatizada 100%
             </span>
-            <span className="text-xs text-slate-400">• eSocial & Folha Integrada</span>
+            <span className="text-xs text-slate-400">• eSocial & Firebase Multiempresa</span>
           </div>
           <h1 className="text-2xl font-black mt-1 flex items-center gap-2">
             <Calculator className="w-6 h-6 text-emerald-400" />
             Folha de Pagamento & Encargos Sociais
           </h1>
           <p className="text-xs text-slate-300 mt-0.5">
-            Processamento de salários, horas extras, insalubridade, INSS, IRRF, FGTS e eSocial com trava de segurança.
+            Cálculo automatizado de salários, horas extras, insalubridade, INSS, IRRF, FGTS e eSocial com trava de segurança.
           </p>
         </div>
 
@@ -225,16 +369,29 @@ export const PayrollView: React.FC = () => {
             </select>
           </div>
 
+          {/* Reprocess Batch Payroll Button */}
+          {!isClosedPeriod && (
+            <button
+              onClick={handleReprocessPayroll}
+              disabled={processingBatch}
+              className="px-3.5 py-2 bg-indigo-600 hover:bg-indigo-500 text-white font-black text-xs rounded-xl transition-all cursor-pointer border border-indigo-400/30 flex items-center gap-1.5 shadow-sm disabled:opacity-50"
+              title="Recalcular toda a folha do mês com dados atualizados"
+            >
+              <RefreshCw className={`w-4 h-4 text-indigo-200 ${processingBatch ? 'animate-spin' : ''}`} />
+              <span>{processingBatch ? 'Calculando...' : 'Recalcular Folha'}</span>
+            </button>
+          )}
+
           {/* Simulator Modal Trigger */}
           <button
             onClick={() => setShowSimulatorModal(true)}
-            className="px-3.5 py-2 bg-indigo-600/80 hover:bg-indigo-600 text-white font-black text-xs rounded-xl transition-all cursor-pointer border border-indigo-400/30 flex items-center gap-1.5 shadow-sm"
+            className="px-3.5 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 font-black text-xs rounded-xl transition-all cursor-pointer border border-slate-700 flex items-center gap-1.5 shadow-sm"
           >
             <Sliders className="w-4 h-4 text-indigo-300" />
             <span>Simulador CLT</span>
           </button>
 
-          {/* Process / New Period */}
+          {/* New Period */}
           <button
             onClick={() => setShowNewPeriodModal(true)}
             className="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-500 text-white font-black text-xs rounded-xl transition-all cursor-pointer border border-emerald-400/30 flex items-center gap-1.5 shadow-md"
@@ -267,10 +424,10 @@ export const PayrollView: React.FC = () => {
       </div>
 
       {/* Navigation Sub-Tabs */}
-      <div className="flex border-b border-slate-200 gap-2">
+      <div className="flex border-b border-slate-200 gap-2 overflow-x-auto">
         <button
           onClick={() => setActiveTab('gestao')}
-          className={`px-4 py-2.5 font-extrabold text-xs rounded-t-xl transition-all cursor-pointer flex items-center gap-2 ${
+          className={`px-4 py-2.5 font-extrabold text-xs rounded-t-xl transition-all cursor-pointer flex items-center gap-2 whitespace-nowrap ${
             activeTab === 'gestao'
               ? 'bg-white text-indigo-600 border-t-2 border-x border-slate-200 border-t-indigo-600 shadow-xs'
               : 'text-slate-500 hover:text-slate-800 hover:bg-slate-50'
@@ -281,8 +438,20 @@ export const PayrollView: React.FC = () => {
         </button>
 
         <button
+          onClick={() => setActiveTab('rubricas')}
+          className={`px-4 py-2.5 font-extrabold text-xs rounded-t-xl transition-all cursor-pointer flex items-center gap-2 whitespace-nowrap ${
+            activeTab === 'rubricas'
+              ? 'bg-white text-indigo-600 border-t-2 border-x border-slate-200 border-t-indigo-600 shadow-xs'
+              : 'text-slate-500 hover:text-slate-800 hover:bg-slate-50'
+          }`}
+        >
+          <FileCode className="w-4 h-4 text-amber-600" />
+          <span>Rúbricas & Tabelas Tributárias</span>
+        </button>
+
+        <button
           onClick={() => setActiveTab('esocial')}
-          className={`px-4 py-2.5 font-extrabold text-xs rounded-t-xl transition-all cursor-pointer flex items-center gap-2 ${
+          className={`px-4 py-2.5 font-extrabold text-xs rounded-t-xl transition-all cursor-pointer flex items-center gap-2 whitespace-nowrap ${
             activeTab === 'esocial'
               ? 'bg-white text-indigo-600 border-t-2 border-x border-slate-200 border-t-indigo-600 shadow-xs'
               : 'text-slate-500 hover:text-slate-800 hover:bg-slate-50'
@@ -293,8 +462,20 @@ export const PayrollView: React.FC = () => {
         </button>
 
         <button
+          onClick={() => setActiveTab('auditoria')}
+          className={`px-4 py-2.5 font-extrabold text-xs rounded-t-xl transition-all cursor-pointer flex items-center gap-2 whitespace-nowrap ${
+            activeTab === 'auditoria'
+              ? 'bg-white text-indigo-600 border-t-2 border-x border-slate-200 border-t-indigo-600 shadow-xs'
+              : 'text-slate-500 hover:text-slate-800 hover:bg-slate-50'
+          }`}
+        >
+          <Shield className="w-4 h-4 text-indigo-600" />
+          <span>Trilha de Auditoria ({auditLogs.length})</span>
+        </button>
+
+        <button
           onClick={() => setActiveTab('portal')}
-          className={`px-4 py-2.5 font-extrabold text-xs rounded-t-xl transition-all cursor-pointer flex items-center gap-2 ${
+          className={`px-4 py-2.5 font-extrabold text-xs rounded-t-xl transition-all cursor-pointer flex items-center gap-2 whitespace-nowrap ${
             activeTab === 'portal'
               ? 'bg-white text-indigo-600 border-t-2 border-x border-slate-200 border-t-indigo-600 shadow-xs'
               : 'text-slate-500 hover:text-slate-800 hover:bg-slate-50'
@@ -317,10 +498,10 @@ export const PayrollView: React.FC = () => {
                 <DollarSign className="w-4 h-4 text-emerald-600" />
               </span>
               <p className="text-2xl font-black text-slate-900">
-                R$ {currentPeriod?.totalGross.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                R$ {(currentPeriod?.totalGross || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
               </p>
               <span className="text-[10px] text-emerald-700 font-bold bg-emerald-50 px-2 py-0.5 rounded-md inline-block">
-                Base calculada para {currentPeriod?.totalEmployees} colaboradores
+                Base calculada para {currentPeriod?.totalEmployees || 0} colaboradores
               </span>
             </div>
 
@@ -330,7 +511,7 @@ export const PayrollView: React.FC = () => {
                 <TrendingUp className="w-4 h-4 text-rose-600" />
               </span>
               <p className="text-2xl font-black text-rose-600">
-                R$ {currentPeriod?.totalDiscounts.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                R$ {(currentPeriod?.totalDiscounts || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
               </p>
               <span className="text-[10px] text-rose-700 font-bold bg-rose-50 px-2 py-0.5 rounded-md inline-block">
                 Retenções fiscais na fonte
@@ -343,7 +524,7 @@ export const PayrollView: React.FC = () => {
                 <CheckCircle2 className="w-4 h-4 text-indigo-600" />
               </span>
               <p className="text-2xl font-black text-indigo-600">
-                R$ {currentPeriod?.totalNet.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                R$ {(currentPeriod?.totalNet || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
               </p>
               <span className="text-[10px] text-indigo-700 font-bold bg-indigo-50 px-2 py-0.5 rounded-md inline-block">
                 Depósito bancário em conta
@@ -356,7 +537,7 @@ export const PayrollView: React.FC = () => {
                 <Building2 className="w-4 h-4 text-amber-600" />
               </span>
               <p className="text-2xl font-black text-amber-700">
-                R$ {currentPeriod?.totalPatronal.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                R$ {(currentPeriod?.totalPatronal || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
               </p>
               <span className="text-[10px] text-amber-800 font-bold bg-amber-50 px-2 py-0.5 rounded-md inline-block">
                 INSS Patronal (20%) + RAT/Terceiros
@@ -482,8 +663,22 @@ export const PayrollView: React.FC = () => {
         </div>
       )}
 
+      {/* Rúbricas e Tabelas Tab */}
+      {activeTab === 'rubricas' && (
+        <RubricsAndTaxesModule
+          rubrics={rubrics}
+          taxTable={taxTable}
+          onSaveRubric={handleSaveRubric}
+          onSaveTaxTable={handleSaveTaxTable}
+          isClosedPeriod={isClosedPeriod}
+        />
+      )}
+
       {/* eSocial Tab */}
       {activeTab === 'esocial' && <ESocialModule />}
+
+      {/* Audit Logs Tab */}
+      {activeTab === 'auditoria' && <PayrollAuditTab logs={auditLogs} />}
 
       {/* Employee Portal Tab */}
       {activeTab === 'portal' && (
@@ -542,7 +737,7 @@ export const PayrollView: React.FC = () => {
           isClosedPeriod={isClosedPeriod}
           canEdit={isMasterOrAdmin}
           onClose={() => setSelectedPaystub(null)}
-          onUpdate={handleUpdatePaystubs}
+          onUpdate={handleRefreshData}
         />
       )}
 
@@ -558,6 +753,37 @@ export const PayrollView: React.FC = () => {
           onConfirm={handleReopenPeriod}
           onClose={() => setShowReopenModal(false)}
         />
+      )}
+
+      {/* Validation Failure Modal */}
+      {showValidationModal && validationResult && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl max-w-md w-full shadow-2xl border border-slate-200 p-6 space-y-4">
+            <div className="flex items-center gap-3 text-rose-600">
+              <AlertTriangle className="w-6 h-6" />
+              <h3 className="text-base font-black text-slate-900">Inconsistências Pré-Fechamento</h3>
+            </div>
+
+            <p className="text-xs text-slate-600">
+              Corrija os erros listados abaixo antes de travar a folha de pagamento:
+            </p>
+
+            <ul className="space-y-1 text-xs text-rose-700 font-bold bg-rose-50 border border-rose-200 p-3 rounded-xl">
+              {validationResult.errors.map((err, i) => (
+                <li key={i}>• {err}</li>
+              ))}
+            </ul>
+
+            <div className="flex justify-end pt-2">
+              <button
+                onClick={() => setShowValidationModal(false)}
+                className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-white font-extrabold text-xs rounded-xl cursor-pointer"
+              >
+                Entendido
+              </button>
+            </div>
+          </div>
+        </div>
       )}
 
       {/* Modal Nova Folha / Mês */}
@@ -604,9 +830,11 @@ export const PayrollView: React.FC = () => {
                 </button>
                 <button
                   type="submit"
-                  className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 font-extrabold text-white cursor-pointer shadow-md"
+                  disabled={processingBatch}
+                  className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 font-extrabold text-white cursor-pointer shadow-md flex items-center gap-1.5 disabled:opacity-50"
                 >
-                  Criar e Processar
+                  {processingBatch && <RefreshCw className="w-3.5 h-3.5 animate-spin" />}
+                  <span>{processingBatch ? 'Processando...' : 'Criar e Processar'}</span>
                 </button>
               </div>
             </form>

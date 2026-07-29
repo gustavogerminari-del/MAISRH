@@ -3,6 +3,8 @@ import { HRDocument } from './types';
 export const MOCK_DOCUMENTS: HRDocument[] = [
   {
     id: 'doc-001',
+    companyId: 'emp-001',
+    version: 1,
     title: 'Contrato Individual de Trabalho CLT - Mariana Siqueira',
     fileName: 'contrato_clt_mariana_siqueira_v2.pdf',
     fileSize: '1.4 MB',
@@ -19,6 +21,8 @@ export const MOCK_DOCUMENTS: HRDocument[] = [
   },
   {
     id: 'doc-002',
+    companyId: 'emp-001',
+    version: 1,
     title: 'Termo de Confidencialidade e NDA Corporativo',
     fileName: 'nda_termo_confidencialidade_2026.pdf',
     fileSize: '850 KB',
@@ -35,6 +39,8 @@ export const MOCK_DOCUMENTS: HRDocument[] = [
   },
   {
     id: 'doc-003',
+    companyId: 'emp-001',
+    version: 1,
     title: 'Adesão ao Vale Refeição & Vale Transporte Flex',
     fileName: 'termo_opcao_beneficios_thiago.pdf',
     fileSize: '620 KB',

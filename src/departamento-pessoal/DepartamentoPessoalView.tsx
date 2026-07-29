@@ -12,9 +12,11 @@ import {
   LayoutDashboard, 
   UserPlus, 
   ShieldAlert, 
-  Key 
+  Key,
+  HeartPulse 
 } from 'lucide-react';
 import { useAuth } from '../auth';
+import { SstView } from '../sst/SstView';
 
 // Import Types and Seeds
 import { 
@@ -46,10 +48,18 @@ import {
   getRescisoesFirestore, 
   concluirRescisaoEBloquearColaborador, 
   getAdmissoesPendenteFirestore, 
+  saveAdmissaoFirestore,
+  deleteAdmissaoFirestore,
   concluirEfetivacaoAdmissao, 
   getConfigTrabalhistaFirestore, 
   saveConfigTrabalhistaFirestore 
 } from './services/dpFirestoreService';
+
+import { 
+  getDPAlertsFirestore, 
+  updateDPAlertStatusFirestore 
+} from './services/dpAnalyticsService';
+import { DPAlertItem, AlertStatus } from './types/dp';
 
 // Import Submenu Components
 import { DpDashboard } from './components/DpDashboard';
@@ -73,6 +83,7 @@ export type DPSubTab =
   | 'admissoes' 
   | 'beneficios' 
   | 'ferias-afastamentos' 
+  | 'sst'
   | 'documentos' 
   | 'rescisao' 
   | 'folha-pagamento' 
@@ -102,6 +113,7 @@ export const DepartamentoPessoalView: React.FC<DepartamentoPessoalViewProps> = (
   const [ajustesPonto, setAjustesPonto] = useState<AjustePontoColaborador[]>([]);
   const [rescisoes, setRescisoes] = useState<CalculoRescisorio[]>([]);
   const [admissoes, setAdmissoes] = useState<AdmissaoPending[]>([]);
+  const [alerts, setAlerts] = useState<DPAlertItem[]>([]);
   const [configTrabalhista, setConfigTrabalhista] = useState<ConfiguracoesTrabalhistas | null>(null);
 
   // Sync state with prop if changed
@@ -126,7 +138,8 @@ export const DepartamentoPessoalView: React.FC<DepartamentoPessoalViewProps> = (
           ajustesData,
           rescData,
           admsData,
-          cfgData
+          cfgData,
+          alertsData
         ] = await Promise.all([
           getColaboradoresFirestore(companyId),
           getBeneficiosFirestore(companyId),
@@ -136,7 +149,8 @@ export const DepartamentoPessoalView: React.FC<DepartamentoPessoalViewProps> = (
           getAjustesPontoFirestore(companyId),
           getRescisoesFirestore(companyId),
           getAdmissoesPendenteFirestore(companyId),
-          getConfigTrabalhistaFirestore(companyId)
+          getConfigTrabalhistaFirestore(companyId),
+          getDPAlertsFirestore(companyId)
         ]);
 
         if (isMounted) {
@@ -149,6 +163,7 @@ export const DepartamentoPessoalView: React.FC<DepartamentoPessoalViewProps> = (
           setRescisoes(rescData);
           setAdmissoes(admsData);
           setConfigTrabalhista(cfgData);
+          setAlerts(alertsData);
         }
       } catch (err) {
         console.error('[DP] Erro ao carregar dados do Firebase:', err);
@@ -163,6 +178,11 @@ export const DepartamentoPessoalView: React.FC<DepartamentoPessoalViewProps> = (
     return () => { isMounted = false; };
   }, [companyId]);
 
+  const handleUpdateAlertStatus = async (alertId: string, status: AlertStatus, ignoreReason?: string) => {
+    setAlerts(prev => prev.map(a => a.id === alertId ? { ...a, status, ignoreReason } : a));
+    await updateDPAlertStatusFirestore(alertId, status, user?.name, ignoreReason);
+  };
+
   // Action Handlers bound to Firestore
   const handleSalvarColaborador = async (colab: ColaboradorCompleto) => {
     const updated = colaboradores.some(c => c.id === colab.id)
@@ -170,6 +190,19 @@ export const DepartamentoPessoalView: React.FC<DepartamentoPessoalViewProps> = (
       : [colab, ...colaboradores];
     setColaboradores(updated);
     await saveColaboradorFirestore(colab);
+  };
+
+  const handleSalvarAdmissao = async (admissao: AdmissaoPending) => {
+    const updated = admissoes.some(a => a.id === admissao.id)
+      ? admissoes.map(a => a.id === admissao.id ? admissao : a)
+      : [admissao, ...admissoes];
+    setAdmissoes(updated);
+    await saveAdmissaoFirestore(admissao);
+  };
+
+  const handleDeletarAdmissao = async (admissaoId: string) => {
+    setAdmissoes(prev => prev.filter(a => a.id !== admissaoId));
+    await deleteAdmissaoFirestore(admissaoId);
   };
 
   const handleEfetivarAdmissao = async (
@@ -223,6 +256,7 @@ export const DepartamentoPessoalView: React.FC<DepartamentoPessoalViewProps> = (
     { id: 'admissoes', label: 'Admissões', icon: UserPlus },
     { id: 'beneficios', label: 'Benefícios', icon: Gift },
     { id: 'ferias-afastamentos', label: 'Férias e Afastamentos', icon: Umbrella },
+    { id: 'sst', label: 'Saúde e Segurança (SST)', icon: HeartPulse },
     { id: 'documentos', label: 'Documentos', icon: FileText },
     { id: 'rescisao', label: 'Rescisões', icon: LogOut },
     { id: 'folha-pagamento', label: 'Folha de Pagamento', icon: Calculator },
@@ -269,6 +303,8 @@ export const DepartamentoPessoalView: React.FC<DepartamentoPessoalViewProps> = (
       <div>
         {activeSubTab === 'visao-geral' && (
           <DpDashboard
+            userRole={user?.role || 'RH'}
+            companyId={companyId}
             colaboradores={colaboradores}
             ferias={feriasList}
             rescisoes={rescisoes}
@@ -276,6 +312,8 @@ export const DepartamentoPessoalView: React.FC<DepartamentoPessoalViewProps> = (
             documentos={documentos}
             ajustesPonto={ajustesPonto}
             admissoes={admissoes}
+            alerts={alerts}
+            onUpdateAlertStatus={handleUpdateAlertStatus}
             onNavigateSubTab={(tab) => setActiveSubTab(tab as DPSubTab)}
           />
         )}
@@ -297,6 +335,8 @@ export const DepartamentoPessoalView: React.FC<DepartamentoPessoalViewProps> = (
             admissoes={admissoes}
             colaboradores={colaboradores}
             onEfetivarAdmissao={handleEfetivarAdmissao}
+            onSalvarAdmissao={handleSalvarAdmissao}
+            onDeletarAdmissao={handleDeletarAdmissao}
             companyId={companyId}
           />
         )}
@@ -330,6 +370,10 @@ export const DepartamentoPessoalView: React.FC<DepartamentoPessoalViewProps> = (
           </div>
         )}
 
+        {activeSubTab === 'sst' && (
+          <SstView />
+        )}
+
         {activeSubTab === 'rescisao' && (
           <CalculoRescisao
             rescisoes={rescisoes}
@@ -345,10 +389,12 @@ export const DepartamentoPessoalView: React.FC<DepartamentoPessoalViewProps> = (
 
         {activeSubTab === 'relatorios-dp' && (
           <RelatoriosDpView
+            companyId={companyId}
             colaboradores={colaboradores}
             beneficios={beneficios}
             ferias={feriasList}
             rescisoes={rescisoes}
+            afastamentos={afastamentos}
           />
         )}
 

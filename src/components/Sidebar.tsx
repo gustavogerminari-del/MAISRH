@@ -23,6 +23,7 @@ import {
   Sun, 
   UserMinus, 
   FileCheck, 
+  HeartPulse,
   Calendar, 
   Settings, 
   Building, 
@@ -65,6 +66,7 @@ export type MainTab =
   | 'rescisao' 
   | 'documentos' 
   | 'afastamentos'
+  | 'sst'
   | 'agenda' 
   | 'relatorios' 
   | 'configuracoes' 
@@ -174,6 +176,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
         { id: 'rescisao', label: 'Rescisões', icon: UserMinus },
         { id: 'documentos', label: 'Documentos', icon: FileCheck },
         { id: 'afastamentos', label: 'Afastamentos', icon: ShieldAlert },
+        { id: 'sst', label: 'Saúde e Segurança (SST)', icon: HeartPulse },
       ]
     },
     {

@@ -19,6 +19,8 @@ export type PayrollType =
 export type RubricType = 'Provento' | 'Desconto' | 'Informativa';
 
 export interface RubricDefinition {
+  id?: string;
+  companyId?: string;
   code: string;           // Código eSocial / Interno (Ex: "1001", "5001")
   name: string;           // Nome da Rúbrica (Ex: "Salário Base", "INSS")
   type: RubricType;
@@ -26,7 +28,10 @@ export interface RubricDefinition {
   incidesINSS: boolean;
   incidesIRRF: boolean;
   incidesFGTS: boolean;
+  incidesDSR?: boolean;
   isSystemDefault: boolean;
+  formulaType?: 'Fixo' | 'Percentual' | 'Tabela' | 'Calculado';
+  formulaExpression?: string;
 }
 
 export interface PaystubItem {
@@ -37,6 +42,11 @@ export interface PaystubItem {
   reference: string;      // Ex: "220 hrs", "10 hrs 50%", "7,5%", "2 dependentes"
   amount: number;         // Valor em R$
   isManual?: boolean;     // Se foi adicionado/editado manualmente
+  calculationMemory?: {
+    baseValue?: number;
+    rateUsed?: number;
+    notes?: string;
+  };
 }
 
 export interface EmployerCharges {
@@ -49,6 +59,7 @@ export interface EmployerCharges {
 
 export interface Paystub {
   id: string;
+  companyId?: string;
   periodId: string;
   periodName: string;      // Ex: "Folha Mensal - Julho / 2026"
   employeeId: string;
@@ -92,10 +103,12 @@ export interface Paystub {
   hashDigital?: string;
   ipAssinatura?: string;
   notes?: string;
+  pdfUrl?: string;
 }
 
 export interface PayrollPeriod {
   id: string;
+  companyId?: string;
   referenceMonth: string;  // Ex: "2026-07"
   year: number;
   month: number;
@@ -118,6 +131,64 @@ export interface PayrollPeriod {
   paystubsCount: number;
   paystubsSignedCount: number;
   updatedAt: string;
+}
+
+export interface TaxBracket {
+  min: number;
+  max: number;
+  rate: number;
+  deduction?: number;
+}
+
+export interface TaxTableVersion {
+  id: string;
+  companyId: string;
+  vigenciaInicio: string;  // Ex: "2026-01"
+  vigenciaFim?: string;    // Opcional se for vigência atual
+  description: string;     // Ex: "Tabela Oficial Fisco 2026"
+  minimumWage: number;     // Ex: 1518.00
+  inssCeiling: number;     // Ex: 8157.41
+  irrfDependentDeduction: number; // Ex: 189.59
+  irrfSimplifiedDeduction: number; // Ex: 564.80
+  inssBrackets: TaxBracket[];
+  irrfBrackets: TaxBracket[];
+  ratPercent: number;      // Ex: 2.0
+  terceirosPercent: number;// Ex: 5.8
+  inssPatronalPercent: number; // Ex: 20.0
+  fgtsPercent: number;     // Ex: 8.0
+  isSystemDefault?: boolean;
+}
+
+export interface PayrollAuditLog {
+  id: string;
+  companyId: string;
+  periodId?: string;
+  action: string;
+  userEmail: string;
+  userName: string;
+  details: string;
+  timestamp: string;
+}
+
+export interface PayrollValidationResult {
+  valid: boolean;
+  warnings: string[];
+  errors: string[];
+  totalEmployeesToCheck: number;
+  employeesMissingSalary: string[];
+  employeesWithPendingAbsences: string[];
+}
+
+export interface PayrollConfig {
+  companyId: string;
+  diaPagamento: number;      // Ex: 5 (5º dia útil)
+  diaAdiantamento: number;   // Ex: 20
+  percentualAdiantamento: number; // Ex: 40%
+  pagaInsalubridade: boolean;
+  pagaPericulosidade: boolean;
+  bancoHorasAtivo: boolean;
+  integracaoPontoAutomatica: boolean;
+  integracaoBeneficiosAutomatica: boolean;
 }
 
 export interface ESocialEvent {

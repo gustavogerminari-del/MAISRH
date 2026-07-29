@@ -346,7 +346,7 @@ function MainAppContent() {
             )}
 
             {/* Departamento Pessoal Master Submenu Routing */}
-            {['departamento-pessoal', 'colaboradores', 'ponto-digital', 'jornada', 'beneficios', 'ferias', 'rescisao', 'documentos', 'afastamentos', 'relatorios-dp', 'configuracoes-trabalhistas'].includes(activeTab) && (
+            {['departamento-pessoal', 'colaboradores', 'ponto-digital', 'jornada', 'beneficios', 'ferias', 'rescisao', 'documentos', 'afastamentos', 'sst', 'relatorios-dp', 'configuracoes-trabalhistas'].includes(activeTab) && (
               <DepartamentoPessoalView initialSubTab={activeTab === 'jornada' ? 'ponto-digital' : (activeTab as DPSubTab)} />
             )}
 

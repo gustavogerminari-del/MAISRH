@@ -109,6 +109,51 @@ service cloud.firestore {
     match /solicitacoes_admissao/{id} {
       allow read, write: if true;
     }
+    match /employee_benefits/{id} {
+      allow read, write: if true;
+    }
+    match /historico_beneficios/{id} {
+      allow read, write: if true;
+    }
+    match /anotacoes_internas_colaborador/{id} {
+      allow read, write: if true;
+    }
+    match /periodos_aquisitivos/{id} {
+      allow read, write: if true;
+    }
+    match /regras_ferias/{id} {
+      allow read, write: if true;
+    }
+    match /cat_registros/{id} {
+      allow read, write: if true;
+    }
+    match /inss_processos/{id} {
+      allow read, write: if true;
+    }
+    match /retorno_trabalho/{id} {
+      allow read, write: if true;
+    }
+    match /alertas_dp/{id} {
+      allow read, write: if true;
+    }
+    match /audit_logs/{id} {
+      allow read, write: if true;
+    }
+    match /documents/{id} {
+      allow read, write: if true;
+    }
+    match /document_templates/{id} {
+      allow read, write: if true;
+    }
+    match /document_categories/{id} {
+      allow read, write: if true;
+    }
+    match /terminations/{id} {
+      allow read, write: if true;
+    }
+    match /termination_event_rules/{id} {
+      allow read, write: if true;
+    }
   }
 }
 

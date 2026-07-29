@@ -207,6 +207,29 @@
       },
       "required": ["id", "companyId", "title"]
     },
+    "document_templates": {
+      "title": "Modelos de Documentos",
+      "description": "Minutas e modelos de documentos com variáveis dinâmicas",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "companyId": { "type": "string" },
+        "title": { "type": "string" },
+        "templateText": { "type": "string" }
+      },
+      "required": ["id", "companyId", "title"]
+    },
+    "document_categories": {
+      "title": "Categorias de Documentos",
+      "description": "Configurações de categorias e prazos de vencimento",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "companyId": { "type": "string" },
+        "name": { "type": "string" }
+      },
+      "required": ["id", "companyId", "name"]
+    },
     "notifications": {
       "title": "Notificações",
       "description": "Notificações do sistema para usuários",
@@ -473,6 +496,14 @@
     "documents/{docId}": {
       "schema": { "$ref": "#/entities/documents" },
       "description": "Documentos e assinaturas"
+    },
+    "document_templates/{templateId}": {
+      "schema": { "$ref": "#/entities/document_templates" },
+      "description": "Modelos de documentos e minutas"
+    },
+    "document_categories/{catId}": {
+      "schema": { "$ref": "#/entities/document_categories" },
+      "description": "Categorias de documentos e alertas de validade"
     },
     "notifications/{notifId}": {
       "schema": { "$ref": "#/entities/notifications" },

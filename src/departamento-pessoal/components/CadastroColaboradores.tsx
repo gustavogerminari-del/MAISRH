@@ -39,9 +39,25 @@ import {
   TrendingUp,
   FileSpreadsheet,
   FileEdit,
-  Save
+  Save,
+  Sparkles,
+  BarChart2,
+  AlertTriangle,
+  GraduationCap,
+  Trash2
 } from 'lucide-react';
-import { ColaboradorCompleto, HistoricoOcorrenciaColaborador } from '../types/dp';
+import { 
+  ColaboradorCompleto, 
+  HistoricoOcorrenciaColaborador, 
+  BeneficioColaboradorIndividual, 
+  AnotacaoInternaColaborador 
+} from '../types/dp';
+import { 
+  getEmployeeBenefitsFirestore, 
+  getAnotacoesInternasFirestore, 
+  saveAnotacaoInternaFirestore, 
+  deleteAnotacaoInternaFirestore 
+} from '../services/dpFirestoreService';
 import { useAuth } from '../../auth';
 
 interface CadastroColaboradoresProps {
@@ -73,8 +89,23 @@ export const CadastroColaboradores: React.FC<CadastroColaboradoresProps> = ({
 
   // Modal de Detalhes / Perfil Completo
   const [isProfileOpen, setIsProfileOpen] = useState(false);
-  const [profileTab, setProfileTab] = useState<'pessoais' | 'contratuais' | 'jornada' | 'beneficios' | 'ferias' | 'documentos' | 'historico' | 'anotacoes'>('pessoais');
-  const [notesInput, setNotesInput] = useState('');
+  const [profileTab, setProfileTab] = useState<
+    'resumo' | 'cadastrais' | 'documentos' | 'beneficios' | 'ferias' | 'afastamentos' | 'ponto' | 'folha' | 'treinamentos' | 'avaliacoes' | 'advertencias' | 'anotacoes' | 'historico' | 'timeline' | 'analise-ia'
+  >('resumo');
+  
+  // Real Firestore Data for Selected Colaborador
+  const [colabBenefits, setColabBenefits] = useState<BeneficioColaboradorIndividual[]>([]);
+  const [colabNotes, setColabNotes] = useState<AnotacaoInternaColaborador[]>([]);
+  const [newNoteText, setNewNoteText] = useState('');
+  const [newNoteVis, setNewNoteVis] = useState<'somente_rh' | 'rh_e_gestor' | 'administrativa' | 'restrita'>('somente_rh');
+
+  // Load Colaborador Specific Benefits & Notes from Firestore
+  React.useEffect(() => {
+    if (selectedColaborador && isProfileOpen) {
+      getEmployeeBenefitsFirestore(companyId, selectedColaborador.id).then(setColabBenefits);
+      getAnotacoesInternasFirestore(companyId, selectedColaborador.id).then(setColabNotes);
+    }
+  }, [selectedColaborador?.id, isProfileOpen, companyId]);
 
   // State para Acesso no Perfil e Modal
   const [showPasswordInForm, setShowPasswordInForm] = useState(false);
@@ -269,6 +300,36 @@ export const CadastroColaboradores: React.FC<CadastroColaboradoresProps> = ({
     setSelectedColaborador(updated);
     setNewOcorrenciaDesc('');
     showNotification(`Nova ocorrência (${newOcorrenciaTipo}) registrada no histórico!`);
+  };
+
+  const handleAddInternalNote = async () => {
+    if (!selectedColaborador || !newNoteText.trim()) return;
+
+    const now = new Date().toISOString();
+    const noteId = `note-${Date.now()}`;
+    const newNote: AnotacaoInternaColaborador = {
+      id: noteId,
+      companyId,
+      employeeId: selectedColaborador.id,
+      content: newNoteText.trim(),
+      visibility: newNoteVis,
+      createdBy: (user as any)?.id || (user as any)?.uid || 'rh-user',
+      createdByName: (user as any)?.nomeCompleto || (user as any)?.nome || (user as any)?.displayName || 'Gestor de RH',
+      createdAt: now,
+      updatedAt: now
+    };
+
+    await saveAnotacaoInternaFirestore(newNote);
+    setColabNotes(prev => [newNote, ...prev]);
+    setNewNoteText('');
+    showNotification('Anotação interna gravada no prontuário do colaborador!');
+  };
+
+  const handleDeleteInternalNote = async (id: string) => {
+    if (!selectedColaborador) return;
+    await deleteAnotacaoInternaFirestore(id);
+    setColabNotes(prev => prev.filter(n => n.id !== id));
+    showNotification('Anotação interna removida.');
   };
 
   return (
@@ -1077,423 +1138,601 @@ export const CadastroColaboradores: React.FC<CadastroColaboradoresProps> = ({
         </div>
       )}
 
-      {/* Modal Profile Viewer - Hierarquia Completa */}
+      {/* Central do Colaborador - Painel Lateral (Drawer) */}
       {isProfileOpen && selectedColaborador && (
-        <div className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-4 overflow-y-auto">
-          <div className="bg-white rounded-2xl max-w-4xl w-full border border-slate-200 shadow-2xl p-6 space-y-5">
-            {/* Header */}
-            <div className="flex items-start justify-between border-b border-slate-100 pb-4">
-              <div className="flex items-center gap-4">
+        <div className="fixed inset-0 z-50 bg-slate-900/40 backdrop-blur-xs flex justify-end transition-opacity">
+          <div className="bg-white w-full max-w-3xl h-full shadow-2xl flex flex-col border-l border-slate-200 overflow-hidden animate-in slide-in-from-right duration-200">
+            {/* Header Lateral */}
+            <div className="p-5 bg-slate-900 text-white flex items-center justify-between shrink-0">
+              <div className="flex items-center gap-3.5">
                 <img
                   src={selectedColaborador.fotoUrl}
                   alt={selectedColaborador.nomeCompleto}
-                  className="w-16 h-16 rounded-full object-cover border-2 border-[#2563EB] shrink-0"
+                  className="w-14 h-14 rounded-full object-cover border-2 border-[#2563EB] shrink-0"
                 />
                 <div>
-                  <h3 className="text-lg font-bold text-[#1E293B]">{selectedColaborador.nomeCompleto}</h3>
-                  <p className="text-xs font-medium text-[#2563EB]">{selectedColaborador.profissionais.cargo}</p>
-                  <p className="text-xs text-slate-500">{selectedColaborador.profissionais.departamento} • Contrato {selectedColaborador.trabalhistas.tipoContrato}</p>
+                  <div className="flex items-center gap-2">
+                    <h3 className="text-base font-bold text-white">{selectedColaborador.nomeCompleto}</h3>
+                    <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
+                      {selectedColaborador.profissionais.status || 'Ativo'}
+                    </span>
+                  </div>
+                  <p className="text-xs text-blue-300 font-medium">{selectedColaborador.profissionais.cargo}</p>
+                  <p className="text-[11px] text-slate-400">{selectedColaborador.profissionais.departamento} • Contrato {selectedColaborador.trabalhistas.tipoContrato}</p>
                 </div>
               </div>
 
               <div className="flex items-center gap-2">
                 <button
                   onClick={() => handleOpenEdit(selectedColaborador)}
-                  className="px-3 py-1.5 bg-blue-50 text-[#2563EB] hover:bg-blue-100 text-xs font-bold rounded-xl flex items-center gap-1.5 cursor-pointer"
+                  className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-xl flex items-center gap-1.5 cursor-pointer transition-all shadow-xs"
                 >
                   <Edit3 className="w-3.5 h-3.5" />
                   <span>Editar</span>
                 </button>
                 <button 
                   onClick={() => setIsProfileOpen(false)}
-                  className="p-1 rounded-lg text-slate-400 hover:bg-slate-100 cursor-pointer"
+                  className="p-1.5 rounded-xl text-slate-400 hover:text-white hover:bg-slate-800 cursor-pointer transition-all"
+                  title="Fechar Painel"
                 >
                   <X className="w-5 h-5" />
                 </button>
               </div>
             </div>
 
-            {/* Hierarchical Profile Sub-Tabs */}
-            <div className="flex items-center gap-1.5 border-b border-slate-200 overflow-x-auto pb-2 scrollbar-none">
-              {[
-                { id: 'pessoais', label: 'Dados Pessoais', icon: UserCheck },
-                { id: 'contratuais', label: 'Dados Contratuais', icon: Briefcase },
-                { id: 'jornada', label: 'Jornada', icon: Clock },
-                { id: 'beneficios', label: 'Benefícios', icon: Gift },
-                { id: 'ferias', label: 'Férias', icon: Umbrella },
-                { id: 'documentos', label: 'Documentos', icon: FileText },
-                { id: 'historico', label: 'Histórico', icon: History },
-                { id: 'anotacoes', label: 'Anotações', icon: FileEdit }
-              ].map(tab => (
-                <button
-                  key={tab.id}
-                  onClick={() => setProfileTab(tab.id as any)}
-                  className={`px-3 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all shrink-0 cursor-pointer ${
-                    profileTab === tab.id 
-                      ? 'bg-[#2563EB] text-white shadow-xs' 
-                      : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-                  }`}
-                >
-                  <tab.icon className="w-3.5 h-3.5" />
-                  <span>{tab.label}</span>
-                </button>
-              ))}
+            {/* 15 Tabs Bar (Scrollable) */}
+            <div className="bg-slate-100 border-b border-slate-200 px-4 py-2.5 overflow-x-auto scrollbar-thin shrink-0">
+              <div className="flex items-center gap-1.5 min-w-max">
+                {[
+                  { id: 'resumo', label: 'Resumo', icon: BarChart2 },
+                  { id: 'cadastrais', label: 'Dados Cadastrais', icon: UserCheck },
+                  { id: 'documentos', label: 'Documentos', icon: FileText },
+                  { id: 'beneficios', label: 'Benefícios', icon: Gift },
+                  { id: 'ferias', label: 'Férias', icon: Umbrella },
+                  { id: 'afastamentos', label: 'Afastamentos', icon: ShieldAlert },
+                  { id: 'ponto', label: 'Ponto', icon: Clock },
+                  { id: 'folha', label: 'Folha', icon: DollarSign },
+                  { id: 'treinamentos', label: 'Treinamentos', icon: GraduationCap },
+                  { id: 'avaliacoes', label: 'Avaliações', icon: Award },
+                  { id: 'advertencias', label: 'Advertências', icon: AlertTriangle },
+                  { id: 'anotacoes', label: 'Anotações Internas', icon: FileEdit },
+                  { id: 'historico', label: 'Histórico', icon: History },
+                  { id: 'timeline', label: 'Linha do Tempo', icon: Calendar },
+                  { id: 'analise-ia', label: 'Análise IA', icon: Sparkles }
+                ].map(tab => (
+                  <button
+                    key={tab.id}
+                    onClick={() => setProfileTab(tab.id as any)}
+                    className={`px-3 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all shrink-0 cursor-pointer ${
+                      profileTab === tab.id 
+                        ? 'bg-[#2563EB] text-white shadow-xs' 
+                        : 'bg-white text-slate-600 hover:bg-slate-200 border border-slate-200'
+                    }`}
+                  >
+                    <tab.icon className="w-3.5 h-3.5" />
+                    <span>{tab.label}</span>
+                  </button>
+                ))}
+              </div>
             </div>
 
-            {/* TAB CONTENTS */}
-            {profileTab === 'pessoais' && (
-              <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 space-y-3 text-xs">
-                <h4 className="font-bold text-[#1E293B] text-xs border-b border-slate-200 pb-2 flex items-center gap-1.5">
-                  <UserCheck className="w-4 h-4 text-[#2563EB]" />
-                  <span>Dados Pessoais</span>
-                </h4>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                  <p><strong>Nome Completo:</strong> {selectedColaborador.pessoais.nomeCompleto}</p>
-                  <p><strong>CPF:</strong> {selectedColaborador.pessoais.cpf}</p>
-                  <p><strong>RG:</strong> {selectedColaborador.pessoais.rg || 'Não informado'}</p>
-                  <p><strong>Data de Nascimento:</strong> {selectedColaborador.pessoais.dataNascimento}</p>
-                  <p><strong>Estado Civil:</strong> {selectedColaborador.pessoais.estadoCivil}</p>
-                  <p><strong>Gênero / Sexo:</strong> {selectedColaborador.pessoais.genero || 'Não informado'}</p>
-                  <p><strong>Telefone WhatsApp:</strong> {selectedColaborador.pessoais.telefone}</p>
-                  <p><strong>E-mail Pessoal:</strong> {selectedColaborador.pessoais.emailPessoal}</p>
-                  <p className="col-span-1 md:col-span-2"><strong>Endereço Completo:</strong> {selectedColaborador.pessoais.endereco.logradouro}, {selectedColaborador.pessoais.endereco.numero} - {selectedColaborador.pessoais.endereco.bairro}, {selectedColaborador.pessoais.endereco.cidade}/{selectedColaborador.pessoais.endereco.estado} (CEP: {selectedColaborador.pessoais.endereco.cep})</p>
-                  <p><strong>Contato de Emergência:</strong> {selectedColaborador.pessoais.contatoEmergenciaNome || 'Não informado'} ({selectedColaborador.pessoais.contatoEmergenciaTelefone || 'Sem telefone'})</p>
-                </div>
-              </div>
-            )}
+            {/* Drawer Body - Tab Content Scrollable */}
+            <div className="flex-1 overflow-y-auto p-5 space-y-4">
+              {/* 1. RESUMO */}
+              {profileTab === 'resumo' && (
+                <div className="space-y-4 text-xs">
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                    <div className="bg-slate-50 p-3 rounded-xl border border-slate-200">
+                      <p className="text-[10px] text-slate-500 font-bold uppercase">Admissão</p>
+                      <p className="text-xs font-bold text-slate-800 mt-1">{selectedColaborador.profissionais.dataAdmissao}</p>
+                    </div>
+                    <div className="bg-slate-50 p-3 rounded-xl border border-slate-200">
+                      <p className="text-[10px] text-slate-500 font-bold uppercase">Salário Base</p>
+                      <p className="text-xs font-bold text-emerald-700 mt-1">{selectedColaborador.profissionais.salarioBase.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</p>
+                    </div>
+                    <div className="bg-slate-50 p-3 rounded-xl border border-slate-200">
+                      <p className="text-[10px] text-slate-500 font-bold uppercase">Contrato</p>
+                      <p className="text-xs font-bold text-blue-700 mt-1">{selectedColaborador.trabalhistas.tipoContrato}</p>
+                    </div>
+                    <div className="bg-slate-50 p-3 rounded-xl border border-slate-200">
+                      <p className="text-[10px] text-slate-500 font-bold uppercase">Gestor</p>
+                      <p className="text-xs font-bold text-slate-800 mt-1 truncate">{selectedColaborador.profissionais.gestorResponsavel}</p>
+                    </div>
+                  </div>
 
-            {profileTab === 'contratuais' && (
-              <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 space-y-3 text-xs">
-                <h4 className="font-bold text-[#1E293B] text-xs border-b border-slate-200 pb-2 flex items-center gap-1.5">
-                  <Briefcase className="w-4 h-4 text-[#2563EB]" />
-                  <span>Dados Contratuais & Vínculo Empregatício</span>
-                </h4>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                  <p><strong>Matrícula eSocial:</strong> <span className="font-mono bg-slate-200 px-1.5 py-0.5 rounded font-bold">{selectedColaborador.pessoais.cpf.replace(/\D/g,'').slice(0,6)}</span></p>
-                  <p><strong>Cargo Profissional:</strong> {selectedColaborador.profissionais.cargo}</p>
-                  <p><strong>Departamento:</strong> {selectedColaborador.profissionais.departamento}</p>
-                  <p><strong>Centro de Custo:</strong> {selectedColaborador.profissionais.centroCusto}</p>
-                  <p><strong>Data de Admissão:</strong> {selectedColaborador.profissionais.dataAdmissao}</p>
-                  <p><strong>Regime de Contratação:</strong> <span className="font-bold text-blue-700">CLT Mensalista</span></p>
-                  <p><strong>Salário Base:</strong> <span className="font-bold text-slate-900">{selectedColaborador.profissionais.salarioBase.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</span></p>
-                  <p><strong>Gestor Responsável:</strong> {selectedColaborador.profissionais.gestorResponsavel}</p>
-                  <p><strong>E-mail Corporativo:</strong> {selectedColaborador.profissionais.emailCorporativo}</p>
-                  <p><strong>Dados Bancários para Folha:</strong> Banco Bradesco (237) | Ag. 1420 | C/C 48201-9</p>
-                </div>
-              </div>
-            )}
+                  <div className="bg-blue-50/60 p-4 rounded-xl border border-blue-200 space-y-2">
+                    <h4 className="font-bold text-[#1E293B] text-xs flex items-center gap-1.5">
+                      <Briefcase className="w-4 h-4 text-[#2563EB]" />
+                      <span>Visão Geral Funcional</span>
+                    </h4>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-slate-700">
+                      <p><strong>E-mail Corp:</strong> {selectedColaborador.profissionais.emailCorporativo}</p>
+                      <p><strong>Escala:</strong> {selectedColaborador.profissionais.escalaTrabalho}</p>
+                      <p><strong>CPF:</strong> {selectedColaborador.pessoais.cpf}</p>
+                      <p><strong>WhatsApp:</strong> {selectedColaborador.pessoais.telefone}</p>
+                    </div>
+                  </div>
 
-            {profileTab === 'jornada' && (
-              <div className="space-y-4 text-xs">
-                <div className="bg-blue-50/60 p-4 rounded-xl border border-blue-200 space-y-2">
-                  <h4 className="font-bold text-[#1E293B] flex items-center gap-2">
-                    <Clock className="w-4 h-4 text-[#2563EB]" />
-                    <span>Jornada de Trabalho e Escala</span>
+                  <div className="p-4 bg-emerald-50/60 border border-emerald-200 rounded-xl flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0" />
+                      <div>
+                        <p className="font-bold text-emerald-900 text-xs">Status do eSocial & Cadastral</p>
+                        <p className="text-[11px] text-emerald-700">Todos os eventos S-2200 sincronizados com sucesso.</p>
+                      </div>
+                    </div>
+                    <span className="px-2.5 py-1 bg-emerald-600 text-white font-bold rounded-lg text-[10px]">100% Regular</span>
+                  </div>
+                </div>
+              )}
+
+              {/* 2. DADOS CADASTRAIS */}
+              {profileTab === 'cadastrais' && (
+                <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 space-y-3 text-xs">
+                  <h4 className="font-bold text-[#1E293B] text-xs border-b border-slate-200 pb-2 flex items-center gap-1.5">
+                    <UserCheck className="w-4 h-4 text-[#2563EB]" />
+                    <span>Dados Pessoais e Contratuais</span>
                   </h4>
-                  <p><strong>Escala Atual:</strong> {selectedColaborador.profissionais.escalaTrabalho} ({selectedColaborador.profissionais.jornadaSemanalHours}h semanais)</p>
-                  <p><strong>Horário Padrão:</strong> 08:00 às 12:00 | 13:00 às 18:00 (Segunda a Sexta)</p>
-                </div>
-
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                  <div className="p-3 bg-slate-50 rounded-xl border border-slate-200">
-                    <p className="text-[11px] text-slate-500">Saldo Banco de Horas</p>
-                    <p className="text-lg font-bold text-emerald-600">+08h 45min</p>
-                  </div>
-                  <div className="p-3 bg-slate-50 rounded-xl border border-slate-200">
-                    <p className="text-[11px] text-slate-500">Carga Semanal Cumprida</p>
-                    <p className="text-lg font-bold text-slate-900">44h / 44h</p>
-                  </div>
-                  <div className="p-3 bg-slate-50 rounded-xl border border-slate-200">
-                    <p className="text-[11px] text-slate-500">Atrasos / Faltas no Mês</p>
-                    <p className="text-lg font-bold text-slate-900">00h 00min</p>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    <p><strong>Nome Completo:</strong> {selectedColaborador.pessoais.nomeCompleto}</p>
+                    <p><strong>CPF:</strong> {selectedColaborador.pessoais.cpf}</p>
+                    <p><strong>RG:</strong> {selectedColaborador.pessoais.rg || 'Não informado'}</p>
+                    <p><strong>Data de Nascimento:</strong> {selectedColaborador.pessoais.dataNascimento}</p>
+                    <p><strong>Estado Civil:</strong> {selectedColaborador.pessoais.estadoCivil}</p>
+                    <p><strong>Gênero / Sexo:</strong> {selectedColaborador.pessoais.genero || 'Não informado'}</p>
+                    <p><strong>Telefone WhatsApp:</strong> {selectedColaborador.pessoais.telefone}</p>
+                    <p><strong>E-mail Pessoal:</strong> {selectedColaborador.pessoais.emailPessoal}</p>
+                    <p><strong>PIS/PASEP:</strong> {selectedColaborador.trabalhistas.pisPasep || '123.45678.90-1'}</p>
+                    <p><strong>CTPS:</strong> {selectedColaborador.trabalhistas.ctpsNumero}/{selectedColaborador.trabalhistas.ctpsSerie} - {selectedColaborador.trabalhistas.ctpsUf}</p>
+                    <p className="col-span-1 md:col-span-2"><strong>Endereço Completo:</strong> {selectedColaborador.pessoais.endereco.logradouro}, {selectedColaborador.pessoais.endereco.numero} - {selectedColaborador.pessoais.endereco.bairro}, {selectedColaborador.pessoais.endereco.cidade}/{selectedColaborador.pessoais.endereco.estado} (CEP: {selectedColaborador.pessoais.endereco.cep})</p>
+                    <p><strong>Dados Bancários:</strong> {selectedColaborador.trabalhistas.bancoAgenciaConta || 'Itaú / Ag 0123 / C/C 45678-9'}</p>
+                    <p><strong>Contato Emergência:</strong> {selectedColaborador.pessoais.contatoEmergenciaNome || 'Não informado'} ({selectedColaborador.pessoais.contatoEmergenciaTelefone || 'Sem telefone'})</p>
                   </div>
                 </div>
+              )}
 
-                <div className="border border-slate-200 rounded-xl overflow-hidden">
-                  <div className="bg-slate-100 px-3 py-2 font-bold text-slate-700 border-b border-slate-200">
-                    Últimas Marcações do Ponto Eletrônico (REP-P)
-                  </div>
-                  <div className="divide-y divide-slate-100">
-                    {[
-                      { data: 'Hoje (27/07)', e1: '08:00', s1: '12:00', e2: '13:20', s2: '18:00', status: 'Normal' },
-                      { data: 'Ontem (26/07)', e1: '07:55', s1: '12:00', e2: '13:15', s2: '18:10', status: 'Hora Extra +10m' },
-                      { data: '25/07/2026', e1: '08:02', s1: '12:05', e2: '13:20', s2: '18:00', status: 'Normal' }
-                    ].map((p, i) => (
-                      <div key={i} className="p-3 flex items-center justify-between">
-                        <span className="font-bold text-slate-800">{p.data}</span>
-                        <div className="flex gap-2 font-mono text-slate-600">
-                          <span>{p.e1}</span> → <span>{p.s1}</span> | <span>{p.e2}</span> → <span>{p.s2}</span>
-                        </div>
-                        <span className="px-2 py-0.5 rounded-md bg-emerald-50 text-emerald-700 font-bold text-[10px]">
-                          {p.status}
-                        </span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {profileTab === 'documentos' && (
-              <div className="space-y-4">
-                <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 flex items-center justify-between">
-                  <div>
-                    <h4 className="font-bold text-slate-800 text-xs">Gestão de Documentos Digitais</h4>
-                    <p className="text-[11px] text-slate-500">Documentação aceita no eSocial e pasta funcional do colaborador.</p>
-                  </div>
-                  <button className="px-3 py-1.5 bg-[#2563EB] text-white rounded-xl text-xs font-bold flex items-center gap-1.5 cursor-pointer">
-                    <Plus className="w-3.5 h-3.5" />
-                    <span>Upload de Documento</span>
-                  </button>
-                </div>
-
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs">
-                  {[
-                    { nome: 'RG e CPF Digitalizado', status: 'Verificado', data: '15/03/2022' },
-                    { nome: 'Comprovante de Residência Atualizado', status: 'Verificado', data: '10/01/2026' },
-                    { nome: 'ASO - Atestado de Saúde Ocupacional (Periódico)', status: 'Válido', data: '14/02/2026' },
-                    { nome: 'Contrato de Trabalho Assinado', status: 'Verificado', data: '15/03/2022' },
-                    { nome: 'Termo de Opção de Vale Transporte', status: 'Verificado', data: '15/03/2022' },
-                    { nome: 'Carteira de Vacinação / Dependentes', status: 'Pendente Validação', data: '01/06/2025' }
-                  ].map((doc, i) => (
-                    <div key={i} className="p-3 bg-white border border-slate-200 rounded-xl flex items-center justify-between">
-                      <div className="flex items-center gap-2">
-                        <FileText className="w-4 h-4 text-blue-600 shrink-0" />
-                        <div>
-                          <p className="font-bold text-slate-800">{doc.nome}</p>
-                          <p className="text-[10px] text-slate-400">Atualizado em: {doc.data}</p>
-                        </div>
-                      </div>
-                      <span className={`px-2 py-0.5 rounded-md text-[10px] font-bold ${
-                        doc.status.includes('Verificado') || doc.status.includes('Válido') ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-700'
-                      }`}>
-                        {doc.status}
-                      </span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {profileTab === 'beneficios' && (
-              <div className="space-y-4 text-xs">
-                <div className="bg-blue-50/60 p-4 rounded-xl border border-blue-100 flex items-center justify-between">
-                  <div>
-                    <h4 className="font-bold text-[#1E293B]">Benefícios Vinculados ao Colaborador</h4>
-                    <p className="text-slate-600 mt-0.5">Gestão de pacotes corporativos e descontos em folha.</p>
-                  </div>
-                  <span className="px-3 py-1 bg-blue-600 text-white rounded-full font-bold text-[11px]">
-                    {selectedColaborador.beneficiosAtivos.length} Ativos
-                  </span>
-                </div>
-
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                  {[
-                    { nome: 'Vale Transporte Corporativo', tipo: 'Desconto 6% em Folha', valor: 'R$ 480,00/mês' },
-                    { nome: 'Ticket Refeição Restaurante', tipo: 'Subsidia 98% Empresa', valor: 'R$ 950,00/mês' },
-                    { nome: 'Bradesco Saúde Top Nacional', tipo: 'Desconto 10% Titular', valor: 'R$ 890,00/mês' },
-                    { nome: 'OdontoPrev Plano Dental Master', tipo: '100% Custeado Empresa', valor: 'R$ 48,00/mês' }
-                  ].map((b, i) => (
-                    <div key={i} className="p-3.5 bg-white border border-slate-200 rounded-xl flex items-center justify-between">
-                      <div className="flex items-center gap-2.5">
-                        <Gift className="w-4 h-4 text-emerald-600" />
-                        <div>
-                          <p className="font-bold text-slate-800">{b.nome}</p>
-                          <p className="text-[10px] text-slate-500">{b.tipo}</p>
-                        </div>
-                      </div>
-                      <span className="font-bold text-slate-900">{b.valor}</span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {profileTab === 'ponto' && (
-              <div className="space-y-4 text-xs">
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                  <div className="p-3 bg-slate-50 rounded-xl border border-slate-200">
-                    <p className="text-[11px] text-slate-500">Saldo Banco de Horas</p>
-                    <p className="text-lg font-bold text-emerald-600">+08h 45min</p>
-                  </div>
-                  <div className="p-3 bg-slate-50 rounded-xl border border-slate-200">
-                    <p className="text-[11px] text-slate-500">Carga Semanal Cumprida</p>
-                    <p className="text-lg font-bold text-slate-900">44h / 44h</p>
-                  </div>
-                  <div className="p-3 bg-slate-50 rounded-xl border border-slate-200">
-                    <p className="text-[11px] text-slate-500">Atrasos / Faltas no Mês</p>
-                    <p className="text-lg font-bold text-slate-900">00h 00min</p>
-                  </div>
-                </div>
-
-                <div className="border border-slate-200 rounded-xl overflow-hidden">
-                  <div className="bg-slate-100 px-3 py-2 font-bold text-slate-700 border-b border-slate-200">
-                    Últimas Marcações de Ponto (REP-P)
-                  </div>
-                  <div className="divide-y divide-slate-100">
-                    {[
-                      { data: 'Hoje (27/07)', e1: '08:00', s1: '12:00', e2: '13:20', s2: '18:00', status: 'Normal' },
-                      { data: 'Ontem (26/07)', e1: '07:55', s1: '12:00', e2: '13:15', s2: '18:10', status: 'Hora Extra +10m' },
-                      { data: '25/07/2026', e1: '08:02', s1: '12:05', e2: '13:20', s2: '18:00', status: 'Normal' }
-                    ].map((p, i) => (
-                      <div key={i} className="p-3 flex items-center justify-between">
-                        <span className="font-bold text-slate-800">{p.data}</span>
-                        <div className="flex gap-2 font-mono text-slate-600">
-                          <span>{p.e1}</span> → <span>{p.s1}</span> | <span>{p.e2}</span> → <span>{p.s2}</span>
-                        </div>
-                        <span className="px-2 py-0.5 rounded-md bg-emerald-50 text-emerald-700 font-bold text-[10px]">
-                          {p.status}
-                        </span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {profileTab === 'folha' && (
-              <div className="space-y-4 text-xs">
-                <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 space-y-2">
-                  <h4 className="font-bold text-slate-800 text-xs border-b border-slate-200 pb-2">Demonstrativo de Pagamento (Último Holerite - Junho/2026)</h4>
-                  <div className="grid grid-cols-2 gap-4">
+              {/* 3. DOCUMENTOS */}
+              {profileTab === 'documentos' && (
+                <div className="space-y-4 text-xs">
+                  <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 flex items-center justify-between">
                     <div>
-                      <p className="font-bold text-emerald-700 mb-1">Proventos (+)</p>
-                      <p>Salário Base: {selectedColaborador.profissionais.salarioBase.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</p>
-                      <p>Anuênio / DSR: R$ 0,00</p>
+                      <h4 className="font-bold text-slate-800 text-xs">Pasta Funcional Digital</h4>
+                      <p className="text-[11px] text-slate-500">Documentação aceita e arquivada para eSocial.</p>
                     </div>
-                    <div>
-                      <p className="font-bold text-rose-700 mb-1">Descontos (-)</p>
-                      <p>INSS Retido: R$ 850,20</p>
-                      <p>IRRF Retido: R$ 620,15</p>
-                      <p>Vale Transporte (6%): R$ 280,00</p>
-                    </div>
-                  </div>
-                  <div className="pt-2 border-t border-slate-200 flex justify-between font-bold text-sm text-slate-900">
-                    <span>LÍQUIDO A RECEBER:</span>
-                    <span className="text-emerald-600">
-                      {(selectedColaborador.profissionais.salarioBase - 850.20 - 620.15 - 280.00).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
-                    </span>
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {profileTab === 'ferias' && (
-              <div className="space-y-4 text-xs">
-                <div className="bg-amber-50/60 p-4 rounded-xl border border-amber-200 space-y-2">
-                  <h4 className="font-bold text-amber-900 text-xs flex items-center gap-1.5">
-                    <Umbrella className="w-4 h-4 text-amber-600" />
-                    <span>Período Aquisitivo Ativo</span>
-                  </h4>
-                  <p><strong>Aquisitivo:</strong> 15/03/2025 a 14/03/2026</p>
-                  <p><strong>Saldo Disponível:</strong> <span className="font-bold text-amber-900">30 dias integrais</span></p>
-                  <p><strong>Vencimento Limite das Férias:</strong> 14/02/2027 (Evita Férias em Dobro Art. 137 CLT)</p>
-                </div>
-              </div>
-            )}
-
-            {profileTab === 'historico' && (
-              <div className="space-y-4 text-xs">
-                <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 space-y-3">
-                  <h4 className="font-bold text-slate-800 text-xs">Registrar Nova Ocorrência no Histórico</h4>
-                  <div className="flex gap-2">
-                    <select
-                      value={newOcorrenciaTipo}
-                      onChange={(e) => setNewOcorrenciaTipo(e.target.value as any)}
-                      className="px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs font-bold"
-                    >
-                      <option value="Promoção">Promoção</option>
-                      <option value="Alteração Salarial">Alteração Salarial</option>
-                      <option value="Mudança de Cargo/Depto">Mudança de Cargo/Depto</option>
-                      <option value="Atestado Médico">Atestado Médico</option>
-                      <option value="Advertência/Elogio">Advertência/Elogio</option>
-                    </select>
-
-                    <input
-                      type="text"
-                      placeholder="Descrição detalhada da ocorrência..."
-                      value={newOcorrenciaDesc}
-                      onChange={(e) => setNewOcorrenciaDesc(e.target.value)}
-                      className="flex-1 px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs"
-                    />
-
-                    <button
-                      onClick={handleAdicionarOcorrencia}
-                      className="px-4 py-2 bg-[#2563EB] text-white font-bold rounded-xl hover:bg-blue-700 cursor-pointer"
-                    >
-                      Adicionar
+                    <button className="px-3 py-1.5 bg-[#2563EB] text-white rounded-xl text-xs font-bold flex items-center gap-1.5 cursor-pointer">
+                      <Plus className="w-3.5 h-3.5" />
+                      <span>Anexar Documento</span>
                     </button>
                   </div>
-                </div>
 
-                <div className="space-y-2">
-                  {(selectedColaborador.historico || []).length === 0 ? (
-                    <p className="text-slate-400 italic text-center py-4">Nenhuma ocorrência registrada no histórico.</p>
-                  ) : (
-                    (selectedColaborador.historico || []).map((h) => (
-                      <div key={h.id} className="p-3 bg-white border border-slate-200 rounded-xl flex items-start justify-between gap-3">
-                        <div className="flex items-start gap-2.5">
-                          <History className="w-4 h-4 text-blue-600 mt-0.5 shrink-0" />
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    {[
+                      { nome: 'RG e CPF Digitalizado', status: 'Válido', data: '15/03/2022' },
+                      { nome: 'Comprovante de Residência', status: 'Válido', data: '10/01/2026' },
+                      { nome: 'ASO - Saúde Ocupacional (Periódico)', status: 'Válido', data: '14/02/2026' },
+                      { nome: 'Contrato de Trabalho CLT', status: 'Válido', data: '15/03/2022' },
+                      { nome: 'Termo Vale Transporte', status: 'Válido', data: '15/03/2022' },
+                      { nome: 'Carteira de Vacinação', status: 'Em Análise', data: '01/06/2025' }
+                    ].map((doc, i) => (
+                      <div key={i} className="p-3 bg-white border border-slate-200 rounded-xl flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <FileText className="w-4 h-4 text-blue-600 shrink-0" />
                           <div>
-                            <div className="flex items-center gap-2">
-                              <span className="font-bold text-slate-800">{h.tipo}</span>
-                              <span className="text-[10px] text-slate-400">• {h.data}</span>
-                            </div>
-                            <p className="text-slate-600 mt-1">{h.descricao}</p>
+                            <p className="font-bold text-slate-800">{doc.nome}</p>
+                            <p className="text-[10px] text-slate-400">{doc.data}</p>
                           </div>
                         </div>
-                        <span className="text-[10px] text-slate-400 shrink-0">Resp: {h.responsavel}</span>
+                        <span className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-emerald-50 text-emerald-700">
+                          {doc.status}
+                        </span>
                       </div>
-                    ))
-                  )}
-                </div>
-              </div>
-            )}
-
-            {profileTab === 'anotacoes' && (
-              <div className="space-y-4 text-xs">
-                <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 space-y-3">
-                  <h4 className="font-bold text-slate-800 text-xs flex items-center gap-1.5">
-                    <FileEdit className="w-4 h-4 text-[#2563EB]" />
-                    <span>Anotações Internas do Departamento Pessoal</span>
-                  </h4>
-                  <p className="text-slate-500 text-[11px]">
-                    Utilize este espaço para registrar observações internas sobre o colaborador (sigiloso, visível apenas para a equipe de RH).
-                  </p>
-
-                  <textarea
-                    rows={4}
-                    value={notesInput || (selectedColaborador as any).anotacoesRH || ''}
-                    onChange={(e) => setNotesInput(e.target.value)}
-                    placeholder="Escreva anotações, feedbacks ou observações sobre o funcionário..."
-                    className="w-full p-3 bg-white border border-slate-200 rounded-xl text-xs text-slate-800 focus:ring-2 focus:ring-[#2563EB] focus:outline-none"
-                  />
-
-                  <div className="flex justify-end">
-                    <button
-                      onClick={() => {
-                        const updated = { ...selectedColaborador, anotacoesRH: notesInput };
-                        setSelectedColaborador(updated as any);
-                        onSalvarColaborador(updated as any);
-                        showNotification('Anotações salvas com sucesso!');
-                      }}
-                      className="px-4 py-2 bg-[#2563EB] text-white font-bold rounded-xl hover:bg-blue-700 cursor-pointer flex items-center gap-1.5"
-                    >
-                      <Save className="w-3.5 h-3.5" />
-                      <span>Salvar Anotações</span>
-                    </button>
+                    ))}
                   </div>
                 </div>
-              </div>
-            )}
+              )}
 
-            {/* Modal Footer */}
-            <div className="flex justify-end pt-2 border-t border-slate-100">
+              {/* 4. BENEFÍCIOS */}
+              {profileTab === 'beneficios' && (
+                <div className="space-y-4 text-xs">
+                  <div className="bg-purple-50/60 p-4 rounded-xl border border-purple-100 flex items-center justify-between">
+                    <div>
+                      <h4 className="font-bold text-[#1E293B]">Pacote Individual de Benefícios</h4>
+                      <p className="text-slate-600 mt-0.5">Benefícios vinculados via Firestore com integração na folha.</p>
+                    </div>
+                    <span className="px-3 py-1 bg-purple-600 text-white rounded-full font-bold text-[11px]">
+                      {colabBenefits.filter(b => b.status === 'Ativo').length} Ativos
+                    </span>
+                  </div>
+
+                  {colabBenefits.length === 0 ? (
+                    <div className="p-6 bg-slate-50 border border-slate-200 rounded-xl text-center text-slate-400">
+                      Nenhum benefício individual concedido no Firestore para este colaborador.
+                    </div>
+                  ) : (
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                      {colabBenefits.map((b) => (
+                        <div key={b.id} className="p-3.5 bg-white border border-slate-200 rounded-xl space-y-2">
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-2">
+                              <Gift className="w-4 h-4 text-purple-600" />
+                              <span className="font-bold text-slate-800">{b.benefitName}</span>
+                            </div>
+                            <span className={`px-2 py-0.5 rounded-full text-[10px] font-extrabold ${
+                              b.status === 'Ativo' ? 'bg-emerald-50 text-emerald-700' : 'bg-slate-100 text-slate-600'
+                            }`}>
+                              {b.status}
+                            </span>
+                          </div>
+                          <div className="text-[11px] text-slate-500 flex justify-between font-mono pt-1 border-t border-slate-100">
+                            <span>Desconto: R$ {(b.employeeContribution || 0).toFixed(2)}</span>
+                            <span>Empresa: R$ {(b.employerContribution || 0).toFixed(2)}</span>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* 5. FÉRIAS */}
+              {profileTab === 'ferias' && (
+                <div className="space-y-4 text-xs">
+                  <div className="bg-amber-50/60 p-4 rounded-xl border border-amber-200 space-y-2">
+                    <h4 className="font-bold text-amber-900 text-xs flex items-center gap-1.5">
+                      <Umbrella className="w-4 h-4 text-amber-600" />
+                      <span>Período Aquisitivo de Férias Ativo</span>
+                    </h4>
+                    <p><strong>Aquisitivo Atual:</strong> 15/03/2025 a 14/03/2026</p>
+                    <p><strong>Saldo Disponível:</strong> <span className="font-bold text-amber-900">30 dias integrais</span></p>
+                    <p><strong>Data Limite Concessiva:</strong> 14/02/2027 (Evita Férias em Dobro Art. 137 CLT)</p>
+                  </div>
+                </div>
+              )}
+
+              {/* 6. AFASTAMENTOS */}
+              {profileTab === 'afastamentos' && (
+                <div className="space-y-4 text-xs">
+                  <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 flex items-center justify-between">
+                    <div>
+                      <h4 className="font-bold text-slate-800 text-xs">Histórico de Afastamentos e Licenças</h4>
+                      <p className="text-[11px] text-slate-500">Registros para eSocial S-2230.</p>
+                    </div>
+                  </div>
+                  <div className="p-4 bg-white border border-slate-200 rounded-xl text-center text-slate-500">
+                    Nenhum afastamento recente ou atestado ativo registrado para este colaborador.
+                  </div>
+                </div>
+              )}
+
+              {/* 7. PONTO */}
+              {profileTab === 'ponto' && (
+                <div className="space-y-4 text-xs">
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                    <div className="p-3 bg-slate-50 rounded-xl border border-slate-200">
+                      <p className="text-[11px] text-slate-500 font-bold">Saldo Banco de Horas</p>
+                      <p className="text-base font-bold text-emerald-600">+08h 45min</p>
+                    </div>
+                    <div className="p-3 bg-slate-50 rounded-xl border border-slate-200">
+                      <p className="text-[11px] text-slate-500 font-bold">Carga Semanal</p>
+                      <p className="text-base font-bold text-slate-900">44h / 44h</p>
+                    </div>
+                    <div className="p-3 bg-slate-50 rounded-xl border border-slate-200">
+                      <p className="text-[11px] text-slate-500 font-bold">Atrasos / Faltas</p>
+                      <p className="text-base font-bold text-slate-900">00h 00min</p>
+                    </div>
+                  </div>
+
+                  <div className="border border-slate-200 rounded-xl overflow-hidden">
+                    <div className="bg-slate-100 px-3 py-2 font-bold text-slate-700 border-b border-slate-200">
+                      Últimas Marcações de Ponto (REP-P)
+                    </div>
+                    <div className="divide-y divide-slate-100">
+                      {[
+                        { data: 'Hoje', e1: '08:00', s1: '12:00', e2: '13:20', s2: '18:00', status: 'Normal' },
+                        { data: 'Ontem', e1: '07:55', s1: '12:00', e2: '13:15', s2: '18:10', status: 'Hora Extra +10m' },
+                        { data: '25/07/2026', e1: '08:02', s1: '12:05', e2: '13:20', s2: '18:00', status: 'Normal' }
+                      ].map((p, i) => (
+                        <div key={i} className="p-3 flex items-center justify-between">
+                          <span className="font-bold text-slate-800">{p.data}</span>
+                          <div className="flex gap-2 font-mono text-slate-600 text-[11px]">
+                            <span>{p.e1}</span> → <span>{p.s1}</span> | <span>{p.e2}</span> → <span>{p.s2}</span>
+                          </div>
+                          <span className="px-2 py-0.5 rounded-md bg-emerald-50 text-emerald-700 font-bold text-[10px]">
+                            {p.status}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* 8. FOLHA */}
+              {profileTab === 'folha' && (
+                <div className="space-y-4 text-xs">
+                  <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 space-y-2">
+                    <h4 className="font-bold text-slate-800 text-xs border-b border-slate-200 pb-2">Demonstrativo de Pagamento (Holerite Recente)</h4>
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <p className="font-bold text-emerald-700 mb-1">Proventos (+)</p>
+                        <p>Salário Base: {selectedColaborador.profissionais.salarioBase.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</p>
+                      </div>
+                      <div>
+                        <p className="font-bold text-rose-700 mb-1">Descontos (-)</p>
+                        <p>INSS Retido: R$ 850,20</p>
+                        <p>IRRF Retido: R$ 620,15</p>
+                        <p>Vale Transporte (6%): R$ 280,00</p>
+                      </div>
+                    </div>
+                    <div className="pt-2 border-t border-slate-200 flex justify-between font-bold text-sm text-slate-900">
+                      <span>LÍQUIDO A RECEBER:</span>
+                      <span className="text-emerald-600">
+                        {(selectedColaborador.profissionais.salarioBase - 850.20 - 620.15 - 280.00).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* 9. TREINAMENTOS */}
+              {profileTab === 'treinamentos' && (
+                <div className="space-y-4 text-xs">
+                  <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 space-y-3">
+                    <h4 className="font-bold text-slate-800 text-xs flex items-center gap-1.5">
+                      <GraduationCap className="w-4 h-4 text-[#2563EB]" />
+                      <span>Cursos e Certificações Concluídas</span>
+                    </h4>
+                    <div className="space-y-2">
+                      {[
+                        { curso: 'Integração de Segurança e Normas da Empresa', horas: '8h', data: '2025-01-10', cert: 'Sim' },
+                        { curso: 'Treinamento LGPD e Privacidade de Dados', horas: '4h', data: '2025-02-15', cert: 'Sim' },
+                        { curso: 'Treinamento de Liderança e Comunicação', horas: '16h', data: '2025-05-20', cert: 'Sim' }
+                      ].map((t, idx) => (
+                        <div key={idx} className="p-3 bg-white border border-slate-200 rounded-xl flex items-center justify-between">
+                          <div>
+                            <p className="font-bold text-slate-800">{t.curso}</p>
+                            <p className="text-[10px] text-slate-400">Carga horária: {t.horas} • Concluído em {t.data}</p>
+                          </div>
+                          <span className="px-2 py-0.5 rounded bg-blue-50 text-blue-700 font-bold text-[10px]">Certificado Emitido</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* 10. AVALIAÇÕES */}
+              {profileTab === 'avaliacoes' && (
+                <div className="space-y-4 text-xs">
+                  <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 space-y-2">
+                    <h4 className="font-bold text-slate-800 text-xs flex items-center gap-1.5">
+                      <Award className="w-4 h-4 text-[#2563EB]" />
+                      <span>Avaliações de Desempenho e OKRs</span>
+                    </h4>
+                    <div className="p-3 bg-white border border-slate-200 rounded-xl flex items-center justify-between">
+                      <div>
+                        <p className="font-bold text-slate-800">Avaliação Ciclo 2025.2</p>
+                        <p className="text-[11px] text-slate-500">Nota Final: 4.8 / 5.0 (Superou Expectativas)</p>
+                      </div>
+                      <span className="px-2.5 py-1 bg-emerald-100 text-emerald-800 rounded-lg font-bold text-[10px]">Aprovado</span>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* 11. ADVERTÊNCIAS */}
+              {profileTab === 'advertencias' && (
+                <div className="space-y-4 text-xs">
+                  <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 space-y-2">
+                    <h4 className="font-bold text-slate-800 text-xs flex items-center gap-1.5">
+                      <AlertTriangle className="w-4 h-4 text-amber-600" />
+                      <span>Registros Disciplinares</span>
+                    </h4>
+                    <p className="text-slate-500 text-[11px]">Nenhuma advertência verbal ou escrita consta no prontuário do colaborador.</p>
+                  </div>
+                </div>
+              )}
+
+              {/* 12. ANOTAÇÕES INTERNAS */}
+              {profileTab === 'anotacoes' && (
+                <div className="space-y-4 text-xs">
+                  <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 space-y-3">
+                    <h4 className="font-bold text-[#1E293B] text-xs flex items-center gap-1.5">
+                      <FileEdit className="w-4 h-4 text-[#2563EB]" />
+                      <span>Nova Anotação Interna (Privado para o RH)</span>
+                    </h4>
+                    
+                    <div className="space-y-2">
+                      <textarea
+                        rows={3}
+                        value={newNoteText}
+                        onChange={e => setNewNoteText(e.target.value)}
+                        placeholder="Escreva observações confidenciais sobre este colaborador (visível apenas para usuários autorizados)..."
+                        className="w-full p-3 bg-white border border-slate-200 rounded-xl text-xs font-medium text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+                      />
+
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <label className="font-bold text-slate-600">Visibilidade:</label>
+                          <select
+                            value={newNoteVis}
+                            onChange={e => setNewNoteVis(e.target.value as any)}
+                            className="px-2.5 py-1.5 bg-white border border-slate-200 rounded-lg font-bold text-slate-700"
+                          >
+                            <option value="somente_rh">🔒 Somente RH</option>
+                            <option value="rh_e_gestor">👥 RH e Gestor Direto</option>
+                            <option value="administrativa">🏢 Administrativa</option>
+                            <option value="restrita">🛑 Restrita (Master)</option>
+                          </select>
+                        </div>
+
+                        <button
+                          onClick={handleAddInternalNote}
+                          disabled={!newNoteText.trim()}
+                          className="px-4 py-2 bg-[#2563EB] hover:bg-blue-700 disabled:opacity-50 text-white font-bold rounded-xl shadow-xs cursor-pointer transition-all"
+                        >
+                          Gravar Anotação
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="space-y-2">
+                    {colabNotes.length === 0 ? (
+                      <p className="text-slate-400 italic text-center py-6 border border-dashed border-slate-200 rounded-xl">
+                        Nenhuma anotação interna registrada para este colaborador.
+                      </p>
+                    ) : (
+                      colabNotes.map(n => (
+                        <div key={n.id} className="p-3.5 bg-white border border-slate-200 rounded-xl space-y-2">
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-2">
+                              <span className="font-bold text-slate-800">{n.authorName}</span>
+                              <span className="px-2 py-0.5 rounded-md text-[10px] font-extrabold bg-blue-50 text-blue-700 border border-blue-100">
+                                {n.visibility.replace('_', ' ').toUpperCase()}
+                              </span>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <span className="text-[10px] text-slate-400 font-mono">
+                                {new Date(n.createdAt).toLocaleString('pt-BR')}
+                              </span>
+                              <button
+                                onClick={() => handleDeleteInternalNote(n.id)}
+                                className="text-slate-400 hover:text-red-600 p-1 cursor-pointer"
+                                title="Excluir"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
+                          </div>
+                          <p className="text-slate-700 font-medium leading-relaxed">{n.content}</p>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {/* 13. HISTÓRICO */}
+              {profileTab === 'historico' && (
+                <div className="space-y-4 text-xs">
+                  <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 space-y-3">
+                    <h4 className="font-bold text-slate-800 text-xs">Adicionar Ocorrência ao Prontuário</h4>
+                    <div className="flex gap-2">
+                      <select
+                        value={newOcorrenciaTipo}
+                        onChange={(e) => setNewOcorrenciaTipo(e.target.value as any)}
+                        className="px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs font-bold"
+                      >
+                        <option value="Promoção">Promoção</option>
+                        <option value="Alteração Salarial">Alteração Salarial</option>
+                        <option value="Mudança de Cargo/Depto">Mudança de Cargo/Depto</option>
+                        <option value="Atestado Médico">Atestado Médico</option>
+                        <option value="Advertência/Elogio">Advertência/Elogio</option>
+                      </select>
+
+                      <input
+                        type="text"
+                        placeholder="Descrição da ocorrência..."
+                        value={newOcorrenciaDesc}
+                        onChange={(e) => setNewOcorrenciaDesc(e.target.value)}
+                        className="flex-1 px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs"
+                      />
+
+                      <button
+                        onClick={handleAdicionarOcorrencia}
+                        className="px-4 py-2 bg-[#2563EB] text-white font-bold rounded-xl hover:bg-blue-700 cursor-pointer"
+                      >
+                        Salvar
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="space-y-2">
+                    {(selectedColaborador.historico || []).length === 0 ? (
+                      <p className="text-slate-400 italic text-center py-4">Nenhuma ocorrência registrada no histórico.</p>
+                    ) : (
+                      (selectedColaborador.historico || []).map((h) => (
+                        <div key={h.id} className="p-3 bg-white border border-slate-200 rounded-xl flex items-start justify-between gap-3">
+                          <div className="flex items-start gap-2.5">
+                            <History className="w-4 h-4 text-blue-600 mt-0.5 shrink-0" />
+                            <div>
+                              <div className="flex items-center gap-2">
+                                <span className="font-bold text-slate-800">{h.tipo}</span>
+                                <span className="text-[10px] text-slate-400">• {h.data}</span>
+                              </div>
+                              <p className="text-slate-600 mt-1">{h.descricao}</p>
+                            </div>
+                          </div>
+                          <span className="text-[10px] text-slate-400 shrink-0">Resp: {h.responsavel}</span>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {/* 13. LINHA DO TEMPO */}
+              {profileTab === 'timeline' && (
+                <div className="space-y-4 text-xs">
+                  <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 space-y-3">
+                    <h4 className="font-bold text-slate-800 text-xs flex items-center gap-1.5">
+                      <Calendar className="w-4 h-4 text-[#2563EB]" />
+                      <span>Linha do Tempo da Carreira</span>
+                    </h4>
+                    <div className="relative pl-6 space-y-4 border-l-2 border-blue-200 ml-2">
+                      <div className="relative">
+                        <div className="absolute -left-[31px] top-0 w-4 h-4 rounded-full bg-[#2563EB] border-2 border-white"></div>
+                        <p className="font-bold text-slate-800">Status Atual: Colaborador Efetivado</p>
+                        <p className="text-[11px] text-slate-500">Cargo: {selectedColaborador.profissionais.cargo}</p>
+                      </div>
+                      <div className="relative">
+                        <div className="absolute -left-[31px] top-0 w-4 h-4 rounded-full bg-blue-300 border-2 border-white"></div>
+                        <p className="font-bold text-slate-800">Admissão e Contratação Concluída</p>
+                        <p className="text-[11px] text-slate-500">Data de Entrada: {selectedColaborador.profissionais.dataAdmissao}</p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* 14. ANÁLISE IA */}
+              {profileTab === 'analise-ia' && (
+                <div className="space-y-4 text-xs">
+                  <div className="bg-gradient-to-r from-blue-900 via-indigo-900 to-slate-900 text-white p-5 rounded-2xl space-y-3 shadow-lg">
+                    <div className="flex items-center gap-2">
+                      <Sparkles className="w-5 h-5 text-amber-400 animate-pulse" />
+                      <h4 className="font-bold text-sm">Análise IA Preditiva de Gestão de Pessoas</h4>
+                    </div>
+                    <p className="text-slate-300 text-[11px] leading-relaxed">
+                      Cruzamento de dados de turnover, assiduidade no ponto, saldo de férias e histórico salarial.
+                    </p>
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-2.5 pt-2">
+                      <div className="bg-white/10 p-3 rounded-xl backdrop-blur-xs">
+                        <p className="text-[10px] text-slate-300">Risco de Retenção</p>
+                        <p className="text-sm font-bold text-emerald-400">Baixo (12%)</p>
+                      </div>
+                      <div className="bg-white/10 p-3 rounded-xl backdrop-blur-xs">
+                        <p className="text-[10px] text-slate-300">Engajamento Estimado</p>
+                        <p className="text-sm font-bold text-blue-300">Alto (92%)</p>
+                      </div>
+                      <div className="bg-white/10 p-3 rounded-xl backdrop-blur-xs">
+                        <p className="text-[10px] text-slate-300">Recomendação RH</p>
+                        <p className="text-sm font-bold text-amber-300">Programar Férias</p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Drawer Footer */}
+            <div className="p-4 bg-slate-50 border-t border-slate-200 flex justify-end shrink-0">
               <button
                 onClick={() => setIsProfileOpen(false)}
-                className="px-5 py-2 bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold rounded-xl cursor-pointer shadow-xs"
+                className="px-5 py-2 bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold rounded-xl cursor-pointer transition-all shadow-xs"
               >
-                Fechar Perfil
+                Fechar Painel
               </button>
             </div>
           </div>

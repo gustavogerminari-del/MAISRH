@@ -15,7 +15,8 @@ import {
   Trash2
 } from 'lucide-react';
 import { Paystub, PaystubItem } from '../types/payroll';
-import { addItemToPaystub, removeItemFromPaystub, signPaystubDigitally } from '../services/payrollStore';
+import { savePaystubFirestore, signPaystubFirestore } from '../services/payrollFirestoreService';
+import { useAuth } from '../../auth';
 
 interface PaystubModalProps {
   paystub: Paystub;
@@ -32,6 +33,9 @@ export const PaystubModal: React.FC<PaystubModalProps> = ({
   onClose,
   onUpdate
 }) => {
+  const { user } = useAuth();
+  const companyId = user?.companyId || user?.empresaId || user?.tenantId || 'emp-001';
+
   const [paystub, setPaystub] = useState<Paystub>(initialPaystub);
   const [showAddItemForm, setShowAddItemForm] = useState(false);
   const [newItemCode, setNewItemCode] = useState('1002');
@@ -47,42 +51,70 @@ export const PaystubModal: React.FC<PaystubModalProps> = ({
   // Max rows to maintain alignment
   const maxRows = Math.max(proventosItems.length, descontosItems.length, 5);
 
-  const handleSign = () => {
-    const updated = signPaystubDigitally(paystub.id, '189.120.45.12');
-    const match = updated.find(s => s.id === paystub.id);
-    if (match) {
-      setPaystub(match);
+  const handleSign = async () => {
+    const updated = await signPaystubFirestore(
+      companyId,
+      paystub.id,
+      '189.120.45.12',
+      user?.name || paystub.employeeName,
+      user?.email || 'colaborador@maisrh.com.br'
+    );
+    if (updated) {
+      setPaystub(updated);
       onUpdate();
     }
   };
 
-  const handleAddItem = (e: React.FormEvent) => {
+  const handleAddItem = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newItemAmount) return;
 
-    const updated = addItemToPaystub(paystub.id, {
+    const newItem: PaystubItem = {
+      id: `item-${Date.now()}`,
       code: newItemCode,
       name: newItemName,
       type: newItemType,
       reference: newItemRef,
-      amount: Number(newItemAmount)
-    });
+      amount: Number(newItemAmount),
+      isManual: true
+    };
 
-    const match = updated.find(s => s.id === paystub.id);
-    if (match) {
-      setPaystub(match);
-      onUpdate();
-    }
+    const updatedItems = [...paystub.items, newItem];
+    const totalProventos = updatedItems.filter(i => i.type === 'Provento').reduce((acc, i) => acc + i.amount, 0);
+    const totalDescontos = updatedItems.filter(i => i.type === 'Desconto').reduce((acc, i) => acc + i.amount, 0);
+    const valorLiquido = Number((totalProventos - totalDescontos).toFixed(2));
+
+    const updatedStub: Paystub = {
+      ...paystub,
+      items: updatedItems,
+      totalProventos: Number(totalProventos.toFixed(2)),
+      totalDescontos: Number(totalDescontos.toFixed(2)),
+      valorLiquido
+    };
+
+    await savePaystubFirestore(companyId, updatedStub);
+    setPaystub(updatedStub);
+    onUpdate();
     setShowAddItemForm(false);
   };
 
-  const handleRemoveItem = (itemId: string) => {
-    const updated = removeItemFromPaystub(paystub.id, itemId);
-    const match = updated.find(s => s.id === paystub.id);
-    if (match) {
-      setPaystub(match);
-      onUpdate();
-    }
+  const handleRemoveItem = async (itemId: string) => {
+    const updatedItems = paystub.items.filter(i => i.id !== itemId);
+    const totalProventos = updatedItems.filter(i => i.type === 'Provento').reduce((acc, i) => acc + i.amount, 0);
+    const totalDescontos = updatedItems.filter(i => i.type === 'Desconto').reduce((acc, i) => acc + i.amount, 0);
+    const valorLiquido = Number((totalProventos - totalDescontos).toFixed(2));
+
+    const updatedStub: Paystub = {
+      ...paystub,
+      items: updatedItems,
+      totalProventos: Number(totalProventos.toFixed(2)),
+      totalDescontos: Number(totalDescontos.toFixed(2)),
+      valorLiquido
+    };
+
+    await savePaystubFirestore(companyId, updatedStub);
+    setPaystub(updatedStub);
+    onUpdate();
   };
 
   const handlePrint = () => {

@@ -16,16 +16,33 @@ import { db } from '../../lib/firebase';
 import { sanitizeFirestoreData } from '../../lib/firestoreUtils';
 import { 
   ColaboradorCompleto, 
+  EstadoCivil,
   ItemBeneficio, 
+  BeneficioColaboradorIndividual,
+  HistoricoAlteracaoBeneficio,
+  AnotacaoInternaColaborador,
+  StatusBeneficioIndividual,
   RegistroFeriasColaborador, 
+  PeriodoAquisitivoFerias,
+  RegraFeriasEmpresa,
   CalculoRescisorio, 
   AfastamentoColaborador, 
+  DadosCat,
+  DadosInss,
+  DadosRetornoTrabalho,
+  AlertaDp,
   DocumentoColaborador, 
   AjustePontoColaborador, 
   HistoricoEventoColaborador, 
   AdmissaoPending, 
   ConfiguracoesTrabalhistas 
 } from '../types/dp';
+import {
+  SolicitacaoPortalItem,
+  ChamadoSuporteItem,
+  ComunicadoItem,
+  DocumentoAssinaturaItem
+} from '../types/portalTypes';
 import { 
   INITIAL_COLABORADORES, 
   INITIAL_BENEFICIOS, 
@@ -43,14 +60,29 @@ export const DP_COLLECTIONS = {
   AJUSTES_PONTO: 'ajustes_ponto',
   BANCO_HORAS: 'banco_horas',
   BENEFICIOS: 'beneficios_colaboradores',
+  BENEFICIOS_CATALOGO: 'beneficios_catalogo',
+  EMPLOYEE_BENEFITS: 'employee_benefits',
+  HISTORICO_BENEFICIOS: 'historico_beneficios',
+  ANOTACOES_INTERNAS: 'anotacoes_internas_colaborador',
   FERIAS: 'ferias',
+  PERIODOS_AQUISITIVOS: 'periodos_aquisitivos',
+  REGRAS_FERIAS: 'regras_ferias',
   AFASTAMENTOS: 'afastamentos',
+  CAT: 'cat_registros',
+  INSS: 'inss_processos',
+  RETORNO_TRABALHO: 'retorno_trabalho',
+  ALERTAS: 'alertas_dp',
+  AUDIT_LOGS: 'audit_logs',
   DOCUMENTOS: 'documentos_colaboradores',
   FOLHAS: 'folhas_pagamento',
   RESCISOES: 'rescisoes',
   HISTORICO: 'historico_colaborador',
   ADMISSOES: 'solicitacoes_admissao',
-  CONFIGURACÕES: 'configuracoes_trabalhistas'
+  CONFIGURACÕES: 'configuracoes_trabalhistas',
+  SOLICITACOES_PORTAL: 'solicitacoes_portal',
+  CHAMADOS_SUPORTE: 'chamados_suporte',
+  COMUNICADOS: 'comunicados_empresa',
+  DOCUMENTOS_ASSINATURA: 'documentos_assinatura_portal'
 } as const;
 
 /**
@@ -74,16 +106,7 @@ export async function getColaboradoresFirestore(companyId: string): Promise<Cola
     const snapshot = await getDocs(q);
 
     if (snapshot.empty) {
-      // Seed initial data to Firestore if empty
-      console.log(`[DP Firestore] Semeando colaboradores iniciais para empresa ${empId}...`);
-      const initialForCompany = INITIAL_COLABORADORES.map(c => ({
-        ...c,
-        companyId: empId
-      }));
-      for (const colab of initialForCompany) {
-        await setDoc(doc(db, DP_COLLECTIONS.COLABORADORES, colab.id), sanitizeFirestoreData(colab));
-      }
-      return initialForCompany;
+      return [];
     }
 
     const list: ColaboradorCompleto[] = [];
@@ -93,17 +116,21 @@ export async function getColaboradoresFirestore(companyId: string): Promise<Cola
     return list;
   } catch (error) {
     console.warn('[DP Firestore] Erro ao buscar colaboradores:', error);
-    return INITIAL_COLABORADORES.map(c => ({ ...c, companyId: empId }));
+    return [];
   }
 }
 
 export async function saveColaboradorFirestore(colaborador: ColaboradorCompleto): Promise<void> {
   try {
     const docRef = doc(db, DP_COLLECTIONS.COLABORADORES, colaborador.id);
-    await setDoc(docRef, sanitizeFirestoreData({
+    const sanitized = sanitizeFirestoreData({
       ...colaborador,
+      companyId: colaborador.companyId || 'emp-001',
+      empresaId: colaborador.companyId || 'emp-001',
+      status: colaborador.profissionais?.status || 'Ativo',
       updatedAt: new Date().toISOString()
-    }), { merge: true });
+    });
+    await setDoc(docRef, sanitized, { merge: true });
 
     // Registra evento no Histórico Único
     await addHistoricoEventoFirestore({
@@ -133,36 +160,7 @@ export async function getAdmissoesPendenteFirestore(companyId: string): Promise<
     const snapshot = await getDocs(q);
 
     if (snapshot.empty) {
-      // Create seed admissions from initial candidates/hires
-      const defaultAdmissoes: AdmissaoPending[] = [
-        {
-          id: 'adm-001',
-          empresaId: empId,
-          candidatoId: 'cand-001',
-          nomeCompleto: 'Mariana Duarte Silva',
-          email: 'mariana.duarte@email.com',
-          telefone: '(11) 98765-4321',
-          cpf: '123.456.789-00',
-          cargo: 'Analista de RH Senior',
-          departamento: 'Recursos Humanos',
-          salarioCombinado: 7500,
-          tipoContrato: 'CLT',
-          dataAdmissaoPrevista: new Date(Date.now() + 86400000 * 5).toISOString().split('T')[0],
-          status: 'Pronto para Efetivação',
-          checklist: [
-            { item: 'Cópia do RG e CPF', concluido: true },
-            { item: 'Comprovante de Residência', concluido: true },
-            { item: 'Carteira de Trabalho (CTPS)', concluido: true },
-            { item: 'Exame Admissional (ASO)', concluido: true },
-            { item: 'Dados Bancários para Salário', concluido: false }
-          ],
-          createdAt: new Date().toISOString()
-        }
-      ];
-      for (const adm of defaultAdmissoes) {
-        await setDoc(doc(db, DP_COLLECTIONS.ADMISSOES, adm.id), sanitizeFirestoreData(adm));
-      }
-      return defaultAdmissoes;
+      return [];
     }
 
     const list: AdmissaoPending[] = [];
@@ -173,6 +171,39 @@ export async function getAdmissoesPendenteFirestore(companyId: string): Promise<
   } catch (error) {
     console.warn('[DP Firestore] Erro ao buscar admissões:', error);
     return [];
+  }
+}
+
+export async function saveAdmissaoFirestore(admissao: AdmissaoPending): Promise<void> {
+  try {
+    const docRef = doc(db, DP_COLLECTIONS.ADMISSOES, admissao.id);
+    const companyId = admissao.empresaId || 'emp-001';
+    await setDoc(docRef, sanitizeFirestoreData({
+      ...admissao,
+      empresaId: companyId,
+      companyId: companyId,
+      updatedAt: new Date().toISOString()
+    }), { merge: true });
+
+    await addHistoricoEventoFirestore({
+      empresaId: companyId,
+      colaboradorId: admissao.id,
+      moduloOrigem: 'Admissões',
+      tipoEvento: 'Atualização de Admissão',
+      descricao: `Admissão de ${admissao.nomeCompleto} atualizada. Status: ${admissao.status}`,
+      dataHora: new Date().toISOString()
+    });
+  } catch (error) {
+    console.error('[DP Firestore] Erro ao salvar admissão:', error);
+  }
+}
+
+export async function deleteAdmissaoFirestore(admissaoId: string): Promise<void> {
+  try {
+    const docRef = doc(db, DP_COLLECTIONS.ADMISSOES, admissaoId);
+    await deleteDoc(docRef);
+  } catch (error) {
+    console.error('[DP Firestore] Erro ao deletar admissão:', error);
   }
 }
 
@@ -209,16 +240,17 @@ export async function concluirEfetivacaoAdmissao(
     nomeCompleto: admissao.nomeCompleto,
     pessoais: {
       cpf: admissao.cpf || '000.000.000-00',
-      rg: dadosAdicionais?.rg || '00.000.000-0',
-      dataNascimento: '1992-05-15',
-      estadoCivil: 'Solteiro(a)',
+      rg: admissao.rg || dadosAdicionais?.rg || '00.000.000-0',
+      dataNascimento: admissao.dataNascimento || '1992-05-15',
+      estadoCivil: (admissao.estadoCivil as EstadoCivil) || 'Solteiro(a)',
+      genero: admissao.genero || 'Não informado',
       endereco: {
-        logradouro: 'Rua das Flores',
-        numero: '100',
-        bairro: 'Centro',
-        cidade: 'São Paulo',
-        estado: 'SP',
-        cep: '01000-000'
+        logradouro: admissao.endereco?.logradouro || 'Rua das Flores',
+        numero: admissao.endereco?.numero || '100',
+        bairro: admissao.endereco?.bairro || 'Centro',
+        cidade: admissao.endereco?.cidade || 'São Paulo',
+        estado: admissao.endereco?.estado || 'SP',
+        cep: admissao.endereco?.cep || '01000-000'
       },
       telefone: admissao.telefone || '(11) 90000-0000',
       emailPessoal: admissao.email
@@ -226,12 +258,12 @@ export async function concluirEfetivacaoAdmissao(
     profissionais: {
       cargo: admissao.cargo,
       departamento: admissao.departamento || 'Geral',
-      centroCusto: 'CC-100',
+      centroCusto: admissao.centroCusto || 'CC-100',
       dataAdmissao: admissao.dataAdmissaoPrevista || new Date().toISOString().split('T')[0],
       salarioBase: admissao.salarioCombinado || 5000,
       jornadaSemanalHours: 44,
-      escalaTrabalho: dadosAdicionais?.escala || '5x2 (Segunda a Sexta 08:00 - 18:00)',
-      gestorResponsavel: dadosAdicionais?.gestor || 'Diretoria de RH',
+      escalaTrabalho: admissao.jornada || dadosAdicionais?.escala || '5x2 (Segunda a Sexta 08:00 - 18:00)',
+      gestorResponsavel: admissao.gestor || dadosAdicionais?.gestor || 'Diretoria de RH',
       status: 'Ativo',
       emailCorporativo: `${admissao.nomeCompleto.split(' ')[0].toLowerCase()}.${admissao.nomeCompleto.split(' ').slice(-1)[0].toLowerCase()}@empresa.com.br`
     },
@@ -239,14 +271,18 @@ export async function concluirEfetivacaoAdmissao(
       pisPasep: '123.45678.90-1',
       ctpsNumero: '123456',
       ctpsSerie: '001',
-      ctpsUf: 'SP',
-      dependentesCount: 0,
-      sindicato: 'SINDRH SP',
+      ctpsUf: admissao.endereco?.estado || 'SP',
+      dependentesCount: (admissao.dependentes || []).length,
+      sindicato: admissao.sindicato || 'SINDRH SP',
       tipoContrato: admissao.tipoContrato || 'CLT',
-      bancoAgenciaConta: dadosAdicionais?.bancoAgencia || 'Itaú / Ag 0123 / C/C 45678-9',
+      bancoAgenciaConta: admissao.dadosBancarios?.banco 
+        ? `${admissao.dadosBancarios.banco} | Ag. ${admissao.dadosBancarios.agencia || ''} | C/C ${admissao.dadosBancarios.conta || ''}`
+        : (dadosAdicionais?.bancoAgencia || 'Itaú / Ag 0123 / C/C 45678-9'),
       optanteValeTransporte: true
     },
-    beneficiosAtivos: ['Vale Transporte', 'Vale Refeição', 'Plano de Saúde'],
+    beneficiosAtivos: admissao.beneficiosSelecionados?.length 
+      ? admissao.beneficiosSelecionados 
+      : ['Vale Transporte', 'Vale Refeição', 'Plano de Saúde'],
     acessoColaborador: {
       loginUsername: admissao.email,
       statusAcesso: 'Ativo',
@@ -257,7 +293,7 @@ export async function concluirEfetivacaoAdmissao(
         id: `h-${Date.now()}`,
         data: new Date().toISOString().split('T')[0],
         tipo: 'Admissão',
-        descricao: `Contratação concluída via Módulo de Admissão/Recrutamento.`,
+        descricao: `Contratação concluída e efetivada no DP.`,
         responsavel: 'Sistema de RH'
       }
     ],
@@ -283,10 +319,55 @@ export async function concluirEfetivacaoAdmissao(
     dataAdmissao: novoColaborador.profissionais.dataAdmissao,
     cargo: admissao.cargo,
     departamento: admissao.departamento,
+    conteudoContrato: admissao.contratoGerado?.conteudoGerado || '',
     createdAt: new Date().toISOString()
   }));
 
-  // 5. Atualiza o status da Admissão para 'Efetivado'
+  // 5. Concede Benefícios Selecionados na Admissão
+  if (admissao.beneficiosSelecionados && admissao.beneficiosSelecionados.length > 0) {
+    try {
+      const catalog = await getBeneficiosFirestore(companyId);
+      for (const benIdOrName of admissao.beneficiosSelecionados) {
+        const catItem = catalog.find(b => b.id === benIdOrName || b.nome.toLowerCase() === benIdOrName.toLowerCase());
+        if (catItem) {
+          const indId = `ben-ind-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`;
+          const nowStr = new Date().toISOString();
+          let colabCost = 0;
+          let empCost = catItem.custoEmpresaEstimado || 0;
+          if (catItem.percentualDescontoFuncionario > 0) {
+            colabCost = (admissao.salarioCombinado || 0) * (catItem.percentualDescontoFuncionario / 100);
+            empCost = Math.max(0, catItem.valorBeneficio - colabCost);
+          }
+
+          await saveEmployeeBenefitFirestore({
+            id: indId,
+            companyId,
+            employeeId: novoId,
+            employeeName: novoColaborador.nomeCompleto,
+            employeeCpf: novoColaborador.pessoais?.cpf,
+            department: novoColaborador.profissionais?.departamento,
+            benefitTypeId: catItem.id,
+            benefitName: catItem.nome,
+            category: catItem.categoria,
+            startDate: novoColaborador.profissionais.dataAdmissao,
+            status: 'Ativo',
+            employeeContribution: Math.round(colabCost * 100) / 100,
+            employerContribution: Math.round(empCost * 100) / 100,
+            totalValue: catItem.valorBeneficio || 0,
+            calculationType: catItem.tipoCalculo || 'Valor Fixo',
+            createdAt: nowStr,
+            updatedAt: nowStr,
+            createdBy: 'admissao-flow',
+            updatedBy: 'admissao-flow'
+          }, 'admissao-flow', 'Admissão de Colaborador', 'Concessão automática do processo admissional');
+        }
+      }
+    } catch (errBen) {
+      console.warn('[DP Firestore] Erro ao conceder benefícios na efetivação:', errBen);
+    }
+  }
+
+  // 6. Atualiza o status da Admissão para 'Efetivado'
   await setDoc(doc(db, DP_COLLECTIONS.ADMISSOES, admissao.id), sanitizeFirestoreData({
     ...admissao,
     status: 'Efetivado',
@@ -298,7 +379,7 @@ export async function concluirEfetivacaoAdmissao(
 }
 
 // ==========================================
-// 3. BENEFÍCIOS
+// 3. BENEFÍCIOS (CATÁLOGO & INDIVIDUAL)
 // ==========================================
 
 export async function getBeneficiosFirestore(companyId: string): Promise<ItemBeneficio[]> {
@@ -311,11 +392,7 @@ export async function getBeneficiosFirestore(companyId: string): Promise<ItemBen
     const snapshot = await getDocs(q);
 
     if (snapshot.empty) {
-      const initialForCompany = INITIAL_BENEFICIOS.map(b => ({ ...b, companyId: empId }));
-      for (const ben of initialForCompany) {
-        await setDoc(doc(db, DP_COLLECTIONS.BENEFICIOS, ben.id), sanitizeFirestoreData(ben));
-      }
-      return initialForCompany;
+      return [];
     }
 
     const list: ItemBeneficio[] = [];
@@ -325,16 +402,473 @@ export async function getBeneficiosFirestore(companyId: string): Promise<ItemBen
     return list;
   } catch (error) {
     console.warn('[DP Firestore] Erro ao buscar benefícios:', error);
-    return INITIAL_BENEFICIOS.map(b => ({ ...b, companyId: empId }));
+    return [];
   }
 }
 
 export async function saveBeneficioFirestore(beneficio: ItemBeneficio): Promise<void> {
   try {
     const docRef = doc(db, DP_COLLECTIONS.BENEFICIOS, beneficio.id);
-    await setDoc(docRef, sanitizeFirestoreData(beneficio), { merge: true });
+    await setDoc(docRef, sanitizeFirestoreData({
+      ...beneficio,
+      companyId: beneficio.companyId || 'emp-001',
+      empresaId: beneficio.companyId || 'emp-001',
+      status: beneficio.ativo ? 'Ativo' : 'Inativo',
+      updatedAt: new Date().toISOString()
+    }), { merge: true });
   } catch (error) {
     console.error('[DP Firestore] Erro ao salvar benefício:', error);
+  }
+}
+
+export async function deleteBeneficioFirestore(companyId: string, id: string): Promise<void> {
+  try {
+    await deleteDoc(doc(db, DP_COLLECTIONS.BENEFICIOS, id));
+  } catch (error) {
+    console.error('[DP Firestore] Erro ao excluir benefício:', error);
+  }
+}
+
+// ------------------------------------------
+// BENEFÍCIOS INDIVIDUAIS DO COLABORADOR
+// ------------------------------------------
+
+export async function getEmployeeBenefitsFirestore(companyId: string, employeeId?: string): Promise<BeneficioColaboradorIndividual[]> {
+  const empId = normalizeCompanyId(companyId);
+  try {
+    let q = query(
+      collection(db, DP_COLLECTIONS.EMPLOYEE_BENEFITS),
+      where('companyId', '==', empId)
+    );
+
+    if (employeeId) {
+      q = query(
+        collection(db, DP_COLLECTIONS.EMPLOYEE_BENEFITS),
+        where('companyId', '==', empId),
+        where('employeeId', '==', employeeId)
+      );
+    }
+
+    const snapshot = await getDocs(q);
+
+    if (snapshot.empty) {
+      return [];
+    }
+
+    const list: BeneficioColaboradorIndividual[] = [];
+    snapshot.forEach(docSnap => {
+      list.push(docSnap.data() as BeneficioColaboradorIndividual);
+    });
+    return list;
+  } catch (error) {
+    console.warn('[DP Firestore] Erro ao buscar benefícios individuais:', error);
+    return [];
+  }
+}
+
+export async function saveEmployeeBenefitFirestore(
+  benefit: BeneficioColaboradorIndividual,
+  userId = 'rh-system',
+  userName = 'Analista DP',
+  reason = 'Concessão/Atualização de benefício'
+): Promise<void> {
+  try {
+    const empId = normalizeCompanyId(benefit.companyId);
+    const docRef = doc(db, DP_COLLECTIONS.EMPLOYEE_BENEFITS, benefit.id);
+
+    const isNew = !benefit.createdAt;
+    const now = new Date().toISOString();
+
+    const dataToSave: BeneficioColaboradorIndividual = {
+      ...benefit,
+      companyId: empId,
+      createdAt: benefit.createdAt || now,
+      updatedAt: now,
+      createdBy: benefit.createdBy || userId,
+      updatedBy: userId
+    };
+
+    await setDoc(docRef, sanitizeFirestoreData(dataToSave), { merge: true });
+
+    // Registra Auditoria no Histórico de Benefícios
+    await addHistoricoBeneficioFirestore({
+      id: `hben-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+      companyId: empId,
+      employeeId: benefit.employeeId,
+      employeeName: benefit.employeeName,
+      benefitId: benefit.id,
+      benefitName: benefit.benefitName,
+      action: isNew ? 'Concessão' : 'Alteração de Valor',
+      previousValue: isNew ? 'N/A' : `R$ ${benefit.totalValue}`,
+      newValue: `R$ ${benefit.totalValue} (Colab: R$ ${benefit.employeeContribution} | Emp: R$ ${benefit.employerContribution})`,
+      reason,
+      userId,
+      userName,
+      createdAt: now
+    });
+
+    // Registra no Prontuário Histórico do Colaborador
+    await addHistoricoEventoFirestore({
+      empresaId: empId,
+      colaboradorId: benefit.employeeId,
+      moduloOrigem: 'Benefícios',
+      tipoEvento: isNew ? 'Concessão de Benefício' : 'Atualização de Benefício',
+      descricao: `Benefício "${benefit.benefitName}" (${benefit.status}) atualizado. Custo Colaborador: R$ ${benefit.employeeContribution} | Empresa: R$ ${benefit.employerContribution}.`,
+      usuarioId: userId,
+      usuarioNome: userName,
+      dataHora: now
+    });
+
+  } catch (error) {
+    console.error('[DP Firestore] Erro ao salvar benefício individual:', error);
+  }
+}
+
+export async function updateEmployeeBenefitStatusFirestore(
+  companyId: string,
+  benefitId: string,
+  newStatus: StatusBeneficioIndividual,
+  userId = 'rh-system',
+  userName = 'Analista DP',
+  reason = 'Alteração de status do benefício'
+): Promise<void> {
+  try {
+    const empId = normalizeCompanyId(companyId);
+    const docRef = doc(db, DP_COLLECTIONS.EMPLOYEE_BENEFITS, benefitId);
+    const docSnap = await getDoc(docRef);
+
+    if (!docSnap.exists()) return;
+
+    const currentData = docSnap.data() as BeneficioColaboradorIndividual;
+    const now = new Date().toISOString();
+
+    const updatedData: Partial<BeneficioColaboradorIndividual> = {
+      status: newStatus,
+      updatedAt: now,
+      updatedBy: userId
+    };
+
+    if (newStatus === 'Encerrado' || newStatus === 'Cancelado') {
+      updatedData.endDate = now.split('T')[0];
+    }
+
+    await setDoc(docRef, sanitizeFirestoreData(updatedData), { merge: true });
+
+    // Auditoria de Benefício
+    await addHistoricoBeneficioFirestore({
+      id: `hben-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+      companyId: empId,
+      employeeId: currentData.employeeId,
+      employeeName: currentData.employeeName,
+      benefitId,
+      benefitName: currentData.benefitName,
+      action: newStatus === 'Suspenso' ? 'Suspensão' : newStatus === 'Ativo' ? 'Reativação' : newStatus === 'Cancelado' ? 'Cancelamento' : 'Encerramento Rescisão',
+      previousValue: currentData.status,
+      newValue: newStatus,
+      reason,
+      userId,
+      userName,
+      createdAt: now
+    });
+
+  } catch (error) {
+    console.error('[DP Firestore] Erro ao atualizar status do benefício:', error);
+  }
+}
+
+export async function applyMassBenefitsFirestore(
+  companyId: string,
+  catalogItem: ItemBeneficio,
+  colaboradoresElegiveis: ColaboradorCompleto[],
+  userId = 'rh-system',
+  userName = 'Analista DP',
+  startDate = new Date().toISOString().split('T')[0]
+): Promise<{ successCount: number; existingCount: number }> {
+  const empId = normalizeCompanyId(companyId);
+  let successCount = 0;
+  let existingCount = 0;
+
+  try {
+    const existingBenefits = await getEmployeeBenefitsFirestore(empId);
+
+    for (const colab of colaboradoresElegiveis) {
+      // Verifica duplicidade ativa
+      const hasActive = existingBenefits.some(
+        b => b.employeeId === colab.id && 
+             b.benefitTypeId === catalogItem.id && 
+             (b.status === 'Ativo' || b.status === 'Pendente')
+      );
+
+      if (hasActive) {
+        existingCount++;
+        continue;
+      }
+
+      // Calcula valores
+      const totalVal = catalogItem.valorBeneficio || 0;
+      let empCost = catalogItem.custoEmpresaEstimado || 0;
+      let colabCost = 0;
+
+      if (catalogItem.percentualDescontoFuncionario > 0) {
+        colabCost = (colab.profissionais?.salarioBase || 0) * (catalogItem.percentualDescontoFuncionario / 100);
+        if (catalogItem.tipoCalculo === 'Desconto Limitado Teto' || catalogItem.categoria === 'Vale Transporte') {
+          colabCost = Math.min(colabCost, totalVal);
+        }
+        empCost = Math.max(0, totalVal - colabCost);
+      } else if (catalogItem.valorDescontoFixoFuncionario) {
+        colabCost = catalogItem.valorDescontoFixoFuncionario;
+        empCost = Math.max(0, totalVal - colabCost);
+      }
+
+      const newBenId = `ben-ind-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`;
+      const now = new Date().toISOString();
+
+      const newIndBen: BeneficioColaboradorIndividual = {
+        id: newBenId,
+        companyId: empId,
+        employeeId: colab.id,
+        employeeName: colab.nomeCompleto,
+        employeeCpf: colab.pessoais?.cpf,
+        department: colab.profissionais?.departamento,
+        benefitTypeId: catalogItem.id,
+        benefitName: catalogItem.nome,
+        category: catalogItem.categoria,
+        startDate,
+        status: 'Ativo',
+        employeeContribution: Math.round(colabCost * 100) / 100,
+        employerContribution: Math.round(empCost * 100) / 100,
+        totalValue: totalVal,
+        calculationType: catalogItem.tipoCalculo || 'Valor Fixo',
+        createdAt: now,
+        updatedAt: now,
+        createdBy: userId,
+        updatedBy: userId
+      };
+
+      await setDoc(doc(db, DP_COLLECTIONS.EMPLOYEE_BENEFITS, newBenId), sanitizeFirestoreData(newIndBen));
+
+      await addHistoricoBeneficioFirestore({
+        id: `hben-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+        companyId: empId,
+        employeeId: colab.id,
+        employeeName: colab.nomeCompleto,
+        benefitId: newBenId,
+        benefitName: catalogItem.nome,
+        action: 'Alteração em Massa',
+        previousValue: 'Sem Benefício',
+        newValue: `Atribuído em massa (R$ ${totalVal})`,
+        reason: 'Concessão de benefício em massa por departamento/cargo',
+        userId,
+        userName,
+        createdAt: now
+      });
+
+      successCount++;
+    }
+
+    return { successCount, existingCount };
+  } catch (error) {
+    console.error('[DP Firestore] Erro na concessão em massa de benefícios:', error);
+    return { successCount, existingCount };
+  }
+}
+
+// Auditoria de benefícios
+export async function addHistoricoBeneficioFirestore(evento: HistoricoAlteracaoBeneficio): Promise<void> {
+  try {
+    const docRef = doc(db, DP_COLLECTIONS.HISTORICO_BENEFICIOS, evento.id || `hben-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`);
+    await setDoc(docRef, sanitizeFirestoreData({
+      ...evento,
+      id: evento.id || `hben-${Date.now()}`,
+      createdAt: evento.createdAt || new Date().toISOString()
+    }));
+  } catch (error) {
+    console.error('[DP Firestore] Erro ao salvar histórico de benefício:', error);
+  }
+}
+
+export async function getHistoricoBeneficiosFirestore(companyId: string, employeeId?: string): Promise<HistoricoAlteracaoBeneficio[]> {
+  const empId = normalizeCompanyId(companyId);
+  try {
+    let q = query(
+      collection(db, DP_COLLECTIONS.HISTORICO_BENEFICIOS),
+      where('companyId', '==', empId)
+    );
+
+    if (employeeId) {
+      q = query(
+        collection(db, DP_COLLECTIONS.HISTORICO_BENEFICIOS),
+        where('companyId', '==', empId),
+        where('employeeId', '==', employeeId)
+      );
+    }
+
+    const snapshot = await getDocs(q);
+    const list: HistoricoAlteracaoBeneficio[] = [];
+    snapshot.forEach(docSnap => {
+      list.push(docSnap.data() as HistoricoAlteracaoBeneficio);
+    });
+
+    list.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+    return list;
+  } catch (error) {
+    console.warn('[DP Firestore] Erro ao buscar histórico de benefícios:', error);
+    return [];
+  }
+}
+
+// ------------------------------------------
+// PERÍODOS AQUISITIVOS DE FÉRIAS
+// ------------------------------------------
+
+export async function getPeriodosAquisitivosFirestore(companyId: string, colaboradorId?: string): Promise<PeriodoAquisitivoFerias[]> {
+  const empId = normalizeCompanyId(companyId);
+  try {
+    let q = query(
+      collection(db, DP_COLLECTIONS.PERIODOS_AQUISITIVOS),
+      where('companyId', '==', empId)
+    );
+
+    if (colaboradorId) {
+      q = query(
+        collection(db, DP_COLLECTIONS.PERIODOS_AQUISITIVOS),
+        where('companyId', '==', empId),
+        where('colaboradorId', '==', colaboradorId)
+      );
+    }
+
+    const snapshot = await getDocs(q);
+    const list: PeriodoAquisitivoFerias[] = [];
+    snapshot.forEach(docSnap => {
+      list.push(docSnap.data() as PeriodoAquisitivoFerias);
+    });
+
+    list.sort((a, b) => new Date(b.dataInicioPeriodo).getTime() - new Date(a.dataInicioPeriodo).getTime());
+    return list;
+  } catch (error) {
+    console.warn('[DP Firestore] Erro ao buscar períodos aquisitivos:', error);
+    return [];
+  }
+}
+
+export async function savePeriodoAquisitivoFirestore(pa: PeriodoAquisitivoFerias): Promise<void> {
+  try {
+    const docRef = doc(db, DP_COLLECTIONS.PERIODOS_AQUISITIVOS, pa.id);
+    await setDoc(docRef, sanitizeFirestoreData({
+      ...pa,
+      companyId: pa.companyId || 'emp-001',
+      updatedAt: new Date().toISOString()
+    }), { merge: true });
+  } catch (error) {
+    console.error('[DP Firestore] Erro ao salvar período aquisitivo:', error);
+  }
+}
+
+export async function getRegraFeriasEmpresaFirestore(companyId: string): Promise<RegraFeriasEmpresa> {
+  const empId = normalizeCompanyId(companyId);
+  try {
+    const docRef = doc(db, DP_COLLECTIONS.REGRAS_FERIAS, empId);
+    const docSnap = await getDoc(docRef);
+
+    if (docSnap.exists()) {
+      return docSnap.data() as RegraFeriasEmpresa;
+    }
+
+    const defaultRule: RegraFeriasEmpresa = {
+      id: empId,
+      companyId: empId,
+      nome: 'Regra Padrão CLT',
+      vigenciaInicio: '2026-01-01',
+      prazoConcessivoMeses: 12,
+      diasPadraoDireito: 30,
+      permitirFracionamento: true,
+      maxFracionamento: 3,
+      minDiasPrimeiroPeriodo: 14,
+      minDiasOutrosPeriodos: 5,
+      permitirAbonoPecuniario: true,
+      maxDiasAbono: 10,
+      permitirAdiantamento13: true,
+      prazoMinimoSolicitacaoDias: 30,
+      ativo: true
+    };
+
+    await setDoc(docRef, sanitizeFirestoreData(defaultRule));
+    return defaultRule;
+  } catch (error) {
+    console.warn('[DP Firestore] Erro ao buscar regra de férias da empresa:', error);
+    return {
+      id: empId,
+      companyId: empId,
+      nome: 'Regra Padrão CLT',
+      vigenciaInicio: '2026-01-01',
+      prazoConcessivoMeses: 12,
+      diasPadraoDireito: 30,
+      permitirFracionamento: true,
+      maxFracionamento: 3,
+      minDiasPrimeiroPeriodo: 14,
+      minDiasOutrosPeriodos: 5,
+      permitirAbonoPecuniario: true,
+      maxDiasAbono: 10,
+      permitirAdiantamento13: true,
+      prazoMinimoSolicitacaoDias: 30,
+      ativo: true
+    };
+  }
+}
+
+export async function saveRegraFeriasEmpresaFirestore(regra: RegraFeriasEmpresa): Promise<void> {
+  try {
+    const docRef = doc(db, DP_COLLECTIONS.REGRAS_FERIAS, regra.companyId);
+    await setDoc(docRef, sanitizeFirestoreData(regra), { merge: true });
+  } catch (error) {
+    console.error('[DP Firestore] Erro ao salvar regra de férias:', error);
+  }
+}
+
+export async function getAnotacoesInternasFirestore(companyId: string, employeeId: string): Promise<AnotacaoInternaColaborador[]> {
+  const empId = normalizeCompanyId(companyId);
+  try {
+    const q = query(
+      collection(db, DP_COLLECTIONS.ANOTACOES_INTERNAS),
+      where('companyId', '==', empId),
+      where('employeeId', '==', employeeId)
+    );
+    const snapshot = await getDocs(q);
+
+    const list: AnotacaoInternaColaborador[] = [];
+    snapshot.forEach(docSnap => {
+      list.push(docSnap.data() as AnotacaoInternaColaborador);
+    });
+
+    list.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+    return list;
+  } catch (error) {
+    console.warn('[DP Firestore] Erro ao buscar anotações internas:', error);
+    return [];
+  }
+}
+
+export async function saveAnotacaoInternaFirestore(anotacao: AnotacaoInternaColaborador): Promise<void> {
+  try {
+    const empId = normalizeCompanyId(anotacao.companyId);
+    const docRef = doc(db, DP_COLLECTIONS.ANOTACOES_INTERNAS, anotacao.id || `anot-${Date.now()}`);
+    await setDoc(docRef, sanitizeFirestoreData({
+      ...anotacao,
+      companyId: empId,
+      id: anotacao.id || `anot-${Date.now()}`,
+      createdAt: anotacao.createdAt || new Date().toISOString(),
+      updatedAt: new Date().toISOString()
+    }), { merge: true });
+  } catch (error) {
+    console.error('[DP Firestore] Erro ao salvar anotação interna:', error);
+  }
+}
+
+export async function deleteAnotacaoInternaFirestore(id: string): Promise<void> {
+  try {
+    await deleteDoc(doc(db, DP_COLLECTIONS.ANOTACOES_INTERNAS, id));
+  } catch (error) {
+    console.error('[DP Firestore] Erro ao excluir anotação interna:', error);
   }
 }
 
@@ -352,11 +886,7 @@ export async function getFeriasFirestore(companyId: string): Promise<RegistroFer
     const snapshot = await getDocs(q);
 
     if (snapshot.empty) {
-      const initialForCompany = INITIAL_FERIAS.map(f => ({ ...f, companyId: empId }));
-      for (const fer of initialForCompany) {
-        await setDoc(doc(db, DP_COLLECTIONS.FERIAS, fer.id), sanitizeFirestoreData(fer));
-      }
-      return initialForCompany;
+      return [];
     }
 
     const list: RegistroFeriasColaborador[] = [];
@@ -366,14 +896,19 @@ export async function getFeriasFirestore(companyId: string): Promise<RegistroFer
     return list;
   } catch (error) {
     console.warn('[DP Firestore] Erro ao buscar férias:', error);
-    return INITIAL_FERIAS.map(f => ({ ...f, companyId: empId }));
+    return [];
   }
 }
 
 export async function saveFeriasFirestore(ferias: RegistroFeriasColaborador): Promise<void> {
   try {
     const docRef = doc(db, DP_COLLECTIONS.FERIAS, ferias.id);
-    await setDoc(docRef, sanitizeFirestoreData(ferias), { merge: true });
+    await setDoc(docRef, sanitizeFirestoreData({
+      ...ferias,
+      companyId: ferias.companyId || 'emp-001',
+      empresaId: ferias.companyId || 'emp-001',
+      updatedAt: new Date().toISOString()
+    }), { merge: true });
 
     // Registra evento no Histórico do Colaborador
     if (ferias.colaboradorId) {
@@ -405,27 +940,7 @@ export async function getAfastamentosFirestore(companyId: string): Promise<Afast
     const snapshot = await getDocs(q);
 
     if (snapshot.empty) {
-      const mockAfastamentos: AfastamentoColaborador[] = [
-        {
-          id: 'afast-001',
-          empresaId: empId,
-          colaboradorId: 'colab-002',
-          colaboradorNome: 'Carlos Eduardo Santos',
-          tipo: 'Atestado médico',
-          dataInicio: '2026-03-01',
-          dataFim: '2026-03-03',
-          diasAfastado: 3,
-          cid: 'J11',
-          medicoResponsavel: 'Dr. Roberto Lima',
-          crmMedico: 'CRM/SP 123456',
-          status: 'Ativo',
-          createdAt: new Date().toISOString()
-        }
-      ];
-      for (const af of mockAfastamentos) {
-        await setDoc(doc(db, DP_COLLECTIONS.AFASTAMENTOS, af.id), sanitizeFirestoreData(af));
-      }
-      return mockAfastamentos;
+      return [];
     }
 
     const list: AfastamentoColaborador[] = [];
@@ -474,6 +989,100 @@ export async function saveAfastamentoFirestore(afastamento: AfastamentoColaborad
   }
 }
 
+export async function concluirRetornoAoTrabalhoFirestore(
+  afastamento: AfastamentoColaborador,
+  dadosRetorno: DadosRetornoTrabalho
+): Promise<void> {
+  try {
+    const docRef = doc(db, DP_COLLECTIONS.AFASTAMENTOS, afastamento.id);
+    const now = new Date().toISOString();
+    
+    const updatedAfastamento: AfastamentoColaborador = {
+      ...afastamento,
+      status: 'Concluído',
+      retornoTrabalhoRealizado: dadosRetorno.dataConclusao || now.split('T')[0],
+      dadosRetornoTrabalho: dadosRetorno,
+      updatedAt: now
+    };
+
+    await setDoc(docRef, sanitizeFirestoreData(updatedAfastamento), { merge: true });
+
+    // Restaura status do colaborador para 'Ativo'
+    const colabRef = doc(db, DP_COLLECTIONS.COLABORADORES, afastamento.colaboradorId);
+    const colabSnap = await getDoc(colabRef);
+    if (colabSnap.exists()) {
+      const cData = colabSnap.data() as ColaboradorCompleto;
+      await setDoc(colabRef, sanitizeFirestoreData({
+        ...cData,
+        profissionais: {
+          ...cData.profissionais,
+          status: 'Ativo'
+        }
+      }), { merge: true });
+    }
+
+    // Registra evento no histórico
+    await addHistoricoEventoFirestore({
+      empresaId: afastamento.empresaId,
+      colaboradorId: afastamento.colaboradorId,
+      moduloOrigem: 'Afastamentos',
+      tipoEvento: 'Retorno ao Trabalho',
+      descricao: `Colaborador retornou ao trabalho. ASO: ${dadosRetorno.resultadoAso}. Restrições: ${dadosRetorno.descricaoRestricoes || 'Nenhuma'}.`,
+      dataHora: now
+    });
+
+  } catch (error) {
+    console.error('[DP Firestore] Erro ao concluir retorno ao trabalho:', error);
+  }
+}
+
+// ------------------------------------------
+// ALERTAS DO DP
+// ------------------------------------------
+
+export async function getAlertasDpFirestore(companyId: string): Promise<AlertaDp[]> {
+  const empId = normalizeCompanyId(companyId);
+  try {
+    const q = query(
+      collection(db, DP_COLLECTIONS.ALERTAS),
+      where('companyId', '==', empId)
+    );
+    const snapshot = await getDocs(q);
+
+    const list: AlertaDp[] = [];
+    snapshot.forEach(docSnap => {
+      list.push(docSnap.data() as AlertaDp);
+    });
+
+    list.sort((a, b) => new Date(b.dataAlerta).getTime() - new Date(a.dataAlerta).getTime());
+    return list;
+  } catch (error) {
+    console.warn('[DP Firestore] Erro ao buscar alertas do DP:', error);
+    return [];
+  }
+}
+
+export async function saveAlertaDpFirestore(alerta: AlertaDp): Promise<void> {
+  try {
+    const docRef = doc(db, DP_COLLECTIONS.ALERTAS, alerta.id);
+    await setDoc(docRef, sanitizeFirestoreData({
+      ...alerta,
+      companyId: alerta.companyId || 'emp-001'
+    }), { merge: true });
+  } catch (error) {
+    console.error('[DP Firestore] Erro ao salvar alerta:', error);
+  }
+}
+
+export async function marcarAlertaComoLidoFirestore(alertaId: string): Promise<void> {
+  try {
+    const docRef = doc(db, DP_COLLECTIONS.ALERTAS, alertaId);
+    await updateDoc(docRef, { lido: true });
+  } catch (error) {
+    console.error('[DP Firestore] Erro ao marcar alerta como lido:', error);
+  }
+}
+
 // ==========================================
 // 6. DOCUMENTOS
 // ==========================================
@@ -495,37 +1104,7 @@ export async function getDocumentosFirestore(companyId: string, colaboradorId?: 
     const snapshot = await getDocs(q);
 
     if (snapshot.empty) {
-      const initialDocs: DocumentoColaborador[] = [
-        {
-          id: 'doc-001',
-          empresaId: empId,
-          colaboradorId: 'colab-001',
-          colaboradorNome: 'Ana Paula Silva',
-          categoria: 'Contratuais',
-          tipoDocumento: 'Contrato de Trabalho CLT',
-          nomeArquivo: 'Contrato_CLT_Ana_Silva.pdf',
-          dataEmissao: '2023-01-15',
-          status: 'Válido',
-          criadoEm: '2023-01-15'
-        },
-        {
-          id: 'doc-002',
-          empresaId: empId,
-          colaboradorId: 'colab-001',
-          colaboradorNome: 'Ana Paula Silva',
-          categoria: 'Saúde ocupacional',
-          tipoDocumento: 'Atestado de Saúde Ocupacional (ASO Periodico)',
-          nomeArquivo: 'ASO_Ana_Silva_2025.pdf',
-          dataEmissao: '2025-01-10',
-          dataValidade: '2026-01-10',
-          status: 'Vencido',
-          criadoEm: '2025-01-10'
-        }
-      ];
-      for (const d of initialDocs) {
-        await setDoc(doc(db, DP_COLLECTIONS.DOCUMENTOS, d.id), sanitizeFirestoreData(d));
-      }
-      return initialDocs.filter(d => !colaboradorId || d.colaboradorId === colaboradorId);
+      return [];
     }
 
     const list: DocumentoColaborador[] = [];
@@ -542,7 +1121,13 @@ export async function getDocumentosFirestore(companyId: string, colaboradorId?: 
 export async function saveDocumentoFirestore(docData: DocumentoColaborador): Promise<void> {
   try {
     const docRef = doc(db, DP_COLLECTIONS.DOCUMENTOS, docData.id);
-    await setDoc(docRef, sanitizeFirestoreData(docData), { merge: true });
+    await setDoc(docRef, sanitizeFirestoreData({
+      ...docData,
+      empresaId: docData.empresaId || 'emp-001',
+      companyId: docData.empresaId || 'emp-001',
+      status: docData.status || 'Válido',
+      criadoEm: docData.criadoEm || new Date().toISOString()
+    }), { merge: true });
 
     await addHistoricoEventoFirestore({
       empresaId: docData.empresaId,
@@ -571,24 +1156,7 @@ export async function getAjustesPontoFirestore(companyId: string): Promise<Ajust
     const snapshot = await getDocs(q);
 
     if (snapshot.empty) {
-      const mockAjustes: AjustePontoColaborador[] = [
-        {
-          id: 'aj-001',
-          empresaId: empId,
-          colaboradorId: 'colab-001',
-          colaboradorNome: 'Ana Paula Silva',
-          data: '2026-03-02',
-          motivo: 'Esquecimento do registro no horário de saída',
-          marcacoesOriginais: ['08:02', '12:00', '13:00'],
-          marcacoesNovas: ['08:02', '12:00', '13:00', '18:00'],
-          status: 'Pendente',
-          createdAt: new Date().toISOString()
-        }
-      ];
-      for (const aj of mockAjustes) {
-        await setDoc(doc(db, DP_COLLECTIONS.AJUSTES_PONTO, aj.id), sanitizeFirestoreData(aj));
-      }
-      return mockAjustes;
+      return [];
     }
 
     const list: AjustePontoColaborador[] = [];
@@ -605,7 +1173,13 @@ export async function getAjustesPontoFirestore(companyId: string): Promise<Ajust
 export async function saveAjustePontoFirestore(ajuste: AjustePontoColaborador): Promise<void> {
   try {
     const docRef = doc(db, DP_COLLECTIONS.AJUSTES_PONTO, ajuste.id);
-    await setDoc(docRef, sanitizeFirestoreData(ajuste), { merge: true });
+    await setDoc(docRef, sanitizeFirestoreData({
+      ...ajuste,
+      empresaId: ajuste.empresaId || 'emp-001',
+      companyId: ajuste.empresaId || 'emp-001',
+      status: ajuste.status || 'Pendente',
+      createdAt: ajuste.createdAt || new Date().toISOString()
+    }), { merge: true });
 
     await addHistoricoEventoFirestore({
       empresaId: ajuste.empresaId,
@@ -634,13 +1208,7 @@ export async function getRescisoesFirestore(companyId: string): Promise<CalculoR
     const snapshot = await getDocs(q);
 
     if (snapshot.empty) {
-      const initialForCompany = INITIAL_RESCISOES.map(r => ({ ...r, companyId: empId }));
-      for (const res of initialForCompany) {
-        if (res.id) {
-          await setDoc(doc(db, DP_COLLECTIONS.RESCISOES, res.id), sanitizeFirestoreData(res));
-        }
-      }
-      return initialForCompany;
+      return [];
     }
 
     const list: CalculoRescisorio[] = [];
@@ -650,7 +1218,7 @@ export async function getRescisoesFirestore(companyId: string): Promise<CalculoR
     return list;
   } catch (error) {
     console.warn('[DP Firestore] Erro ao buscar rescisões:', error);
-    return INITIAL_RESCISOES.map(r => ({ ...r, companyId: empId }));
+    return [];
   }
 }
 
@@ -689,15 +1257,19 @@ export async function concluirRescisaoEBloquearColaborador(rescisao: CalculoResc
       await setDoc(colabRef, sanitizeFirestoreData(colabAtualizado), { merge: true });
     }
 
-    // 3. Encerra Benefícios Ativos do Colaborador no Firestore
-    const benList = await getBeneficiosFirestore(companyId);
-    const colabBen = benList.filter(b => b.companyId === companyId && b.ativo);
-    for (const b of colabBen) {
-      await setDoc(doc(db, DP_COLLECTIONS.BENEFICIOS, b.id), sanitizeFirestoreData({
-        ...b,
-        ativo: false,
-        observacoes: `Encerrado automaticamente devido a desligamento em ${rescisao.dataDesligamento}`
-      }), { merge: true });
+    // 3. Encerra Benefícios Ativos APENAS do Colaborador Desligado no Firestore
+    const colabBenefits = await getEmployeeBenefitsFirestore(companyId, rescisao.colaboradorId);
+    const activeBenefits = colabBenefits.filter(b => b.status === 'Ativo' || b.status === 'Pendente');
+    
+    for (const b of activeBenefits) {
+      await updateEmployeeBenefitStatusFirestore(
+        companyId,
+        b.id,
+        'Encerrado',
+        'rh-system',
+        'Módulo de Rescisão',
+        `Encerrado automaticamente devido ao desligamento em ${rescisao.dataDesligamento}`
+      );
     }
 
     // 4. Registra no Histórico Único do Colaborador
@@ -809,3 +1381,176 @@ export async function saveConfigTrabalhistaFirestore(config: ConfiguracoesTrabal
     console.error('[DP Firestore] Erro ao salvar configurações:', error);
   }
 }
+
+// ==========================================
+// 11. PORTAL DO COLABORADOR - SOLICITAÇÕES
+// ==========================================
+
+export async function getSolicitacoesPortalFirestore(companyId: string, employeeId?: string): Promise<SolicitacaoPortalItem[]> {
+  const empId = normalizeCompanyId(companyId);
+  try {
+    let q;
+    if (employeeId) {
+      q = query(
+        collection(db, DP_COLLECTIONS.SOLICITACOES_PORTAL),
+        where('companyId', '==', empId),
+        where('employeeId', '==', employeeId)
+      );
+    } else {
+      q = query(
+        collection(db, DP_COLLECTIONS.SOLICITACOES_PORTAL),
+        where('companyId', '==', empId)
+      );
+    }
+    const snapshot = await getDocs(q);
+    const list: SolicitacaoPortalItem[] = [];
+    snapshot.forEach(docSnap => {
+      list.push(docSnap.data() as SolicitacaoPortalItem);
+    });
+    list.sort((a, b) => new Date(b.dataSolicitacao).getTime() - new Date(a.dataSolicitacao).getTime());
+    return list;
+  } catch (error) {
+    console.warn('[DP Firestore] Erro ao buscar solicitações do portal:', error);
+    return [];
+  }
+}
+
+export async function saveSolicitacaoPortalFirestore(solicitacao: SolicitacaoPortalItem): Promise<void> {
+  try {
+    const docRef = doc(db, DP_COLLECTIONS.SOLICITACOES_PORTAL, solicitacao.id);
+    await setDoc(docRef, sanitizeFirestoreData({
+      ...solicitacao,
+      companyId: solicitacao.companyId || 'emp-001',
+      updatedAt: new Date().toISOString()
+    }), { merge: true });
+  } catch (error) {
+    console.error('[DP Firestore] Erro ao salvar solicitação do portal:', error);
+  }
+}
+
+// ==========================================
+// 12. PORTAL DO COLABORADOR - CHAMADOS SUPORTE
+// ==========================================
+
+export async function getChamadosSuporteFirestore(companyId: string, employeeId?: string): Promise<ChamadoSuporteItem[]> {
+  const empId = normalizeCompanyId(companyId);
+  try {
+    let q;
+    if (employeeId) {
+      q = query(
+        collection(db, DP_COLLECTIONS.CHAMADOS_SUPORTE),
+        where('companyId', '==', empId),
+        where('employeeId', '==', employeeId)
+      );
+    } else {
+      q = query(
+        collection(db, DP_COLLECTIONS.CHAMADOS_SUPORTE),
+        where('companyId', '==', empId)
+      );
+    }
+    const snapshot = await getDocs(q);
+    const list: ChamadoSuporteItem[] = [];
+    snapshot.forEach(docSnap => {
+      list.push(docSnap.data() as ChamadoSuporteItem);
+    });
+    list.sort((a, b) => new Date(b.criadoEm).getTime() - new Date(a.criadoEm).getTime());
+    return list;
+  } catch (error) {
+    console.warn('[DP Firestore] Erro ao buscar chamados de suporte:', error);
+    return [];
+  }
+}
+
+export async function saveChamadoSuporteFirestore(chamado: ChamadoSuporteItem): Promise<void> {
+  try {
+    const docRef = doc(db, DP_COLLECTIONS.CHAMADOS_SUPORTE, chamado.id);
+    await setDoc(docRef, sanitizeFirestoreData({
+      ...chamado,
+      companyId: chamado.companyId || 'emp-001',
+      atualizadoEm: new Date().toISOString()
+    }), { merge: true });
+  } catch (error) {
+    console.error('[DP Firestore] Erro ao salvar chamado de suporte:', error);
+  }
+}
+
+// ==========================================
+// 13. PORTAL DO COLABORADOR - COMUNICADOS
+// ==========================================
+
+export async function getComunicadosFirestore(companyId: string): Promise<ComunicadoItem[]> {
+  const empId = normalizeCompanyId(companyId);
+  try {
+    const q = query(
+      collection(db, DP_COLLECTIONS.COMUNICADOS),
+      where('companyId', '==', empId)
+    );
+    const snapshot = await getDocs(q);
+    const list: ComunicadoItem[] = [];
+    snapshot.forEach(docSnap => {
+      list.push(docSnap.data() as ComunicadoItem);
+    });
+    list.sort((a, b) => new Date(b.dataPublicacao).getTime() - new Date(a.dataPublicacao).getTime());
+    return list;
+  } catch (error) {
+    console.warn('[DP Firestore] Erro ao buscar comunicados:', error);
+    return [];
+  }
+}
+
+export async function saveComunicadoFirestore(comunicado: ComunicadoItem): Promise<void> {
+  try {
+    const docRef = doc(db, DP_COLLECTIONS.COMUNICADOS, comunicado.id);
+    await setDoc(docRef, sanitizeFirestoreData({
+      ...comunicado,
+      companyId: comunicado.companyId || 'emp-001'
+    }), { merge: true });
+  } catch (error) {
+    console.error('[DP Firestore] Erro ao salvar comunicado:', error);
+  }
+}
+
+// ==========================================
+// 14. PORTAL DO COLABORADOR - DOCUMENTOS DE ASSINATURA
+// ==========================================
+
+export async function getDocumentosAssinaturaFirestore(companyId: string, employeeId?: string): Promise<DocumentoAssinaturaItem[]> {
+  const empId = normalizeCompanyId(companyId);
+  try {
+    let q;
+    if (employeeId) {
+      q = query(
+        collection(db, DP_COLLECTIONS.DOCUMENTOS_ASSINATURA),
+        where('companyId', '==', empId),
+        where('employeeId', '==', employeeId)
+      );
+    } else {
+      q = query(
+        collection(db, DP_COLLECTIONS.DOCUMENTOS_ASSINATURA),
+        where('companyId', '==', empId)
+      );
+    }
+    const snapshot = await getDocs(q);
+    const list: DocumentoAssinaturaItem[] = [];
+    snapshot.forEach(docSnap => {
+      list.push(docSnap.data() as DocumentoAssinaturaItem);
+    });
+    return list;
+  } catch (error) {
+    console.warn('[DP Firestore] Erro ao buscar documentos de assinatura:', error);
+    return [];
+  }
+}
+
+export async function saveDocumentoAssinaturaFirestore(docItem: DocumentoAssinaturaItem): Promise<void> {
+  try {
+    const docRef = doc(db, DP_COLLECTIONS.DOCUMENTOS_ASSINATURA, docItem.id);
+    await setDoc(docRef, sanitizeFirestoreData({
+      ...docItem,
+      companyId: docItem.companyId || 'emp-001'
+    }), { merge: true });
+  } catch (error) {
+    console.error('[DP Firestore] Erro ao salvar documento de assinatura:', error);
+  }
+}
+
