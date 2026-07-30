@@ -38,13 +38,28 @@ export const JobsManagementView: React.FC<JobsManagementViewProps> = ({
   const canEdit = hasActionAccess('edit_job');
   const canClose = hasActionAccess('close_job');
 
-  const [jobs, setJobs] = useState<Job[]>(initialJobsList || INITIAL_JOBS_DATA);
+  const userCompanyId = user?.empresaId || user?.companyId || user?.tenantId;
+  const isMaster = user?.role === 'Super Administrador' || user?.role === 'MASTER' || user?.tipoUsuario === 'MASTER' || user?.isMaster === true;
+
+  const rawJobs = initialJobsList !== undefined
+    ? initialJobsList
+    : (import.meta.env.DEV ? INITIAL_JOBS_DATA : []);
+
+  const companyJobs = useMemo(() => {
+    if (isMaster || !userCompanyId) {
+      return rawJobs;
+    }
+    return rawJobs.filter((j: any) => {
+      const cId = j.companyId || j.empresaId || j.tenantId;
+      return !cId || cId === userCompanyId;
+    });
+  }, [rawJobs, isMaster, userCompanyId]);
+
+  const [jobs, setJobs] = useState<Job[]>(companyJobs);
 
   React.useEffect(() => {
-    if (initialJobsList && initialJobsList.length > 0) {
-      setJobs(initialJobsList);
-    }
-  }, [initialJobsList]);
+    setJobs(companyJobs);
+  }, [companyJobs]);
 
   const [selectedJob, setSelectedJob] = useState<Job | null>(null);
   const [selectedJobForCandidates, setSelectedJobForCandidates] = useState<Job | null>(null);

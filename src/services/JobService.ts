@@ -101,7 +101,7 @@ export class JobService {
     } catch (err) {
       console.warn('Erro em JobService.getById:', err);
     }
-    return INITIAL_JOBS.find(j => j.id === id) || null;
+    return import.meta.env.DEV ? (INITIAL_JOBS.find(j => j.id === id) || null) : null;
   }
 
   static async get(id: string): Promise<Job | null> {
@@ -110,11 +110,20 @@ export class JobService {
 
   static async list(companyId?: string): Promise<Job[]> {
     try {
-      const q = companyId 
-        ? query(collection(db, COLLECTION_NAME), where('companyId', '==', companyId))
-        : collection(db, COLLECTION_NAME);
-      const snap = await getDocs(q);
-      if (!snap.empty) {
+      if (companyId) {
+        const listMap = new Map<string, Job>();
+
+        const q1 = query(collection(db, COLLECTION_NAME), where('companyId', '==', companyId));
+        const snap1 = await getDocs(q1);
+        snap1.forEach(d => listMap.set(d.id, d.data() as Job));
+
+        const q2 = query(collection(db, COLLECTION_NAME), where('empresaId', '==', companyId));
+        const snap2 = await getDocs(q2);
+        snap2.forEach(d => listMap.set(d.id, d.data() as Job));
+
+        return Array.from(listMap.values());
+      } else {
+        const snap = await getDocs(collection(db, COLLECTION_NAME));
         const list: Job[] = [];
         snap.forEach(d => list.push(d.data() as Job));
         return list;
@@ -122,7 +131,7 @@ export class JobService {
     } catch (err) {
       console.warn('Erro em JobService.list:', err);
     }
-    return INITIAL_JOBS;
+    return import.meta.env.DEV ? INITIAL_JOBS : [];
   }
 
   static async listByCompany(companyId?: string): Promise<Job[]> {

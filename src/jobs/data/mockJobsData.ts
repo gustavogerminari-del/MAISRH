@@ -4,7 +4,7 @@
 
 import { Job } from '../types/job';
 
-export const INITIAL_JOBS_DATA: Job[] = [
+export const INITIAL_JOBS_DATA: Job[] = import.meta.env.DEV ? [
   {
     id: 'job-01',
     title: 'Desenvolvedor(a) Full Stack Senior (React & Node)',
@@ -128,4 +128,4 @@ export const INITIAL_JOBS_DATA: Job[] = [
     },
     isArchived: false,
   },
-];
+] : [];

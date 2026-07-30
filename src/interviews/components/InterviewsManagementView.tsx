@@ -45,13 +45,24 @@ export const InterviewsManagementView: React.FC<InterviewsManagementViewProps> =
 }) => {
   const { user, hasActionAccess } = useAuth();
 
+  const userCompanyId = user?.empresaId || user?.companyId || user?.tenantId;
+  const isMaster = user?.role === 'Super Administrador' || user?.role === 'MASTER' || user?.tipoUsuario === 'MASTER' || user?.isMaster === true;
+
   const [interviews, setInterviews] = useState<Interview[]>(
     initialInterviewsList || INITIAL_INTERVIEWS_DATA
   );
   const [candidates] = useState<Candidate[]>(
     candidatesList || INITIAL_CANDIDATES_DATA
   );
-  const [jobs] = useState<Job[]>(jobsList || INITIAL_JOBS_DATA);
+
+  const rawJobs = jobsList !== undefined ? jobsList : (import.meta.env.DEV ? INITIAL_JOBS_DATA : []);
+  const jobs = useMemo(() => {
+    if (isMaster || !userCompanyId) return rawJobs;
+    return rawJobs.filter((j: any) => {
+      const cId = j.companyId || j.empresaId || j.tenantId;
+      return !cId || cId === userCompanyId;
+    });
+  }, [rawJobs, isMaster, userCompanyId]);
 
   // Modals state
   const [isScheduleModalOpen, setIsScheduleModalOpen] = useState(false);

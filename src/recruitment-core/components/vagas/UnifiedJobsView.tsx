@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { 
   Briefcase, 
   Plus, 
@@ -12,6 +12,7 @@ import {
   TrendingUp,
   BarChart2
 } from 'lucide-react';
+import { useAuth } from '../../../auth';
 import { 
   UnifiedJob, 
   UnifiedCandidate, 
@@ -64,8 +65,21 @@ export const UnifiedJobsView: React.FC<UnifiedJobsViewProps> = ({
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [editingJob, setEditingJob] = useState<UnifiedJob | null>(null);
 
+  const { user } = useAuth();
+  const userCompanyId = user?.empresaId || user?.companyId || user?.tenantId;
+  const isMaster = user?.role === 'Super Administrador' || user?.role === 'MASTER' || user?.tipoUsuario === 'MASTER' || user?.isMaster === true;
+
+  // Filter jobs by authenticated company
+  const companyJobs = useMemo(() => {
+    if (isMaster || !userCompanyId) return jobs;
+    return jobs.filter(j => {
+      const cId = j.empresaId || j.companyId || (j as any).tenantId;
+      return !cId || cId === userCompanyId;
+    });
+  }, [jobs, isMaster, userCompanyId]);
+
   // Filter jobs
-  const filteredJobs = jobs.filter(j => {
+  const filteredJobs = companyJobs.filter(j => {
     const term = searchTerm.toLowerCase().trim();
     const matchesSearch = !term || 
       (j.titulo || j.title || '').toLowerCase().includes(term) ||
@@ -79,9 +93,9 @@ export const UnifiedJobsView: React.FC<UnifiedJobsViewProps> = ({
   });
 
   // Calculate Metrics
-  const openJobsCount = jobs.filter(j => j.status === 'Aberta' || j.status === 'ativa' || j.status === 'Busca ativa').length;
-  const totalReceitaPrevista = jobs.reduce((acc, j) => acc + (j.valorNegociado || j.valorCobrado || j.valorVaga || 0), 0);
-  const totalComissaoPrevista = jobs.reduce((acc, j) => acc + (j.comissaoCalculada || 0), 0);
+  const openJobsCount = companyJobs.filter(j => j.status === 'Aberta' || j.status === 'ativa' || j.status === 'Busca ativa').length;
+  const totalReceitaPrevista = companyJobs.reduce((acc, j) => acc + (j.valorNegociado || j.valorCobrado || j.valorVaga || 0), 0);
+  const totalComissaoPrevista = companyJobs.reduce((acc, j) => acc + (j.comissaoCalculada || 0), 0);
 
   const handleSaveJob = (savedJob: UnifiedJob) => {
     const updated = [savedJob, ...jobs.filter(j => j.id !== savedJob.id)];

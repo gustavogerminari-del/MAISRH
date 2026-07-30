@@ -1,12 +1,32 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
-import { ModuleService, ModuleDoc, CompanyModuleDoc } from '../services/ModuleService';
+import { 
+  SystemModule, 
+  fetchModulosFirestore, 
+  saveModuloFirestore, 
+  deleteModuloFirestore, 
+  toggleModuloStatusFirestore, 
+  duplicateModuloFirestore,
+  fetchCompanyReleasedModules,
+  saveCompanyReleasedModules
+} from '../services/ModuleCatalogService';
+import { ModuleService } from '../services/ModuleService';
 import { useAuth } from '../auth/context/AuthContext';
 
 export interface ModuleContextType {
-  modules: ModuleDoc[];
+  modules: SystemModule[];
   companyModules: Record<string, boolean>;
   loading: boolean;
+  error: string | null;
   isModuleEnabled: (moduleKey: string) => boolean;
+  
+  // CRUD Functions for 'modulos' collection in Firestore
+  createModule: (moduleData: Partial<SystemModule>) => Promise<SystemModule>;
+  updateModule: (id: string, moduleData: Partial<SystemModule>) => Promise<SystemModule>;
+  deleteModule: (id: string) => Promise<void>;
+  toggleModuleStatus: (id: string, currentStatus: boolean) => Promise<boolean>;
+  duplicateModule: (module: SystemModule) => Promise<SystemModule>;
+  
+  // Company access management
   toggleCompanyModule: (companyId: string, moduleKey: string, enabled: boolean) => Promise<void>;
   refreshModules: () => Promise<void>;
 }
@@ -15,28 +35,34 @@ const ModuleContext = createContext<ModuleContextType | undefined>(undefined);
 
 export const ModuleProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const { user, activeModules } = useAuth();
-  const [modules, setModules] = useState<ModuleDoc[]>([]);
+  const [modules, setModules] = useState<SystemModule[]>([]);
   const [companyModulesMap, setCompanyModulesMap] = useState<Record<string, boolean>>({});
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   const companyId = user?.companyId || user?.empresaId || user?.tenantId || 't-001';
 
   const refreshModules = async () => {
     setLoading(true);
+    setError(null);
     try {
-      const allMods = await ModuleService.listAllModules();
+      const allMods = await fetchModulosFirestore(false);
       setModules(allMods);
 
       if (user?.tipoUsuario === 'MASTER' || user?.role === 'Super Administrador') {
         const fullAccess: Record<string, boolean> = {};
-        allMods.forEach(m => { fullAccess[m.id] = true; });
+        allMods.forEach(m => { 
+          fullAccess[m.key] = true;
+          fullAccess[m.id] = true;
+        });
         setCompanyModulesMap(fullAccess);
       } else {
-        const compMods = await ModuleService.getCompanyModules(companyId);
+        const compMods = await fetchCompanyReleasedModules(companyId);
         setCompanyModulesMap(compMods);
       }
-    } catch (err) {
-      console.warn('Erro ao carregar módulos no ModuleProvider:', err);
+    } catch (err: any) {
+      console.warn('Aviso/Erro ao carregar módulos no ModuleProvider:', err);
+      setError(err?.message || 'Erro ao consultar coleção de módulos.');
       setCompanyModulesMap(activeModules || {});
     } finally {
       setLoading(false);
@@ -60,7 +86,38 @@ export const ModuleProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     return true; // fallback
   };
 
+  // CRUD Functions for 'modulos'
+  const createModule = async (moduleData: Partial<SystemModule>): Promise<SystemModule> => {
+    const saved = await saveModuloFirestore(moduleData);
+    await refreshModules();
+    return saved;
+  };
+
+  const updateModule = async (id: string, moduleData: Partial<SystemModule>): Promise<SystemModule> => {
+    const saved = await saveModuloFirestore({ ...moduleData, id, key: moduleData.key || id });
+    await refreshModules();
+    return saved;
+  };
+
+  const deleteModule = async (id: string): Promise<void> => {
+    await deleteModuloFirestore(id);
+    await refreshModules();
+  };
+
+  const toggleModuleStatus = async (id: string, currentStatus: boolean): Promise<boolean> => {
+    const newStatus = await toggleModuloStatusFirestore(id, currentStatus);
+    await refreshModules();
+    return newStatus;
+  };
+
+  const duplicateModule = async (sourceModule: SystemModule): Promise<SystemModule> => {
+    const duplicated = await duplicateModuloFirestore(sourceModule);
+    await refreshModules();
+    return duplicated;
+  };
+
   const toggleCompanyModule = async (cId: string, moduleKey: string, enabled: boolean) => {
+    await saveCompanyReleasedModules(cId, { [moduleKey]: enabled });
     await ModuleService.setCompanyModule(cId, moduleKey, enabled);
     setCompanyModulesMap(prev => ({
       ...prev,
@@ -74,7 +131,13 @@ export const ModuleProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         modules,
         companyModules: companyModulesMap,
         loading,
+        error,
         isModuleEnabled,
+        createModule,
+        updateModule,
+        deleteModule,
+        toggleModuleStatus,
+        duplicateModule,
         toggleCompanyModule,
         refreshModules
       }}
@@ -91,3 +154,4 @@ export const useModuleContext = (): ModuleContextType => {
   }
   return context;
 };
+

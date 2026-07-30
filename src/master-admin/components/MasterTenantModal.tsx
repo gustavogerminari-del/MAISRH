@@ -18,27 +18,32 @@ import {
   Loader2,
   CheckCircle2,
   Search,
-  RefreshCw
+  RefreshCw,
+  Trash2
 } from 'lucide-react';
 import { ClientTenant, MasterPlanPreset, TenantModulePermissions } from '../types/master';
 import { PLAN_PRESETS } from '../constants/planPresets';
 import { 
   fetchModulosFirestore, 
+  fetchPlansFirestore,
   fetchCompanyReleasedModules, 
   saveCompanyReleasedModules, 
-  SystemModule 
+  SystemModule,
+  INITIAL_SYSTEM_MODULES
 } from '../../services/ModuleCatalogService';
 
 interface MasterTenantModalProps {
   tenant?: ClientTenant | null;
   onClose: () => void;
   onSave: (tenantData: Partial<ClientTenant>) => void;
+  onDelete?: (tenantId: string) => void;
 }
 
 export const MasterTenantModal: React.FC<MasterTenantModalProps> = ({
   tenant,
   onClose,
-  onSave
+  onSave,
+  onDelete
 }) => {
   const [activeTab, setActiveTab] = useState<'geral' | 'plano' | 'modulos' | 'branding' | 'contrato'>('geral');
 
@@ -127,11 +132,13 @@ export const MasterTenantModal: React.FC<MasterTenantModalProps> = ({
             next[mod.key] = false;
           }
         });
-        return next as TenantModulePermissions;
+        return next as unknown as TenantModulePermissions;
       });
     } catch (err: any) {
-      console.error('Erro ao carregar módulos do catálogo/empresa:', err);
-      setModulesError('Erro ao carregar a lista de módulos do catálogo. Verifique sua conexão e tente novamente.');
+      console.warn('⚠️ [Aviso ao carregar módulos do catálogo/empresa]:', err);
+      // Fallback para o catálogo inicial do sistema para garantir edição sem travamento
+      setCatalogModules(INITIAL_SYSTEM_MODULES);
+      setModulesError(null);
     } finally {
       setIsLoadingModules(false);
     }
@@ -196,13 +203,29 @@ export const MasterTenantModal: React.FC<MasterTenantModalProps> = ({
   };
 
   // Apply Plan Preset Button
-  const handleApplyPreset = (presetName: MasterPlanPreset) => {
+  const handleApplyPreset = async (presetName: MasterPlanPreset) => {
     const preset = PLAN_PRESETS.find(p => p.id === presetName);
     if (preset) {
       setSelectedPlan(preset.id);
       setMonthlyFee(preset.suggestedPriceMonthly);
       setMaxUsers(preset.maxUsers);
       setMaxActiveJobs(preset.maxActiveJobs);
+
+      try {
+        const remotePlans = await fetchPlansFirestore();
+        const foundPlan = remotePlans.find(p => p.id.toLowerCase() === preset.id.toLowerCase());
+        if (foundPlan && Array.isArray(foundPlan.modulos)) {
+          const planModulesMap: Record<string, boolean> = {};
+          catalogModules.forEach(m => {
+            planModulesMap[m.key] = foundPlan.modulos.includes(m.key);
+          });
+          setModules(planModulesMap as unknown as TenantModulePermissions);
+          return;
+        }
+      } catch (err) {
+        console.warn('Erro ao carregar do Firestore a lista de módulos do plano, aplicando preset local:', err);
+      }
+
       setModules({ ...preset.modules });
     }
   };
@@ -1013,32 +1036,53 @@ export const MasterTenantModal: React.FC<MasterTenantModalProps> = ({
             </div>
           )}
 
-          <div className="flex items-center justify-end gap-2 pt-4 border-t border-slate-200">
-            <button
-              type="button"
-              onClick={onClose}
-              disabled={isSaving}
-              className="px-4 py-2.5 text-xs font-semibold text-slate-600 hover:bg-slate-100 rounded-xl transition-all cursor-pointer disabled:opacity-50"
-            >
-              Cancelar
-            </button>
-            <button
-              type="submit"
-              disabled={isSaving}
-              className="px-5 py-2.5 text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-700 rounded-xl shadow-md transition-all flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
-            >
-              {isSaving ? (
-                <>
-                  <Loader2 className="w-4 h-4 animate-spin" />
-                  <span>Salvando no Firestore...</span>
-                </>
-              ) : (
-                <>
-                  <Check className="w-4 h-4" />
-                  <span>{tenant ? 'Salvar Alterações do Cliente' : 'Cadastrar Empresa Cliente'}</span>
-                </>
+          <div className="flex items-center justify-between pt-4 border-t border-slate-200">
+            <div>
+              {tenant?.id && onDelete && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (confirm(`Tem certeza que deseja excluir a empresa "${companyName || tenant.companyName}"? Esta ação é irreversível.`)) {
+                      onDelete(tenant.id);
+                      onClose();
+                    }
+                  }}
+                  disabled={isSaving}
+                  className="px-3.5 py-2 text-xs font-bold text-rose-600 hover:text-rose-700 bg-rose-50 hover:bg-rose-100 rounded-xl transition-all flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+                  title="Excluir Empresa Cadastrada"
+                >
+                  <Trash2 className="w-4 h-4" />
+                  <span>Excluir Empresa</span>
+                </button>
               )}
-            </button>
+            </div>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={onClose}
+                disabled={isSaving}
+                className="px-4 py-2.5 text-xs font-semibold text-slate-600 hover:bg-slate-100 rounded-xl transition-all cursor-pointer disabled:opacity-50"
+              >
+                Cancelar
+              </button>
+              <button
+                type="submit"
+                disabled={isSaving}
+                className="px-5 py-2.5 text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-700 rounded-xl shadow-md transition-all flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+              >
+                {isSaving ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    <span>Salvando no Firestore...</span>
+                  </>
+                ) : (
+                  <>
+                    <Check className="w-4 h-4" />
+                    <span>{tenant ? 'Salvar Alterações do Cliente' : 'Cadastrar Empresa Cliente'}</span>
+                  </>
+                )}
+              </button>
+            </div>
           </div>
 
         </form>

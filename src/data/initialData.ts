@@ -10,7 +10,7 @@ export const fontStages: Stage[] = [
   { id: 'contratado', name: 'Contratado', color: 'bg-teal-50 text-teal-800 border-teal-200' },
 ];
 
-export const INITIAL_JOBS: Job[] = [
+export const INITIAL_JOBS: Job[] = import.meta.env.DEV ? [
   {
     id: 'vaga-1',
     title: 'Desenvolvedor Senior React / TypeScript',
@@ -96,7 +96,7 @@ export const INITIAL_JOBS: Job[] = [
     requirements: ['Domínio total do eSocial e e-Folha', 'Legislação trabalhista CLT', 'Domínio de Excel avançado'],
     recruiterName: 'Luciana Mello'
   }
-];
+] : [];
 
 export const INITIAL_CANDIDATES: Candidate[] = [
   {

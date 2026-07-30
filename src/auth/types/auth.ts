@@ -9,7 +9,9 @@ export type RoleProfile =
   | 'Gestor de Seleção'
   | 'Recrutador Sênior'
   | 'Analista de RH'
-  | 'Colaborador';
+  | 'Colaborador'
+  | 'MASTER'
+  | string;
 
 export type UserType = 'MASTER' | 'EMPRESA' | 'CANDIDATO' | 'FUNCIONARIO' | 'COLABORADOR';
 

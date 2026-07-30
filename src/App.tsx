@@ -38,6 +38,7 @@ import {
 } from './data/initialData';
 
 import { Job, Candidate, Interview, StageId } from './types/rh';
+import { JobService } from './services/JobService';
 
 function MainAppContent() {
   const { user, isAuthenticated } = useAuth();
@@ -61,6 +62,32 @@ function MainAppContent() {
   const [departments] = useState(INITIAL_DEPARTMENTS);
   const [recruiters] = useState(INITIAL_RECRUITERS);
 
+  // Load company jobs from Firestore
+  React.useEffect(() => {
+    if (!isAuthenticated) return;
+
+    const isMaster = user?.role === 'Super Administrador' || user?.role === 'MASTER' || user?.tipoUsuario === 'MASTER' || user?.isMaster === true;
+    const userCompanyId = isMaster ? undefined : (user?.empresaId || user?.companyId || user?.tenantId);
+
+    JobService.list(userCompanyId)
+      .then(loadedJobs => {
+        if (loadedJobs && Array.isArray(loadedJobs)) {
+          if (!isMaster && userCompanyId) {
+            const filtered = loadedJobs.filter(j => {
+              const cId = (j as any).companyId || (j as any).empresaId || (j as any).tenantId;
+              return cId === userCompanyId;
+            });
+            setJobs(filtered);
+          } else {
+            setJobs(loadedJobs);
+          }
+        }
+      })
+      .catch(err => {
+        console.warn('Erro ao carregar vagas do Firestore:', err);
+      });
+  }, [isAuthenticated, user?.empresaId, user?.companyId, user?.tenantId, user?.role, user?.tipoUsuario, user?.isMaster]);
+
   // Modals state
   const [isJobModalOpen, setIsJobModalOpen] = useState(false);
   const [isCandidateModalOpen, setIsCandidateModalOpen] = useState(false);
@@ -68,9 +95,9 @@ function MainAppContent() {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
   // Handlers
-  const handleAddJob = (newJobData: Omit<Job, 'id' | 'applicantsCount' | 'createdAt'>) => {
-    const empresaId = user?.companyId || user?.tenantId || user?.id || 'emp-001';
-    const nomeEmpresa = user?.companyName || user?.tenantName || 'MAIS RH Brasil';
+  const handleAddJob = async (newJobData: Omit<Job, 'id' | 'applicantsCount' | 'createdAt'>) => {
+    const empresaId = user?.empresaId || user?.companyId || user?.tenantId || user?.id || 'emp-001';
+    const nomeEmpresa = user?.companyName || user?.tenantName || user?.name || 'Empresa';
     const parts = (newJobData.location || 'São Paulo - SP').split('-');
     const cidade = parts[0]?.trim() || 'São Paulo';
     const estado = parts[1]?.trim() || 'SP';
@@ -79,6 +106,7 @@ function MainAppContent() {
     const newJob: Job = {
       ...newJobData,
       id: `vaga-${Date.now()}`,
+      companyId: empresaId,
       empresaId,
       nomeEmpresa,
       titulo: newJobData.title,
@@ -90,20 +118,27 @@ function MainAppContent() {
       cidade,
       estado,
       location: newJobData.location || `${cidade} - ${estado}`,
-      salario: newJobData.salaryRange || 'R$ 8.000 - R$ 12.000',
-      salaryRange: newJobData.salaryRange || 'R$ 8.000 - R$ 12.000',
+      salario: newJobData.salaryRange || 'A combinar',
+      salaryRange: newJobData.salaryRange || 'A combinar',
       tipoContrato: newJobData.type || 'CLT',
       type: newJobData.type || 'CLT',
-      beneficios: ['Vale Refeição R$ 1.000/mês', 'Plano de Saúde', 'Seguro de Vida', 'Auxílio Home Office'],
-      benefits: ['Vale Refeição R$ 1.000/mês', 'Plano de Saúde', 'Seguro de Vida', 'Auxílio Home Office'],
+      beneficios: ['Vale Refeição', 'Plano de Saúde', 'Seguro de Vida'],
+      benefits: ['Vale Refeição', 'Plano de Saúde', 'Seguro de Vida'],
       quantidadeVagas: newJobData.openings || 1,
       openings: newJobData.openings || 1,
       dataCriacao: nowIsoDate,
       createdAt: nowIsoDate,
-      status: 'ativa',
+      status: 'Aberta',
       publicada: true,
       applicantsCount: 0,
     };
+
+    try {
+      await JobService.create(newJob);
+    } catch (err) {
+      console.warn('Erro ao salvar nova vaga no Firestore:', err);
+    }
+
     setJobs(prev => [newJob, ...prev]);
   };
 

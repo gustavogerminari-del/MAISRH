@@ -236,6 +236,70 @@ async function startServer() {
     }
   });
 
+  // BOOTSTRAP DO USUÁRIO MASTER PRINCIPAL NO FIRESTORE
+  app.post('/api/bootstrap-master', async (req, res) => {
+    try {
+      const authHeader = req.headers.authorization;
+      const idToken = req.body?.idToken || (authHeader && authHeader.startsWith('Bearer ') ? authHeader.split('Bearer ')[1] : null);
+
+      if (!idToken) {
+        return res.status(401).json({ success: false, error: 'Firebase ID token de autenticação ausente.' });
+      }
+
+      const { adminAuth, adminDb } = getFirebaseAdmin();
+      const decodedToken = await adminAuth.verifyIdToken(idToken);
+      const email = (decodedToken.email || '').toLowerCase().trim();
+
+      const ALLOWED_MASTER_EMAILS = ['gustavo.germinari@gmail.com', 'master@maisrh.com.br'];
+      if (!ALLOWED_MASTER_EMAILS.includes(email)) {
+        return res.status(403).json({ success: false, error: 'Acesso negado: E-mail não autorizado para perfil MASTER principal.' });
+      }
+
+      const uid = decodedToken.uid;
+      const userRef = adminDb.collection('usuarios').doc(uid);
+      const userDoc = await userRef.get();
+
+      if (userDoc.exists) {
+        const data = userDoc.data();
+        if (data?.role === 'MASTER' || data?.tipoUsuario === 'MASTER' || data?.isMaster === true) {
+          return res.json({ success: true, message: 'Perfil MASTER principal já existe e está ativo.', uid, email });
+        }
+      }
+
+      const nowIso = new Date().toISOString();
+      const masterProfile = {
+        uid,
+        nome: decodedToken.name || 'Gustavo Germinari',
+        email,
+        role: 'MASTER',
+        tipoUsuario: 'MASTER',
+        ativo: true,
+        empresaId: null,
+        isMaster: true,
+        createdAt: nowIso,
+        updatedAt: nowIso
+      };
+
+      await userRef.set(masterProfile, { merge: true });
+      await adminDb.collection('users').doc(uid).set({
+        ...masterProfile,
+        displayName: masterProfile.nome,
+        status: 'Ativo'
+      }, { merge: true });
+
+      return res.json({
+        success: true,
+        message: 'Perfil MASTER criado e ativado com sucesso no Firestore.',
+        uid,
+        email,
+        profile: masterProfile
+      });
+    } catch (err: any) {
+      console.error('[API BOOTSTRAP MASTER ERR]', err);
+      return res.status(500).json({ success: false, error: err.message || String(err) });
+    }
+  });
+
   // 1. GERADOR DE VAGAS VIA IA
   app.post('/api/ai/job-generator', async (req, res) => {
     try {

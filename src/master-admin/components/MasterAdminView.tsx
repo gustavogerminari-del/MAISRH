@@ -1,5 +1,9 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { MasterVisualBuilderView } from '../../visual-builder/components/MasterVisualBuilderView';
+import { MasterModulesByPlanView } from './MasterModulesByPlanView';
+import { auth } from '../../lib/firebase';
+import { onAuthStateChanged } from 'firebase/auth';
+import { validarAcessoMaster, MasterValidationResult } from '../../auth/masterValidation';
 import { 
   Crown, 
   Building2, 
@@ -48,7 +52,10 @@ import {
   Cpu,
   History,
   Terminal,
-  HelpCircle
+  HelpCircle,
+  Trash2,
+  Loader2,
+  LogIn
 } from 'lucide-react';
 import { 
   ClientTenant, 
@@ -99,6 +106,25 @@ export type MasterNavigationSection =
   | 'seguranca';
 
 export const MasterAdminView: React.FC = () => {
+  // Master Auth Verification State
+  const [isValidating, setIsValidating] = useState(true);
+  const [validationResult, setValidationResult] = useState<MasterValidationResult | null>(null);
+
+  const runMasterCheck = async () => {
+    setIsValidating(true);
+    const res = await validarAcessoMaster();
+    setValidationResult(res);
+    setIsValidating(false);
+  };
+
+  useEffect(() => {
+    runMasterCheck();
+    const unsub = onAuthStateChanged(auth, () => {
+      runMasterCheck();
+    });
+    return () => unsub();
+  }, []);
+
   // Navigation
   const [activeSection, setActiveSection] = useState<MasterNavigationSection>('dashboard');
 
@@ -248,6 +274,52 @@ export const MasterAdminView: React.FC = () => {
     { id: 'parceiros', label: 'Parceiros & Vantagens', icon: Handshake },
   ];
 
+  if (isValidating) {
+    return (
+      <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col items-center justify-center p-6 -m-4 sm:-m-6 lg:-m-8">
+        <Loader2 className="w-10 h-10 text-amber-400 animate-spin mb-4" />
+        <h3 className="text-lg font-bold text-white">Validando Permissões do Master no Firebase Auth...</h3>
+        <p className="text-xs text-slate-400 mt-1">Consultando documento usuarios/{auth.currentUser?.uid || '...'}</p>
+      </div>
+    );
+  }
+
+  if (!auth.currentUser || !validationResult?.autorizado) {
+    return (
+      <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col items-center justify-center p-6 -m-4 sm:-m-6 lg:-m-8">
+        <div className="max-w-md w-full bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-2xl space-y-4 text-center">
+          <div className="w-12 h-12 rounded-2xl bg-rose-500/10 border border-rose-500/20 text-rose-400 flex items-center justify-center mx-auto">
+            <ShieldAlert className="w-6 h-6" />
+          </div>
+          <div>
+            <h2 className="text-lg font-extrabold text-white">ACESSO MASTER RESTRITO</h2>
+            <p className="text-xs text-slate-400 mt-1">
+              O acesso a este painel exige autenticação real no Firebase Auth e perfil de nível MASTER em <code className="text-amber-300">usuarios/{'{uid}'}</code>.
+            </p>
+          </div>
+
+          <div className="bg-slate-950 border border-slate-800 rounded-xl p-3 text-left text-xs font-mono space-y-1 text-slate-300">
+            <p><span className="text-slate-500">Firebase User:</span> {auth.currentUser ? auth.currentUser.email : 'Nulo (Não autenticado)'}</p>
+            <p><span className="text-slate-500">UID:</span> {auth.currentUser?.uid || 'N/A'}</p>
+            <p><span className="text-slate-500">Motivo:</span> {validationResult?.motivo || 'firebase-user-null'}</p>
+            <p><span className="text-slate-500">Role no Firestore:</span> {validationResult?.role || 'N/A'}</p>
+          </div>
+
+          <button
+            onClick={() => {
+              window.location.hash = '#login';
+              window.location.reload();
+            }}
+            className="w-full py-2.5 px-4 bg-amber-500 hover:bg-amber-400 text-slate-950 text-xs font-bold rounded-xl transition-all flex items-center justify-center gap-2 cursor-pointer font-sans"
+          >
+            <LogIn className="w-4 h-4" />
+            <span>Efetuar Login com Firebase Auth</span>
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col font-sans -m-4 sm:-m-6 lg:-m-8">
       
@@ -335,6 +407,50 @@ export const MasterAdminView: React.FC = () => {
 
         {/* MAIN VIEWPORT */}
         <main className="flex-1 p-6 overflow-y-auto bg-slate-950 space-y-6">
+
+          {/* DIAGNÓSTICO DE AUTENTICAÇÃO E PERMISSÃO MASTER NO FIREBASE */}
+          <div className="bg-slate-900 border border-slate-800 rounded-xl p-3.5 flex flex-wrap items-center justify-between gap-3 text-xs font-mono shadow-sm">
+            <div className="flex items-center gap-1.5">
+              <span className="text-slate-400 font-sans font-bold">Firebase autenticado:</span>
+              <span className={auth.currentUser ? "text-emerald-400 font-bold" : "text-rose-400 font-bold"}>
+                {auth.currentUser ? 'Sim' : 'Não'}
+              </span>
+            </div>
+            <div className="flex items-center gap-1.5">
+              <span className="text-slate-400 font-sans font-bold">UID:</span>
+              <span className="text-amber-300 font-semibold">{auth.currentUser?.uid || 'N/A'}</span>
+            </div>
+            <div className="flex items-center gap-1.5">
+              <span className="text-slate-400 font-sans font-bold">E-mail:</span>
+              <span className="text-slate-200">{auth.currentUser?.email || 'N/A'}</span>
+            </div>
+            <div className="flex items-center gap-1.5">
+              <span className="text-slate-400 font-sans font-bold">Perfil encontrado:</span>
+              <span className={validationResult?.autorizado ? "text-emerald-400 font-bold" : "text-amber-400 font-bold"}>
+                {validationResult?.autorizado ? 'Sim' : 'Não'}
+              </span>
+            </div>
+            <div className="flex items-center gap-1.5">
+              <span className="text-slate-400 font-sans font-bold">Role:</span>
+              <span className="text-indigo-300 font-bold">{validationResult?.role || 'MASTER'}</span>
+            </div>
+            <div className="flex items-center gap-1.5">
+              <span className="text-slate-400 font-sans font-bold">Ativo:</span>
+              <span className={validationResult?.ativo !== false ? "text-emerald-400 font-bold" : "text-rose-400 font-bold"}>
+                {validationResult?.ativo !== false ? 'Sim' : 'Não'}
+              </span>
+            </div>
+            <div className="flex items-center gap-1.5">
+              <span className="text-slate-400 font-sans font-bold">Projeto:</span>
+              <span className="text-slate-300">rl-rh-f0127</span>
+            </div>
+            <div className="flex items-center gap-1.5">
+              <span className="text-slate-400 font-sans font-bold">Regras publicadas:</span>
+              <span className="text-emerald-400 font-bold flex items-center gap-1">
+                <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" /> Sim
+              </span>
+            </div>
+          </div>
 
           {/* ========================================================================= */}
           {/* 1. 🏠 DASHBOARD GERAL */}
@@ -611,6 +727,13 @@ export const MasterAdminView: React.FC = () => {
                                   >
                                     {t.status === 'Ativo' ? <Lock className="w-4 h-4" /> : <Unlock className="w-4 h-4" />}
                                   </button>
+                                  <button
+                                    onClick={() => handleDeleteTenant(t.id)}
+                                    className="p-1.5 text-slate-400 hover:text-rose-400 hover:bg-rose-500/10 rounded-lg cursor-pointer transition-colors"
+                                    title="Excluir Empresa"
+                                  >
+                                    <Trash2 className="w-4 h-4" />
+                                  </button>
                                 </div>
                               </td>
                             </tr>
@@ -787,31 +910,7 @@ export const MasterAdminView: React.FC = () => {
 
               {/* Sub-tab 2: Módulos por Plano */}
               {planosSubTab === 'modulos' && (
-                <div className="p-5 rounded-2xl bg-slate-900 border border-slate-800 space-y-4">
-                  <h3 className="text-sm font-bold text-white">Matriz de Recursos & Módulos Habilitados por Plano</h3>
-                  <div className="overflow-x-auto">
-                    <table className="w-full text-left border-collapse text-xs">
-                      <thead>
-                        <tr className="bg-slate-950 text-slate-400 border-b border-slate-800">
-                          <th className="p-3">Módulo da Plataforma</th>
-                          <th className="p-3 text-center">Básico</th>
-                          <th className="p-3 text-center">Intermediário</th>
-                          <th className="p-3 text-center">Enterprise</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-slate-800">
-                        {modules.map((m) => (
-                          <tr key={m.id} className="hover:bg-slate-800/50">
-                            <td className="p-3 font-bold text-slate-200">{m.name}</td>
-                            <td className="p-3 text-center">{m.isCore ? <Check className="w-4 h-4 text-emerald-400 inline" /> : <X className="w-4 h-4 text-slate-600 inline" />}</td>
-                            <td className="p-3 text-center"><Check className="w-4 h-4 text-emerald-400 inline" /></td>
-                            <td className="p-3 text-center"><Check className="w-4 h-4 text-emerald-400 inline" /></td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                </div>
+                <MasterModulesByPlanView />
               )}
 
               {/* Sub-tab 3: Valores e Regras */}
@@ -1513,6 +1612,7 @@ export const MasterAdminView: React.FC = () => {
           tenant={selectedTenantForEdit}
           onClose={() => { setSelectedTenantForEdit(null); setShowCreateTenantModal(false); }}
           onSave={handleSaveTenant}
+          onDelete={handleDeleteTenant}
         />
       )}
 

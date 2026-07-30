@@ -106,6 +106,7 @@ export interface UsuarioFirestoreDoc {
   tipoUsuario?: 'MASTER' | 'EMPRESA' | 'CANDIDATO' | 'FUNCIONARIO' | 'COLABORADOR';
   empresaId?: string | null;
   ativo?: boolean;
+  isMaster?: boolean;
   status?: string;
   permissions?: string[];
   dataCriacao?: string;

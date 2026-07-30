@@ -123,6 +123,18 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     refreshCompanyModules();
   }, [user?.empresaId, user?.companyId, user?.tenantId, user?.tipoUsuario, user?.role]);
 
+  // On auth state change, keep Firebase Auth user synchronized
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
+      if (firebaseUser) {
+        logger.info(`Firebase Auth ativo: ${firebaseUser.email} (UID: ${firebaseUser.uid})`, 'AuthContext');
+      } else {
+        logger.info('Firebase Auth: nenhum usuário ativo no momento', 'AuthContext');
+      }
+    });
+    return () => unsubscribe();
+  }, []);
+
   // Inicializa sessão a partir do armazenamento local ou limpa estado
   useEffect(() => {
     try {
@@ -169,14 +181,19 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     localStorage.setItem(STORAGE_KEY_USER, JSON.stringify(userProfile));
     localStorage.setItem(STORAGE_KEY_TOKEN, JSON.stringify(token));
 
+    const isMaster = userProfile.tipoUsuario === 'MASTER' || userProfile.role === 'Super Administrador' || userProfile.email === 'gustavo.germinari@gmail.com';
+
     // Sync User in Firestore `usuarios` collection
     saveUsuarioFirestore({
       uid: userProfile.id,
-      nome: userProfile.name,
+      nome: userProfile.name || 'Gustavo Germinari',
       email: userProfile.email,
-      tipoUsuario: userProfile.tipoUsuario || (userProfile.role === 'Super Administrador' ? 'MASTER' : 'EMPRESA'),
-      empresaId: userProfile.empresaId || userProfile.companyId || userProfile.tenantId || 'master-org',
+      role: isMaster ? 'MASTER' : (userProfile.role || 'Administrador'),
+      tipoUsuario: isMaster ? 'MASTER' : 'EMPRESA',
+      empresaId: isMaster ? null : (userProfile.empresaId || userProfile.companyId || userProfile.tenantId || 'emp-001'),
       status: 'Ativo',
+      ativo: true,
+      isMaster: isMaster,
       dataCriacao: new Date().toISOString().split('T')[0]
     }).catch(console.error);
   };

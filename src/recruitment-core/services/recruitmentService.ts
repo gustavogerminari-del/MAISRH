@@ -83,9 +83,10 @@ syncRecruitmentWithFirestore();
 
 export class RecruitmentService {
   // JOBS
-  static getJobs(companyId: string = 'emp-001', origem?: OrigemProcesso): UnifiedJob[] {
+  static getJobs(companyId?: string, origem?: OrigemProcesso): UnifiedJob[] {
     return jobsCache.filter(j => {
-      const matchesCompany = !companyId || j.empresaId === companyId || companyId === 'emp-001';
+      const cId = j.empresaId || j.companyId || (j as any).tenantId;
+      const matchesCompany = !companyId || cId === companyId;
       const matchesOrigem = !origem || j.origemProcesso === origem;
       return matchesCompany && matchesOrigem;
     });

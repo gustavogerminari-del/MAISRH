@@ -42,10 +42,21 @@ export const TalentBankManagementView: React.FC<TalentBankManagementViewProps> =
   // General edit permission for candidate management
   const canEditCandidate = true; // All authenticated HR users can manage profiles
 
+  const userCompanyId = user?.empresaId || user?.companyId || user?.tenantId;
+  const isMaster = user?.role === 'Super Administrador' || user?.role === 'MASTER' || user?.tipoUsuario === 'MASTER' || user?.isMaster === true;
+
   const [candidates, setCandidates] = useState<Candidate[]>(
     initialCandidatesList || INITIAL_CANDIDATES_DATA
   );
-  const [jobs] = useState<Job[]>(jobsList || INITIAL_JOBS_DATA);
+
+  const rawJobs = jobsList !== undefined ? jobsList : (import.meta.env.DEV ? INITIAL_JOBS_DATA : []);
+  const jobs = useMemo(() => {
+    if (isMaster || !userCompanyId) return rawJobs;
+    return rawJobs.filter((j: any) => {
+      const cId = j.companyId || j.empresaId || j.tenantId;
+      return !cId || cId === userCompanyId;
+    });
+  }, [rawJobs, isMaster, userCompanyId]);
 
   const [selectedCandidate, setSelectedCandidate] = useState<Candidate | null>(null);
   const [isDetailOpen, setIsDetailOpen] = useState(false);
