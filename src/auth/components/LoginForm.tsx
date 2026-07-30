@@ -34,6 +34,36 @@ export const LoginForm: React.FC<LoginFormProps> = ({ onBackToJobs }) => {
     }
   };
 
+  // Dev helper to create initial accounts on the server and auto-login as MASTER
+  const handleDevBootstrapAndLogin = async () => {
+    setErrorMsg('');
+    setIsLoading(true);
+    try {
+      // Call server endpoint to sync initial users
+      const resp = await fetch('/api/users/sync-initial', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' }
+      });
+      const data = await resp.json();
+      if (!resp.ok) {
+        throw new Error(data?.error || data?.message || 'Falha ao sincronizar contas iniciais');
+      }
+
+      // Attempt login with MASTER demo credentials
+      const masterEmail = 'gustavo.germinari@gmail.com';
+      const masterPassword = 'Gugato94@';
+      setEmail(masterEmail);
+      setPassword(masterPassword);
+
+      await login(masterEmail, masterPassword);
+    } catch (err: any) {
+      console.error('Dev bootstrap/login error:', err);
+      setErrorMsg(err?.message || String(err));
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   return (
     <div className="min-h-screen bg-slate-100 flex items-center justify-center p-4">
       <div className="max-w-4xl w-full grid grid-cols-1 md:grid-cols-2 gap-6 bg-white rounded-3xl border border-slate-200 shadow-xl overflow-hidden">
@@ -73,7 +103,7 @@ export const LoginForm: React.FC<LoginFormProps> = ({ onBackToJobs }) => {
               <button
                 type="button"
                 onClick={onBackToJobs}
-                className="inline-flex items-center gap-1.5 text-xs font-semibold text-indigo-600 hover:text-indigo-800 bg-indigo-50 hover:bg-indigo-100 px-3 py-1.5 rounded-lg transition-colors mb-2 cursor-pointer"
+                className="inline-flex items-center gap-1.5 text-xs font-semibold text-indigo-600 hover:text-indigo-800 bg-indigo-50 hover:bg-indigo-100 px-3 py-1.5 rounded-lg transition-colors mb-2"
               >
                 <ArrowLeft className="w-3.5 h-3.5" />
                 <Globe className="w-3.5 h-3.5" />
@@ -126,6 +156,21 @@ export const LoginForm: React.FC<LoginFormProps> = ({ onBackToJobs }) => {
             <Button type="submit" variant="primary" className="w-full" isLoading={isLoading} rightIcon={<ArrowRight className="w-4 h-4" />}>
               Entrar no Sistema
             </Button>
+
+            {/* DEV helper: visible only in development builds */}
+            {(import.meta as any).env?.DEV && (
+              <div className="pt-2">
+                <button
+                  type="button"
+                  onClick={handleDevBootstrapAndLogin}
+                  className="w-full bg-amber-500 hover:bg-amber-600 text-white font-bold py-2 px-4 rounded-lg"
+                >
+                  Criar contas iniciais (DEV) e entrar como MASTER
+                </button>
+                <p className="text-[11px] text-slate-400 mt-2">Apenas para uso em desenvolvimento local. Não utilize em produção.</p>
+              </div>
+            )}
+
           </form>
 
           <div className="pt-4 border-t border-slate-100 text-center">
