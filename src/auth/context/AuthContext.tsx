@@ -69,6 +69,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       vagas: true,
       bancoTalentos: true,
       entrevistas: true,
+      headhunter: true,
       dp: true,
       equipeInterna: true,
       ponto: true,

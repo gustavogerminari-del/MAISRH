@@ -20,6 +20,7 @@ export const PLAN_PRESETS: PlanPresetConfig[] = [
     maxActiveJobs: 5,
     modules: {
       vagas: true,
+      headhunter: false,
       bancoTalentos: true,
       entrevistas: true,
       equipeInterna: true,
@@ -40,6 +41,7 @@ export const PLAN_PRESETS: PlanPresetConfig[] = [
     maxActiveJobs: 20,
     modules: {
       vagas: true,
+      headhunter: true,
       bancoTalentos: true,
       entrevistas: true,
       equipeInterna: true,
@@ -60,6 +62,7 @@ export const PLAN_PRESETS: PlanPresetConfig[] = [
     maxActiveJobs: 100,
     modules: {
       vagas: true,
+      headhunter: true,
       bancoTalentos: true,
       entrevistas: true,
       equipeInterna: true,

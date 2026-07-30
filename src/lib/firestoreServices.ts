@@ -142,6 +142,7 @@ export async function fetchEmpresasFirestore(): Promise<ClientTenant[]> {
         } else {
           const defaultModules: TenantModulePermissions = {
             vagas: true,
+            headhunter: true,
             bancoTalentos: true,
             entrevistas: true,
             equipeInterna: true,
@@ -382,6 +383,10 @@ export async function fetchEmpresaModulosFirestore(empresaId: string): Promise<R
 // USUÁRIOS
 // ----------------------------------------------------------------------------
 export async function saveUsuarioFirestore(userDoc: UsuarioFirestoreDoc): Promise<void> {
+  if (!auth.currentUser) {
+    console.warn('Firebase Auth client não está autenticado. Salvamento no Firestore via client ignorado.');
+    return;
+  }
   try {
     const docRef = doc(db, COLLECTIONS.USUARIOS, userDoc.uid);
     const sanitized = sanitizeFirestoreData(userDoc);
@@ -395,7 +400,7 @@ export async function saveUsuarioFirestore(userDoc: UsuarioFirestoreDoc): Promis
       companyId: userDoc.empresaId
     }), { merge: true });
   } catch (err) {
-    handleFirestoreError(err, OperationType.WRITE, `${COLLECTIONS.USUARIOS}/${userDoc.uid}`);
+    console.warn(`Aviso ao salvar usuário (${userDoc.uid}) no Firestore:`, err);
   }
 }
 

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   X, 
   Building2, 
@@ -17,10 +17,17 @@ import {
   Mail,
   Loader2,
   CheckCircle2,
-  Search
+  Search,
+  RefreshCw
 } from 'lucide-react';
 import { ClientTenant, MasterPlanPreset, TenantModulePermissions } from '../types/master';
 import { PLAN_PRESETS } from '../constants/planPresets';
+import { 
+  fetchModulosFirestore, 
+  fetchCompanyReleasedModules, 
+  saveCompanyReleasedModules, 
+  SystemModule 
+} from '../../services/ModuleCatalogService';
 
 interface MasterTenantModalProps {
   tenant?: ClientTenant | null;
@@ -69,7 +76,14 @@ export const MasterTenantModal: React.FC<MasterTenantModalProps> = ({
   const [maxUsers, setMaxUsers] = useState<number>(tenant?.maxUsers || 15);
   const [maxActiveJobs, setMaxActiveJobs] = useState<number>(tenant?.maxActiveJobs || 20);
 
-  // Modules
+  // Modules Catalog & Async State
+  const [catalogModules, setCatalogModules] = useState<SystemModule[]>([]);
+  const [isLoadingModules, setIsLoadingModules] = useState<boolean>(false);
+  const [modulesError, setModulesError] = useState<string | null>(null);
+  const [isSaving, setIsSaving] = useState<boolean>(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
+
+  // Modules Selection
   const [modules, setModules] = useState<TenantModulePermissions>(
     tenant?.modules || {
       vagas: true,
@@ -85,6 +99,47 @@ export const MasterTenantModal: React.FC<MasterTenantModalProps> = ({
       siteVagasPersonalizado: true
     }
   );
+
+  // Load dynamic catalog from Firestore 'modulos' and company released modules
+  const loadCatalogAndCompanyModules = async () => {
+    setIsLoadingModules(true);
+    setModulesError(null);
+    try {
+      // 1. Consultar a coleção 'modulos' no Firestore
+      const catalog = await fetchModulosFirestore();
+      setCatalogModules(catalog);
+
+      // 2. Consultar os módulos liberados para a empresa
+      let released: Record<string, boolean> = {};
+      if (tenant?.id) {
+        released = await fetchCompanyReleasedModules(tenant.id);
+      } else if (tenant?.modules) {
+        released = tenant.modules as Record<string, boolean>;
+      }
+
+      setModules(prev => {
+        const next = { ...prev } as Record<string, boolean>;
+        catalog.forEach(mod => {
+          if (released[mod.key] !== undefined) {
+            next[mod.key] = released[mod.key];
+          } else if (next[mod.key] === undefined) {
+            // Módulo novo no catálogo aparece bloqueado por padrão para empresas antigas
+            next[mod.key] = false;
+          }
+        });
+        return next as TenantModulePermissions;
+      });
+    } catch (err: any) {
+      console.error('Erro ao carregar módulos do catálogo/empresa:', err);
+      setModulesError('Erro ao carregar a lista de módulos do catálogo. Verifique sua conexão e tente novamente.');
+    } finally {
+      setIsLoadingModules(false);
+    }
+  };
+
+  useEffect(() => {
+    loadCatalogAndCompanyModules();
+  }, [tenant?.id]);
 
   // Branding
   const [primaryColor, setPrimaryColor] = useState(tenant?.branding.primaryColor || '#4F46E5');
@@ -159,9 +214,10 @@ export const MasterTenantModal: React.FC<MasterTenantModalProps> = ({
     }));
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setValidationError('');
+    setSaveError(null);
 
     // Mandatory Field Validations
     if (!companyName.trim()) {
@@ -220,60 +276,77 @@ export const MasterTenantModal: React.FC<MasterTenantModalProps> = ({
       }
     }
 
-    onSave({
-      id: tenant?.id || `t-${Date.now()}`,
-      code: tenant?.code || companyName.substring(0, 5).toUpperCase().replace(/\s/g, ''),
-      companyName,
-      tradeName: tradeName || companyName,
-      cnpj,
-      ownerName,
-      ownerEmail,
-      ownerPhone,
-      address: {
-        cep,
-        street,
-        number,
-        complement,
-        neighborhood,
-        cityUf
-      },
-      adminCredentials: {
-        adminEmail,
-        initialPassword: initialPassword || tenant?.adminCredentials?.initialPassword || '••••••••',
-        sendWelcomeEmail,
-        createdAt: new Date().toISOString()
-      },
-      status,
-      maxUsers,
-      maxActiveJobs,
-      modules,
-      branding: {
-        primaryColor,
-        companyDisplayName: companyDisplayName || tradeName || companyName,
-        customDomain
-      },
-      metrics: tenant?.metrics || {
-        activeUsersCount: 1,
-        totalJobsCreated: 0,
-        totalTalentsStored: 0,
-        totalDocumentsSigned: 0,
-        storageUsedMB: 10,
-        lastLoginAt: 'Nunca'
-      },
-      contract: {
-        id: tenant?.contract.id || `ctr-${Date.now()}`,
-        contractNumber: tenant?.contract.contractNumber || `CTR-${new Date().getFullYear()}-${Math.floor(1000 + Math.random() * 9000)}`,
-        planName: selectedPlan,
-        monthlyFee,
-        billingCycle,
-        startDate: tenant?.contract.startDate || new Date().toISOString().split('T')[0],
-        expirationDate,
-        paymentMethod,
-        autoRenew: true
-      },
-      createdAt: tenant?.createdAt || new Date().toISOString().split('T')[0],
-      notes
-    });
+    const tenantId = tenant?.id || `t-${Date.now()}`;
+    setIsSaving(true);
+
+    try {
+      // 1. Salvar os módulos liberados da empresa em 'empresa_modulos/{empresaId}' no Firestore
+      await saveCompanyReleasedModules(tenantId, modules as Record<string, boolean>);
+
+      // 2. Chover handler de salvamento no app
+      await onSave({
+        id: tenantId,
+        code: tenant?.code || companyName.substring(0, 5).toUpperCase().replace(/\s/g, ''),
+        companyName,
+        tradeName: tradeName || companyName,
+        cnpj,
+        ownerName,
+        ownerEmail,
+        ownerPhone,
+        address: {
+          cep,
+          street,
+          number,
+          complement,
+          neighborhood,
+          cityUf
+        },
+        adminCredentials: {
+          adminEmail,
+          initialPassword: initialPassword || tenant?.adminCredentials?.initialPassword || '••••••••',
+          sendWelcomeEmail,
+          createdAt: new Date().toISOString()
+        },
+        status,
+        maxUsers,
+        maxActiveJobs,
+        modules,
+        branding: {
+          primaryColor,
+          companyDisplayName: companyDisplayName || tradeName || companyName,
+          customDomain
+        },
+        metrics: tenant?.metrics || {
+          activeUsersCount: 1,
+          totalJobsCreated: 0,
+          totalTalentsStored: 0,
+          totalDocumentsSigned: 0,
+          storageUsedMB: 10,
+          lastLoginAt: 'Nunca'
+        },
+        contract: {
+          id: tenant?.contract.id || `ctr-${Date.now()}`,
+          contractNumber: tenant?.contract.contractNumber || `CTR-${new Date().getFullYear()}-${Math.floor(1000 + Math.random() * 9000)}`,
+          planName: selectedPlan,
+          monthlyFee,
+          billingCycle,
+          startDate: tenant?.contract.startDate || new Date().toISOString().split('T')[0],
+          expirationDate,
+          paymentMethod,
+          autoRenew: true
+        },
+        createdAt: tenant?.createdAt || new Date().toISOString().split('T')[0],
+        notes
+      });
+
+      // Fechar modal apenas após confirmação do Firestore
+      onClose();
+    } catch (err: any) {
+      console.error('Erro ao salvar empresa no Firestore:', err);
+      setSaveError(err?.message || 'Erro ao persistir dados da empresa no Firestore. Não foi possível salvar.');
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   return (
@@ -733,48 +806,96 @@ export const MasterTenantModal: React.FC<MasterTenantModalProps> = ({
           {/* TAB 3: MÓDULOS LIBERADOS */}
           {activeTab === 'modulos' && (
             <div className="space-y-4">
-              <p className="text-xs text-slate-500">
-                Ative ou desative individualmente os módulos do sistema para esta empresa. O bloqueio é imediato no acesso da empresa.
-              </p>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                {[
-                  { key: 'vagas', label: 'Módulo de Vagas & Recrutamento', desc: 'Abertura, triagem e kanban de candidatos' },
-                  { key: 'bancoTalentos', label: 'Banco de Talentos Inteligente', desc: 'Busca semântica e histórico de candidatos' },
-                  { key: 'entrevistas', label: 'Agenda de Entrevistas & Scorecards', desc: 'Avaliações técnicas e feedbacks de gestores' },
-                  { key: 'equipeInterna', label: 'Gestão da Equipe Interna de RH', desc: 'Cadastro de usuários e permissões por papel' },
-                  { key: 'consultorRH', label: 'Consultor de RH (IA Especializada)', desc: 'Geração de PDIs, descrições e testes técnicos' },
-                  { key: 'feriasBeneficios', label: 'Gestão de Férias & Benefícios', desc: 'Escala de folgas e saldo de benefícios' },
-                  { key: 'documentosAssinatura', label: 'Assinatura Digital de Documentos', desc: 'Envio e validação jurídica de documentos' },
-                  { key: 'auditoriaLogs', label: 'Auditoria & Logs de Segurança', desc: 'Histórico detalhado de ações dos usuários' },
-                  { key: 'relatoriosAvancados', label: 'Relatórios Avançados & Métricas', desc: 'Exportação CSV/PDF e BI do recrutamento' },
-                  { key: 'siteVagasPersonalizado', label: 'Site Público de Vagas (Careers)', desc: 'Portal próprio da marca para atração de talentos' }
-                ].map((mod) => {
-                  const isEnabled = modules[mod.key as keyof TenantModulePermissions];
-                  return (
-                    <div
-                      key={mod.key}
-                      onClick={() => handleToggleModule(mod.key as keyof TenantModulePermissions)}
-                      className={`p-3.5 rounded-xl border cursor-pointer transition-all flex items-start justify-between gap-3 ${
-                        isEnabled
-                          ? 'bg-emerald-50/50 border-emerald-200 text-slate-900 shadow-2xs'
-                          : 'bg-slate-50 border-slate-200 text-slate-400 opacity-75'
-                      }`}
-                    >
-                      <div>
-                        <div className="flex items-center gap-1.5">
-                          <span className="text-xs font-bold text-slate-900">{mod.label}</span>
-                        </div>
-                        <p className="text-[11px] text-slate-500 mt-0.5">{mod.desc}</p>
-                      </div>
-
-                      <div className={`p-1.5 rounded-lg ${isEnabled ? 'bg-emerald-600 text-white' : 'bg-slate-200 text-slate-500'}`}>
-                        {isEnabled ? <Unlock className="w-4 h-4" /> : <Lock className="w-4 h-4" />}
-                      </div>
-                    </div>
-                  );
-                })}
+              <div className="flex items-center justify-between gap-2">
+                <p className="text-xs text-slate-500">
+                  Ative ou desative individualmente os módulos do catálogo para esta empresa. O bloqueio é imediato no acesso do cliente.
+                </p>
+                <button
+                  type="button"
+                  onClick={loadCatalogAndCompanyModules}
+                  disabled={isLoadingModules}
+                  className="p-1.5 text-slate-400 hover:text-indigo-600 rounded-lg transition-colors flex items-center gap-1 text-[11px] font-semibold"
+                  title="Recarregar catálogo"
+                >
+                  <RefreshCw className={`w-3.5 h-3.5 ${isLoadingModules ? 'animate-spin' : ''}`} />
+                  <span>Atualizar</span>
+                </button>
               </div>
+
+              {/* Estado: Carregando */}
+              {isLoadingModules && (
+                <div className="p-8 text-center text-slate-500 flex flex-col items-center justify-center gap-2 border border-dashed border-slate-200 rounded-2xl bg-slate-50/50">
+                  <Loader2 className="w-6 h-6 animate-spin text-indigo-600" />
+                  <p className="text-xs font-semibold text-slate-700">Carregando módulos do catálogo no Firestore...</p>
+                </div>
+              )}
+
+              {/* Estado: Erro */}
+              {modulesError && !isLoadingModules && (
+                <div className="p-4 bg-amber-50 border border-amber-200 rounded-xl text-amber-900 text-xs flex items-center justify-between gap-3">
+                  <div className="flex items-center gap-2">
+                    <AlertCircle className="w-4 h-4 text-amber-600 shrink-0" />
+                    <span>{modulesError}</span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={loadCatalogAndCompanyModules}
+                    className="px-3 py-1.5 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-xs font-bold transition-colors cursor-pointer shrink-0"
+                  >
+                    Tentar novamente
+                  </button>
+                </div>
+              )}
+
+              {/* Estado: Lista Vazia */}
+              {!isLoadingModules && !modulesError && catalogModules.length === 0 && (
+                <div className="p-8 text-center text-slate-500 bg-slate-50 rounded-2xl border border-dashed border-slate-200">
+                  <p className="text-xs font-bold text-slate-700">Nenhum módulo encontrado no catálogo oficial.</p>
+                  <button
+                    type="button"
+                    onClick={loadCatalogAndCompanyModules}
+                    className="mt-2 text-xs text-indigo-600 font-semibold hover:underline cursor-pointer"
+                  >
+                    Tentar novamente
+                  </button>
+                </div>
+              )}
+
+              {/* Lista Dinâmica de Módulos do Catálogo */}
+              {!isLoadingModules && !modulesError && catalogModules.length > 0 && (
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  {catalogModules.map((mod) => {
+                    const isEnabled = !!modules[mod.key as keyof TenantModulePermissions];
+                    return (
+                      <div
+                        key={mod.key}
+                        onClick={() => handleToggleModule(mod.key as keyof TenantModulePermissions)}
+                        className={`p-3.5 rounded-xl border cursor-pointer transition-all flex items-start justify-between gap-3 ${
+                          isEnabled
+                            ? 'bg-emerald-50/60 border-emerald-300 text-slate-900 shadow-2xs hover:border-emerald-400'
+                            : 'bg-slate-50 border-slate-200 text-slate-400 hover:border-slate-300'
+                        }`}
+                      >
+                        <div>
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            <span className="text-xs font-bold text-slate-900">{mod.nome}</span>
+                            {mod.categoria && (
+                              <span className="text-[10px] px-1.5 py-0.2 rounded bg-slate-200/70 text-slate-600 font-semibold">
+                                {mod.categoria}
+                              </span>
+                            )}
+                          </div>
+                          <p className="text-[11px] text-slate-500 mt-0.5">{mod.descricao}</p>
+                        </div>
+
+                        <div className={`p-1.5 rounded-lg shrink-0 transition-colors ${isEnabled ? 'bg-emerald-600 text-white' : 'bg-slate-200 text-slate-500'}`}>
+                          {isEnabled ? <Unlock className="w-4 h-4" /> : <Lock className="w-4 h-4" />}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
             </div>
           )}
 
@@ -885,20 +1006,38 @@ export const MasterTenantModal: React.FC<MasterTenantModalProps> = ({
           )}
 
           {/* Modal Actions */}
+          {saveError && (
+            <div className="mb-3 p-3 bg-rose-50 border border-rose-200 rounded-xl text-rose-800 text-xs flex items-center gap-2">
+              <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
+              <span>{saveError}</span>
+            </div>
+          )}
+
           <div className="flex items-center justify-end gap-2 pt-4 border-t border-slate-200">
             <button
               type="button"
               onClick={onClose}
-              className="px-4 py-2.5 text-xs font-semibold text-slate-600 hover:bg-slate-100 rounded-xl transition-all cursor-pointer"
+              disabled={isSaving}
+              className="px-4 py-2.5 text-xs font-semibold text-slate-600 hover:bg-slate-100 rounded-xl transition-all cursor-pointer disabled:opacity-50"
             >
               Cancelar
             </button>
             <button
               type="submit"
-              className="px-5 py-2.5 text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-700 rounded-xl shadow-md transition-all flex items-center gap-1.5 cursor-pointer"
+              disabled={isSaving}
+              className="px-5 py-2.5 text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-700 rounded-xl shadow-md transition-all flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
             >
-              <Check className="w-4 h-4" />
-              Salvar Alterações do Cliente
+              {isSaving ? (
+                <>
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  <span>Salvando no Firestore...</span>
+                </>
+              ) : (
+                <>
+                  <Check className="w-4 h-4" />
+                  <span>{tenant ? 'Salvar Alterações do Cliente' : 'Cadastrar Empresa Cliente'}</span>
+                </>
+              )}
             </button>
           </div>
 

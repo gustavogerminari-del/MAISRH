@@ -28,6 +28,7 @@ export const MOCK_TENANTS: ClientTenant[] = [
     maxActiveJobs: 50,
     modules: {
       vagas: true,
+      headhunter: true,
       bancoTalentos: true,
       entrevistas: true,
       equipeInterna: true,
