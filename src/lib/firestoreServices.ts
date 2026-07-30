@@ -102,10 +102,15 @@ export interface UsuarioFirestoreDoc {
   uid: string;
   nome: string;
   email: string;
-  tipoUsuario: 'MASTER' | 'EMPRESA' | 'CANDIDATO' | 'FUNCIONARIO' | 'COLABORADOR';
-  empresaId: string;
+  role?: string;
+  tipoUsuario?: 'MASTER' | 'EMPRESA' | 'CANDIDATO' | 'FUNCIONARIO' | 'COLABORADOR';
+  empresaId?: string | null;
+  ativo?: boolean;
   status?: string;
+  permissions?: string[];
   dataCriacao?: string;
+  createdAt?: string;
+  updatedAt?: string;
 }
 
 /**
@@ -379,7 +384,16 @@ export async function fetchEmpresaModulosFirestore(empresaId: string): Promise<R
 export async function saveUsuarioFirestore(userDoc: UsuarioFirestoreDoc): Promise<void> {
   try {
     const docRef = doc(db, COLLECTIONS.USUARIOS, userDoc.uid);
-    await setDoc(docRef, sanitizeFirestoreData(userDoc), { merge: true });
+    const sanitized = sanitizeFirestoreData(userDoc);
+    await setDoc(docRef, sanitized, { merge: true });
+
+    // Also sync to `users` collection for compatibility
+    const usersDocRef = doc(db, 'users', userDoc.uid);
+    await setDoc(usersDocRef, sanitizeFirestoreData({
+      ...sanitized,
+      displayName: userDoc.nome,
+      companyId: userDoc.empresaId
+    }), { merge: true });
   } catch (err) {
     handleFirestoreError(err, OperationType.WRITE, `${COLLECTIONS.USUARIOS}/${userDoc.uid}`);
   }
@@ -391,6 +405,24 @@ export async function fetchUsuarioFirestore(uid: string): Promise<UsuarioFiresto
     const snap = await getDoc(docRef);
     if (snap.exists()) {
       return snap.data() as UsuarioFirestoreDoc;
+    }
+
+    // Check `users` collection as fallback
+    const usersRef = doc(db, 'users', uid);
+    const usersSnap = await getDoc(usersRef);
+    if (usersSnap.exists()) {
+      const uData = usersSnap.data();
+      return {
+        uid,
+        nome: uData.nome || uData.displayName || uData.email?.split('@')[0] || 'Usuário',
+        email: uData.email,
+        role: uData.role,
+        tipoUsuario: uData.tipoUsuario || (uData.role === 'MASTER' ? 'MASTER' : 'EMPRESA'),
+        empresaId: uData.empresaId || uData.companyId || null,
+        ativo: uData.ativo ?? (uData.status !== 'Inativo' && uData.status !== 'Bloqueado'),
+        status: uData.status || (uData.ativo ? 'Ativo' : 'Inativo'),
+        permissions: uData.permissions || []
+      };
     }
   } catch (err) {
     handleFirestoreError(err, OperationType.GET, `${COLLECTIONS.USUARIOS}/${uid}`);

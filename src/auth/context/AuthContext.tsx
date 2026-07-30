@@ -5,13 +5,15 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { 
   signInWithEmailAndPassword, 
-  createUserWithEmailAndPassword 
+  onAuthStateChanged,
+  signOut
 } from 'firebase/auth';
 import { UserProfile, RoleProfile, ScreenRouteKey, SystemActionKey, SessionToken } from '../types/auth';
 import { MASTER_USER } from '../constants/permissions';
 import { logger, logCentralizedError } from '../../core';
 import { 
   saveUsuarioFirestore, 
+  fetchUsuarioFirestore,
   fetchEmpresaModulosFirestore,
   seedFirestoreIfEmpty 
 } from '../../lib/firestoreServices';
@@ -190,88 +192,107 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const normalizedEmail = email.toLowerCase().trim();
     const pwd = password || '';
 
-    // Check if trying to log in as MASTER user
-    const isMasterEmail = 
-      normalizedEmail === MASTER_USER.email.toLowerCase() || 
-      normalizedEmail === 'gustavo.germinari@gmail.com' ||
-      normalizedEmail === 'master@maisrh.com.br';
-
-    if (isMasterEmail) {
-      const masterPassword = pwd || 'Gugato94@';
-
-      // Validate password if user supplied a non-matching password
-      if (pwd && pwd !== 'Gugato94@' && pwd !== 'master' && pwd !== '123456') {
-        throw new Error('Senha incorreta para a conta MASTER.');
-      }
-
-      // Authenticate / sync with Firebase Authentication in the background without blocking
-      try {
-        await signInWithEmailAndPassword(auth, normalizedEmail, masterPassword);
-      } catch (firebaseErr: any) {
-        if (
-          firebaseErr?.code === 'auth/user-not-found' || 
-          firebaseErr?.code === 'auth/invalid-credential' ||
-          String(firebaseErr?.message || '').includes('not-found')
-        ) {
-          try {
-            await createUserWithEmailAndPassword(auth, normalizedEmail, masterPassword);
-          } catch {
-            // Ignore creation error if Firebase Auth fails
-          }
-        }
-      }
-
-      const token = generateMockToken(MASTER_USER.id);
-      saveAuthData(MASTER_USER, token);
-      logger.info(`Login MASTER efetuado com sucesso para ${MASTER_USER.email}`, 'AuthContext');
-      return true;
+    if (!normalizedEmail) {
+      throw new Error('Informe o e-mail de acesso.');
     }
 
-    // Standard corporate user authentication
     if (!pwd) {
       throw new Error('Por favor, informe a senha de acesso.');
     }
 
-    // Try Firebase Authentication
+    let firebaseAuthUid: string | null = null;
+
+    // 1. Authenticate with Firebase Authentication
     try {
-      await signInWithEmailAndPassword(auth, normalizedEmail, pwd);
+      const cred = await signInWithEmailAndPassword(auth, normalizedEmail, pwd);
+      firebaseAuthUid = cred.user.uid;
+      logger.info(`Autenticado com sucesso no Firebase Auth: ${normalizedEmail} (UID: ${firebaseAuthUid})`, 'AuthContext');
     } catch (authErr: any) {
-      if (authErr?.code === 'auth/user-not-found' || authErr?.code === 'auth/invalid-credential') {
-        // Attempt auto-provisioning for corporate user in Firebase
-        try {
-          if (pwd.length >= 6) {
-            await createUserWithEmailAndPassword(auth, normalizedEmail, pwd);
-          }
-        } catch {
-          // If auto-provisioning fails or is disallowed, proceed with local corporate session
-        }
-      } else if (authErr?.code === 'auth/wrong-password') {
+      const errorCode = authErr?.code || '';
+      logger.error(`[Firebase Auth Error Code]: ${errorCode} | ${authErr?.message || authErr}`, 'AuthContext');
+
+      if (errorCode === 'auth/operation-not-allowed') {
+        throw new Error('O provedor de autenticação por e-mail e senha precisa ser ativado no Firebase Console.');
+      } else if (errorCode.includes('api-key-not-valid') || errorCode === 'auth/invalid-api-key') {
+        throw new Error('A chave de API do Firebase é inválida ou a autenticação por e-mail/senha precisa ser ativada no Firebase Console.');
+      } else if (errorCode === 'auth/user-disabled') {
+        throw new Error('Esta conta foi desativada pelo administrador.');
+      } else if (
+        errorCode === 'auth/user-not-found' || 
+        errorCode === 'auth/wrong-password' || 
+        errorCode === 'auth/invalid-credential'
+      ) {
+        throw new Error('E-mail ou senha de acesso incorretos.');
+      } else if (errorCode === 'auth/too-many-requests') {
+        throw new Error('Muitas tentativas de login. Tente novamente mais tarde.');
+      } else if (errorCode === 'auth/network-request-failed') {
+        throw new Error('Falha na conexão de rede. Verifique sua internet.');
+      } else if (errorCode === 'auth/invalid-email') {
+        throw new Error('O endereço de e-mail informado é inválido.');
+      } else {
         throw new Error('E-mail ou senha de acesso incorretos.');
       }
     }
 
-    const tenants = getTenants();
-    const matchedTenant = tenants.find(t => 
-      t.ownerEmail?.toLowerCase() === normalizedEmail || 
-      t.adminCredentials?.adminEmail?.toLowerCase() === normalizedEmail
-    ) || tenants[0];
+    // 2. Fetch User Profile from Firestore (`usuarios/{uid}`)
+    let profileDoc: any = null;
+    if (firebaseAuthUid) {
+      profileDoc = await fetchUsuarioFirestore(firebaseAuthUid);
+    }
 
-    const corpUser: UserProfile = {
-      id: `usr-${Date.now()}`,
-      name: normalizedEmail.split('@')[0] || 'Usuário Corporativo',
-      email: normalizedEmail,
-      role: 'Administrador',
-      department: 'Gente & Gestão',
-      avatar: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=150&auto=format&fit=crop&q=80',
-      tipoUsuario: 'EMPRESA',
-      empresaId: matchedTenant?.id || 'emp-001',
-      companyId: matchedTenant?.id || 'emp-001',
-      companyName: matchedTenant?.companyName || 'Empresa Cliente'
-    };
+    // Check if user account is disabled in Firestore
+    if (profileDoc && (profileDoc.status === 'Inativo' || profileDoc.status === 'Bloqueado' || profileDoc.ativo === false)) {
+      await signOut(auth).catch(() => {});
+      clearAuthData();
+      throw new Error('Esta conta foi desativada pelo administrador.');
+    }
 
-    const token = generateMockToken(corpUser.id);
-    saveAuthData(corpUser, token);
-    logger.info(`Login corporativo efetuado com sucesso: ${corpUser.email}`, 'AuthContext');
+    // 3. Resolve role & tenant context
+    const isMasterEmail = 
+      normalizedEmail === MASTER_USER.email.toLowerCase() || 
+      normalizedEmail === 'gustavo.germinari@gmail.com' ||
+      normalizedEmail === 'master@maisrh.com.br' ||
+      profileDoc?.tipoUsuario === 'MASTER' ||
+      profileDoc?.role === 'MASTER';
+
+    let userProfile: UserProfile;
+
+    if (isMasterEmail) {
+      userProfile = {
+        ...MASTER_USER,
+        id: firebaseAuthUid || MASTER_USER.id,
+        email: normalizedEmail,
+        tipoUsuario: 'MASTER',
+        role: 'Super Administrador',
+        empresaId: 'master-org',
+        companyId: 'master-org',
+        companyName: 'MAIS RH SaaS'
+      };
+    } else {
+      const tenants = getTenants();
+      const matchedTenant = tenants.find(t => 
+        t.id === profileDoc?.empresaId ||
+        t.ownerEmail?.toLowerCase() === normalizedEmail || 
+        t.adminCredentials?.adminEmail?.toLowerCase() === normalizedEmail
+      ) || tenants[0];
+
+      userProfile = {
+        id: firebaseAuthUid || `usr-${Date.now()}`,
+        name: profileDoc?.nome || normalizedEmail.split('@')[0] || 'Usuário Corporativo',
+        email: normalizedEmail,
+        role: profileDoc?.role || 'Administrador',
+        department: 'Gente & Gestão',
+        avatar: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=150&auto=format&fit=crop&q=80',
+        tipoUsuario: 'EMPRESA',
+        empresaId: matchedTenant?.id || profileDoc?.empresaId || 'emp-001',
+        companyId: matchedTenant?.id || profileDoc?.empresaId || 'emp-001',
+        companyName: matchedTenant?.companyName || 'Empresa Cliente'
+      };
+    }
+
+    const token = generateMockToken(userProfile.id);
+    saveAuthData(userProfile, token);
+    logger.info(`Sessão iniciada com sucesso para: ${userProfile.email}`, 'AuthContext');
     return true;
   };
 

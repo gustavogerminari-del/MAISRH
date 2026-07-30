@@ -83,10 +83,26 @@ export function saveTenant(tenantData: Partial<ClientTenant>): ClientTenant[] {
 
   saveTenantsToStorage(updated);
 
-  // Firestore Sync
+  // Firestore Sync & Backend User Creation
   saveEmpresaFirestore(fullTenantData).catch(err => {
     console.error('Falha na persistência remota da empresa no Firestore:', err);
   });
+
+  const adminEmail = fullTenantData.adminCredentials?.adminEmail || fullTenantData.ownerEmail;
+  if (adminEmail) {
+    fetch('/api/users/create', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        email: adminEmail,
+        password: fullTenantData.adminCredentials?.initialPassword || 'Gugato94@',
+        nome: fullTenantData.ownerName || fullTenantData.companyName || 'Administrador',
+        role: 'ADMIN_EMPRESA',
+        empresaId: tenantId,
+        ativo: fullTenantData.status === 'Ativo'
+      })
+    }).catch(err => console.warn('Aviso ao sincronizar usuário admin da empresa:', err));
+  }
 
   return updated;
 }

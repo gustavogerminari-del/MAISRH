@@ -29,27 +29,73 @@ export interface UserProfile {
 }
 
 export class UserService {
-  static async create(userData: Partial<UserProfile>): Promise<UserProfile> {
-    const uid = userData.uid || `usr-${Date.now()}`;
-    const user = auth.currentUser;
+  static async create(userData: Partial<UserProfile> & { password?: string }): Promise<UserProfile> {
+    const email = userData.email || 'usuario@empresa.com.br';
+    const displayName = userData.displayName || 'Novo Usuário';
+    const role = userData.role || 'Colaborador';
+    const companyId = userData.companyId || 'emp-001';
+    const status = userData.status || 'Ativo';
+    const isAtivo = status === 'Ativo';
+
+    let uid = userData.uid;
+
+    // Call backend endpoint to create user in Firebase Auth & Firestore usuarios/{uid}
+    try {
+      const response = await fetch('/api/users/create', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          email,
+          password: userData.password || 'Gugato94@',
+          nome: displayName,
+          role,
+          empresaId: companyId,
+          ativo: isAtivo,
+          permissions: userData.permissions || []
+        })
+      });
+
+      const resData = await response.json();
+      if (resData.success && resData.uid) {
+        uid = resData.uid;
+      }
+    } catch (err) {
+      console.warn('Erro ao chamar API de criação de usuário:', err);
+    }
+
+    const finalUid = uid || userData.uid || `usr-${Date.now()}`;
+    const currentUser = auth.currentUser;
     const now = new Date().toISOString();
 
     const profile: UserProfile = {
-      uid,
-      email: userData.email || 'usuario@empresa.com.br',
-      displayName: userData.displayName || 'Novo Usuário',
-      role: userData.role || 'Colaborador',
-      companyId: userData.companyId || 'emp-001',
+      uid: finalUid,
+      email,
+      displayName,
+      role,
+      companyId,
       tipoUsuario: userData.tipoUsuario || 'EMPRESA',
-      status: userData.status || 'Ativo',
+      status,
       permissions: userData.permissions || [],
-      createdBy: user?.uid || 'system',
+      createdBy: currentUser?.uid || 'system',
       createdAt: userData.createdAt || now,
       updatedAt: now
     };
 
     try {
-      await setDoc(doc(db, COLLECTION_NAME, uid), sanitizeFirestoreData(profile), { merge: true });
+      await setDoc(doc(db, COLLECTION_NAME, finalUid), sanitizeFirestoreData(profile), { merge: true });
+      await setDoc(doc(db, 'usuarios', finalUid), sanitizeFirestoreData({
+        uid: finalUid,
+        email,
+        nome: displayName,
+        role,
+        empresaId: companyId,
+        ativo: isAtivo,
+        status,
+        permissions: userData.permissions || [],
+        createdAt: now,
+        updatedAt: now
+      }), { merge: true });
+
       await AuditService.log({
         action: 'CREATE',
         description: `Usuário ${profile.displayName} (${profile.email}) criado`,
@@ -58,7 +104,7 @@ export class UserService {
         companyId: profile.companyId
       });
     } catch (err) {
-      console.warn('Erro ao criar usuário no Firestore:', err);
+      console.warn('Erro ao salvar perfil do usuário no Firestore:', err);
     }
 
     return profile;

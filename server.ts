@@ -3,8 +3,33 @@ import path from 'path';
 import { createServer as createViteServer } from 'vite';
 import dotenv from 'dotenv';
 import { GoogleGenAI, Type } from '@google/genai';
+import { initializeApp as initAdminApp, getApps as getAdminApps } from 'firebase-admin/app';
+import { getAuth as getAdminAuth } from 'firebase-admin/auth';
+import { getFirestore as getAdminDb } from 'firebase-admin/firestore';
+import firebaseAppletConfig from './firebase-applet-config.json';
 
 dotenv.config();
+
+const getFirebaseAdmin = () => {
+  if (!getAdminApps().length) {
+    try {
+      const projId = firebaseAppletConfig.projectId || process.env.VITE_FIREBASE_PROJECT_ID || 'rl-rh-f0127';
+      initAdminApp({
+        projectId: projId
+      });
+      console.log('🔥 [Firebase Admin Initialized]', {
+        projectId: projId,
+        database: '(default)'
+      });
+    } catch (err) {
+      console.error('❌ [Firebase Admin Init Error]:', err);
+    }
+  }
+  return {
+    adminAuth: getAdminAuth(),
+    adminDb: getAdminDb()
+  };
+};
 
 async function startServer() {
   const app = express();
@@ -32,6 +57,183 @@ async function startServer() {
   // Health check
   app.get('/api/health', (req, res) => {
     res.json({ status: 'ok', timestamp: new Date().toISOString() });
+  });
+
+  // FIREBASE USER CREATION & SYNC API
+  app.post('/api/users/create', async (req, res) => {
+    try {
+      const { email, password, nome, role, empresaId, ativo, permissions } = req.body;
+      if (!email || typeof email !== 'string') {
+        return res.status(400).json({ success: false, error: 'E-mail é obrigatório.' });
+      }
+
+      const normEmail = email.trim().toLowerCase();
+      const { adminAuth, adminDb } = getFirebaseAdmin();
+
+      let userRecord: any = null;
+      let alreadyExistedInAuth = false;
+
+      try {
+        userRecord = await adminAuth.getUserByEmail(normEmail);
+        alreadyExistedInAuth = true;
+        if (password && password.length >= 6) {
+          await adminAuth.updateUser(userRecord.uid, {
+            password,
+            displayName: nome || normEmail.split('@')[0],
+            disabled: !(ativo ?? true)
+          });
+        }
+      } catch (findErr: any) {
+        if (findErr.code === 'auth/user-not-found' || String(findErr.message || '').includes('not-found')) {
+          const initialPassword = password && password.length >= 6 ? password : 'Gugato94@';
+          try {
+            userRecord = await adminAuth.createUser({
+              email: normEmail,
+              password: initialPassword,
+              displayName: nome || normEmail.split('@')[0],
+              disabled: !(ativo ?? true)
+            });
+          } catch (createErr: any) {
+            console.warn(`[Admin Auth create user fallback]:`, createErr.message);
+          }
+        } else {
+          console.warn(`[Admin Auth lookup warning]:`, findErr.message);
+        }
+      }
+
+      const uid = userRecord ? userRecord.uid : `usr-${Date.now()}`;
+      const nowIso = new Date().toISOString();
+
+      const isMaster = normEmail === 'gustavo.germinari@gmail.com' || role === 'MASTER';
+      const finalRole = isMaster ? 'MASTER' : (role || 'ADMIN_EMPRESA');
+      const finalEmpresaId = isMaster ? null : (empresaId || 'emp-001');
+
+      const firestoreData = {
+        uid,
+        email: normEmail,
+        nome: nome || normEmail.split('@')[0],
+        role: finalRole,
+        empresaId: finalEmpresaId,
+        ativo: ativo ?? true,
+        permissions: permissions || [],
+        createdAt: nowIso,
+        updatedAt: nowIso
+      };
+
+      try {
+        await adminDb.collection('usuarios').doc(uid).set(firestoreData, { merge: true });
+        await adminDb.collection('users').doc(uid).set({
+          ...firestoreData,
+          displayName: firestoreData.nome,
+          companyId: firestoreData.empresaId,
+          tipoUsuario: isMaster ? 'MASTER' : 'EMPRESA',
+          status: (ativo ?? true) ? 'Ativo' : 'Inativo'
+        }, { merge: true });
+      } catch (fsErr) {
+        console.warn('Firestore Admin write notice:', fsErr);
+      }
+
+      return res.json({
+        success: true,
+        uid,
+        alreadyExistedInAuth,
+        user: firestoreData,
+        message: alreadyExistedInAuth
+          ? `Perfil do usuário sincronizado no Firestore (${uid}).`
+          : `Usuário criado no Firebase Authentication e Firestore com sucesso (${uid}).`
+      });
+    } catch (err: any) {
+      console.error('Error in /api/users/create:', err);
+      return res.status(500).json({
+        success: false,
+        code: err.code || 'internal-error',
+        error: err.message || String(err)
+      });
+    }
+  });
+
+  app.post('/api/users/sync-initial', async (req, res) => {
+    try {
+      const { adminAuth, adminDb } = getFirebaseAdmin();
+      const results = [];
+
+      const accountsToSync = [
+        {
+          email: 'gustavo.germinari@gmail.com',
+          password: 'Gugato94@',
+          nome: 'Gustavo Germinari',
+          role: 'MASTER',
+          empresaId: null
+        },
+        {
+          email: 'rh04consultoria@gmail.com',
+          password: 'Gugato94@',
+          nome: 'RH 04 Consultoria',
+          role: 'ADMIN_EMPRESA',
+          empresaId: 'emp-001'
+        }
+      ];
+
+      for (const acc of accountsToSync) {
+        let userRecord: any = null;
+        let created = false;
+
+        try {
+          userRecord = await adminAuth.getUserByEmail(acc.email);
+          await adminAuth.updateUser(userRecord.uid, {
+            password: acc.password,
+            displayName: acc.nome,
+            disabled: false
+          });
+        } catch {
+          try {
+            userRecord = await adminAuth.createUser({
+              email: acc.email,
+              password: acc.password,
+              displayName: acc.nome,
+              disabled: false
+            });
+            created = true;
+          } catch (cErr: any) {
+            console.warn(`Admin SDK sync create fallback for ${acc.email}:`, cErr.message);
+          }
+        }
+
+        const uid = userRecord ? userRecord.uid : (acc.role === 'MASTER' ? 'usr-master-001' : 'usr-rh04-001');
+        const nowIso = new Date().toISOString();
+
+        const profile = {
+          uid,
+          email: acc.email,
+          nome: acc.nome,
+          role: acc.role,
+          empresaId: acc.empresaId,
+          ativo: true,
+          permissions: [],
+          createdAt: nowIso,
+          updatedAt: nowIso
+        };
+
+        try {
+          await adminDb.collection('usuarios').doc(uid).set(profile, { merge: true });
+          await adminDb.collection('users').doc(uid).set({
+            ...profile,
+            displayName: acc.nome,
+            companyId: acc.empresaId,
+            tipoUsuario: acc.role === 'MASTER' ? 'MASTER' : 'EMPRESA',
+            status: 'Ativo'
+          }, { merge: true });
+        } catch (fErr) {
+          console.warn(`Firestore sync note for ${acc.email}:`, fErr);
+        }
+
+        results.push({ email: acc.email, uid, created });
+      }
+
+      return res.json({ success: true, synced: results });
+    } catch (err: any) {
+      return res.status(500).json({ success: false, error: err.message });
+    }
   });
 
   // 1. GERADOR DE VAGAS VIA IA
