@@ -65,9 +65,10 @@ export const ProtectedRoute: React.FC<ProtectedRouteProps> = ({
           <Button
             variant="outline"
             size="sm"
-            onClick={() => switchDemoProfile('Administrador')}
+            onClick={() => window.history.back()}
           >
-            Alternar para Administrador
+            <ArrowLeft className="w-3.5 h-3.5 mr-1" />
+            Voltar
           </Button>
         </div>
       </div>

@@ -117,8 +117,9 @@ export const Sidebar: React.FC<SidebarProps> = ({
   isOpenMobile = false,
   onCloseMobile
 }) => {
-  const { user } = useAuth();
+  const { user, isModuleActive } = useAuth();
   const isMaster = user?.role === 'Super Administrador' || user?.tipoUsuario === 'MASTER';
+  const isHeadhunterEnabled = isMaster || (isModuleActive ? isModuleActive('headhunter') : true);
 
   const [isCollapsed, setIsCollapsed] = useState<boolean>(() => {
     const saved = localStorage.getItem(COLLAPSED_STORAGE_KEY);
@@ -149,7 +150,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
         { id: 'contratacoes', label: 'Contratações', icon: UserCheck },
       ]
     },
-    {
+    ...(isHeadhunterEnabled ? [{
       id: 'headhunter',
       title: 'HEADHUNTER',
       items: [
@@ -158,7 +159,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
         { id: 'headhunter-comercial' as MainTab, label: 'Comercial', icon: TrendingUp },
         { id: 'headhunter-financeiro' as MainTab, label: 'Financeiro', icon: Wallet },
       ]
-    },
+    }] : []),
     {
       id: 'colaboradores',
       title: 'COLABORADORES',

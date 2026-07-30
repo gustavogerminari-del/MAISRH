@@ -136,6 +136,22 @@ service cloud.firestore {
     }
 
     // Candidaturas Públicas / Applications
+    match /candidate_applications/{applicationId} {
+      allow create: if (
+        (request.resource.data.jobId != null || request.resource.data.vagaId != null) &&
+        (request.resource.data.companyId != null || request.resource.data.empresaId != null) &&
+        (request.resource.data.nome != null || request.resource.data.name != null) &&
+        request.resource.data.email != null &&
+        (request.resource.data.status in ['received', 'recebida', 'pendente', 'novo', 'Nova', 'Novos', 'Triagem IA', 'Em Análise RH', 'Em Processo'])
+      ) || (
+        isSignedIn() && isRh() && belongsToCurrentCompany(request.resource.data)
+      );
+
+      allow read: if isSignedIn() && isRh() && belongsToCurrentCompany(resource.data);
+      allow update: if isSignedIn() && isRh() && belongsToCurrentCompany(resource.data) && notChangingCompanyId();
+      allow delete: if isSignedIn() && isCompanyAdmin() && belongsToCurrentCompany(resource.data);
+    }
+
     match /applications/{applicationId} {
       // Unauthenticated candidate can apply, but only with valid initial status & mandatory fields
       allow create: if (

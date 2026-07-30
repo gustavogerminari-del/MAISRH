@@ -1036,21 +1036,12 @@ export const MOCK_PARTNERS: import('../types/master').PartnerBenefit[] = [
 export const MOCK_PLATFORM_ADMINS: import('../types/master').PlatformAdminUser[] = [
   {
     id: 'padm-01',
-    name: 'Grupo MAIS RH (Master)',
-    email: 'master@maisrh.com.br',
+    name: 'Gustavo Germinari (MASTER)',
+    email: 'gustavo.germinari@gmail.com',
     role: 'Super Administrador',
     status: 'Ativo',
-    lastAccessAt: '2026-07-26 15:50',
+    lastAccessAt: '2026-07-30 12:00',
     avatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80'
-  },
-  {
-    id: 'padm-02',
-    name: 'Engenharia & Infraestrutura Tech',
-    email: 'tech.master@maisrh.com.br',
-    role: 'Suporte Técnico',
-    status: 'Ativo',
-    lastAccessAt: '2026-07-26 11:30',
-    avatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=150&auto=format&fit=crop&q=80'
   }
 ];
 
@@ -1059,7 +1050,7 @@ export const MOCK_SECURITY_LOGS: import('../types/master').AuditSecurityLog[] = 
     id: 'sec-01',
     timestamp: '2026-07-26 15:45:12',
     tenantName: 'Grupo MAIS RH (Master)',
-    userName: 'master@maisrh.com.br',
+    userName: 'gustavo.germinari@gmail.com',
     userRole: 'Super Administrador',
     actionCategory: 'LOGIN',
     description: 'Acesso autenticado ao Painel Exclusivo Master via Acesso Rápido Demo.',

@@ -35,6 +35,8 @@ export interface CandidateApplicationPayload {
   courses?: string;
   linkedinUrl?: string;
   resumeFileName?: string;
+  resumeFile?: File;
+  resumeUrl?: string;
   coverNote?: string;
   pne?: boolean;
 }

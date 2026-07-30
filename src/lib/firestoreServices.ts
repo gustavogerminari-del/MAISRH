@@ -112,25 +112,7 @@ export interface UsuarioFirestoreDoc {
  * Utility to seed initial Firestore collections if empty.
  */
 export async function seedFirestoreIfEmpty(): Promise<void> {
-  try {
-    const empresasSnap = await getDocs(collection(db, COLLECTIONS.EMPRESAS));
-    if (empresasSnap.empty) {
-      console.log('Coleção empresas vazia no Firestore. Semeando com dados de exemplo...');
-      for (const tenant of MOCK_TENANTS) {
-        await saveEmpresaFirestore(tenant);
-      }
-    }
-
-    const modulosSnap = await getDocs(collection(db, COLLECTIONS.MODULOS));
-    if (modulosSnap.empty) {
-      console.log('Coleção modulos vazia no Firestore. Semeando com módulos da plataforma...');
-      for (const mod of MOCK_PLATFORM_MODULES) {
-        await saveModuloFirestore(mod);
-      }
-    }
-  } catch (err) {
-    console.warn('Semeação de dados iniciais no Firestore falhou (sem conexão ou permissão local):', err);
-  }
+  // Seeds de desenvolvimento desativados conforme diretrizes de segurança de produção.
 }
 
 // ----------------------------------------------------------------------------

@@ -14,6 +14,7 @@ export type MasterPlanPreset = 'Básico' | 'Intermediário' | 'Completo / Enterp
 
 export interface TenantModulePermissions {
   vagas: boolean;
+  headhunter?: boolean;
   bancoTalentos: boolean;
   entrevistas: boolean;
   equipeInterna: boolean;

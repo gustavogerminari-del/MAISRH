@@ -28,6 +28,7 @@ import { ContactSection } from './ContactSection';
 
 import { CandidateResumeModal } from './CandidateResumeModal';
 import { CompanyRegistrationModal } from './CompanyRegistrationModal';
+import { JobCandidateService } from '../services/JobCandidateService';
 
 export interface PublicJobsViewProps {
   jobs?: Job[];
@@ -108,18 +109,57 @@ export const PublicJobsView: React.FC<PublicJobsViewProps> = ({
     }
   };
 
-  const handleCandidateApplicationSubmit = (payload: CandidateApplicationPayload) => {
+  const handleCandidateApplicationSubmit = async (payload: CandidateApplicationPayload) => {
+    let fileUrl = payload.resumeFileName || 'curriculo_candidato.pdf';
+    if (payload.resumeFile) {
+      try {
+        fileUrl = await new Promise<string>((resolve) => {
+          const reader = new FileReader();
+          reader.onloadend = () => resolve(reader.result as string);
+          reader.onerror = () => resolve(URL.createObjectURL(payload.resumeFile!));
+          reader.readAsDataURL(payload.resumeFile!);
+        });
+      } catch {
+        fileUrl = URL.createObjectURL(payload.resumeFile);
+      }
+    }
+
+    const targetJobId = payload.jobId || 'pub-job-001';
+    const targetJob = (jobs || []).find(j => j.id === targetJobId);
+    const targetCompanyId = (targetJob as any)?.empresaId || (targetJob as any)?.companyId || 'emp-001';
+
+    // 1. Persist directly to Firestore candidate_applications collection
+    try {
+      await JobCandidateService.create({
+        jobId: targetJobId,
+        companyId: targetCompanyId,
+        name: payload.fullName,
+        email: payload.email,
+        phone: payload.phone,
+        role: payload.interestArea || targetJob?.title || 'Candidato',
+        city: payload.cityState?.split(',')[0]?.trim() || 'São Paulo',
+        state: payload.cityState?.split(',')[1]?.trim() || 'SP',
+        experienceYears: Number(payload.experienceYears) || 3,
+        education: payload.educationLevel || 'Superior Completo',
+        resumeUrl: fileUrl,
+        notes: payload.coverNote ? [payload.coverNote] : [`Candidatura enviada via Portal Público MAIS RH`],
+      });
+    } catch (err) {
+      console.warn('⚠️ Erro ao registrar candidatura no Firestore:', err);
+    }
+
+    // 2. Callback for local React state
     if (onApplyCandidate) {
       onApplyCandidate({
         name: payload.fullName,
         email: payload.email,
         phone: payload.phone,
-        role: payload.interestArea || 'Candidato Banco de Talentos',
+        role: payload.interestArea || targetJob?.title || 'Candidato Banco de Talentos',
         location: payload.cityState,
         experienceYears: Number(payload.experienceYears) || 3,
         skills: ['Comunicação', 'Qualificações Diversas', payload.interestArea || 'Geral'],
         status: 'Em Processo',
-        currentJobId: payload.jobId || 'pub-job-001',
+        currentJobId: targetJobId,
         currentStageId: 'inscritos',
         rating: 5,
         notes: payload.coverNote 
@@ -127,7 +167,7 @@ export const PublicJobsView: React.FC<PublicJobsViewProps> = ({
           : `Candidato cadastrado via Portal Público MAIS RH. Formação: ${payload.educationLevel || 'Superior'}. Cursos: ${payload.courses || 'Não informado'}.`,
         avatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150',
         source: 'Portal MAIS RH',
-        resumeUrl: payload.resumeFileName || 'curriculo_candidato.pdf',
+        resumeUrl: fileUrl,
         salaryExpectation: 'A combinar',
       });
     }

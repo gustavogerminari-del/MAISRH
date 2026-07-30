@@ -6,11 +6,15 @@ import { RoleProfile, ScreenRouteKey, SystemActionKey, UserProfile } from '../ty
 
 export const MASTER_USER: UserProfile = {
   id: 'usr-master-00',
-  name: 'Grupo MAIS RH (Super Admin)',
-  email: 'master@maisrh.com.br',
+  name: 'Gustavo Germinari (MASTER)',
+  email: 'gustavo.germinari@gmail.com',
   role: 'Super Administrador',
   department: 'Diretoria de Tecnologia & SaaS',
   avatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80',
+  tipoUsuario: 'MASTER',
+  empresaId: 'master-org',
+  companyId: 'master-org',
+  companyName: 'Grupo MAIS RH (Master)'
 };
 
 const ALL_SCREENS: ScreenRouteKey[] = [
@@ -41,7 +45,7 @@ const ALL_SCREENS: ScreenRouteKey[] = [
 ];
 
 /**
- * Matriz de Telas Permitidas por Perfil de Acesso (Todas liberadas para Modo Demo/Tester)
+ * Matriz de Telas Permitidas por Perfil de Acesso
  */
 export const SCREEN_PERMISSIONS: Record<RoleProfile, ScreenRouteKey[]> = {
   'Super Administrador': ALL_SCREENS,
@@ -66,7 +70,7 @@ const ALL_ACTIONS: SystemActionKey[] = [
 ];
 
 /**
- * Matriz de Ações de System Permitidas por Perfil (Todas liberadas para Modo Demo/Tester)
+ * Matriz de Ações do Sistema Permitidas por Perfil
  */
 export const ACTION_PERMISSIONS: Record<RoleProfile, SystemActionKey[]> = {
   'Super Administrador': ALL_ACTIONS,
@@ -78,69 +82,6 @@ export const ACTION_PERMISSIONS: Record<RoleProfile, SystemActionKey[]> = {
 };
 
 /**
- * Usuários de Exemplo Pré-cadastrados para Testes de Login e Alternância de Perfis
+ * Usuários Demo removidos conforme diretrizes de produção.
  */
-export const DEMO_USERS: UserProfile[] = [
-  {
-    id: 'usr-admin-01',
-    name: 'Luciana Mello',
-    email: 'luciana.admin@maisrh.com.br',
-    role: 'Administrador',
-    department: 'Diretoria de Gente & Gestão',
-    avatar: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=150&auto=format&fit=crop&q=80',
-    tipoUsuario: 'EMPRESA',
-    empresaId: 'emp-001',
-    companyId: 'emp-001',
-    companyName: 'Grupo Alpha Logística S/A'
-  },
-  {
-    id: 'usr-gestor-02',
-    name: 'Carlos Eduardo Silva',
-    email: 'carlos.gestor@maisrh.com.br',
-    role: 'Gestor de Seleção',
-    department: 'Gerência de Atração de Talentos',
-    avatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=150&auto=format&fit=crop&q=80',
-    tipoUsuario: 'EMPRESA',
-    empresaId: 'emp-001',
-    companyId: 'emp-001',
-    companyName: 'Grupo Alpha Logística S/A'
-  },
-  {
-    id: 'usr-recrutador-03',
-    name: 'Mariana Costa',
-    email: 'mariana.recrutadora@maisrh.com.br',
-    role: 'Recrutador Sênior',
-    department: 'Recrutamento & Seleção Tech',
-    avatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80',
-    tipoUsuario: 'EMPRESA',
-    empresaId: 'emp-001',
-    companyId: 'emp-001',
-    companyName: 'Grupo Alpha Logística S/A'
-  },
-  {
-    id: 'usr-analista-04',
-    name: 'Roberto Andrade',
-    email: 'roberto.analista@maisrh.com.br',
-    role: 'Analista de RH',
-    department: 'Operações de RH & Admissão',
-    avatar: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=150&auto=format&fit=crop&q=80',
-    tipoUsuario: 'EMPRESA',
-    empresaId: 'emp-001',
-    companyId: 'emp-001',
-    companyName: 'Grupo Alpha Logística S/A'
-  },
-  {
-    id: 'usr-colab-05',
-    name: 'Ana Paula Vasconcelos',
-    email: 'ana.vasconcelos@gmail.com',
-    role: 'Colaborador',
-    department: 'Recursos Humanos',
-    avatar: 'https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?w=150&auto=format&fit=crop&q=80',
-    tipoUsuario: 'COLABORADOR',
-    colaboradorId: 'colab-001',
-    empresaId: 'emp-001',
-    companyId: 'emp-001',
-    companyName: 'Grupo Alpha Logística S/A',
-    portalAccessStatus: 'Ativo'
-  }
-];
+export const DEMO_USERS: UserProfile[] = [];

@@ -136,9 +136,7 @@ export class JobCandidateService {
 
   static async listByJob(jobId: string, companyId?: string): Promise<JobCandidateApplication[]> {
     try {
-      const q = companyId 
-        ? query(collection(db, COLLECTION_NAME), where('jobId', '==', jobId), where('companyId', '==', companyId))
-        : query(collection(db, COLLECTION_NAME), where('jobId', '==', jobId));
+      const q = query(collection(db, COLLECTION_NAME), where('jobId', '==', jobId));
       
       const snap = await getDocs(q);
       if (!snap.empty) {

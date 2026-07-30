@@ -3,6 +3,8 @@ import { HeadhunterDashboard } from './components/HeadhunterDashboard';
 import { HeadhunterClientes } from './components/HeadhunterClientes';
 import { HeadhunterComercial } from './components/HeadhunterComercial';
 import { HeadhunterFinanceiro } from './components/HeadhunterFinanceiro';
+import { HeadhunterCandidatos } from './components/HeadhunterCandidatos';
+import { HeadhunterCandidate } from './types';
 
 // Unified Recruitment Core Modules
 import { 
@@ -218,6 +220,75 @@ export const HeadhunterView: React.FC<HeadhunterViewProps> = ({ initialSubTab = 
 
   return (
     <div className="w-full space-y-6">
+      {/* Subtab Navigation Header */}
+      <div className="bg-white p-2 rounded-2xl border border-slate-200 shadow-2xs flex items-center gap-1 overflow-x-auto scrollbar-none">
+        <button
+          onClick={() => setActiveTab('dashboard')}
+          className={`px-3.5 py-2 rounded-xl text-xs font-extrabold transition-all cursor-pointer whitespace-nowrap ${
+            activeTab === 'dashboard'
+              ? 'bg-indigo-600 text-white shadow-xs'
+              : 'text-slate-600 hover:bg-slate-100'
+          }`}
+        >
+          Visão Geral
+        </button>
+
+        <button
+          onClick={() => setActiveTab('prospeccao' as any)}
+          className={`px-3.5 py-2 rounded-xl text-xs font-extrabold transition-all cursor-pointer whitespace-nowrap ${
+            activeTab === ('prospeccao' as any) || activeTab === 'candidatos'
+              ? 'bg-indigo-600 text-white shadow-xs'
+              : 'text-slate-600 hover:bg-slate-100'
+          }`}
+        >
+          Candidatos Prospectados
+        </button>
+
+        <button
+          onClick={() => setActiveTab('vagas')}
+          className={`px-3.5 py-2 rounded-xl text-xs font-extrabold transition-all cursor-pointer whitespace-nowrap ${
+            activeTab === 'vagas'
+              ? 'bg-indigo-600 text-white shadow-xs'
+              : 'text-slate-600 hover:bg-slate-100'
+          }`}
+        >
+          Vagas Busca Ativa
+        </button>
+
+        <button
+          onClick={() => setActiveTab('clientes')}
+          className={`px-3.5 py-2 rounded-xl text-xs font-extrabold transition-all cursor-pointer whitespace-nowrap ${
+            activeTab === 'clientes'
+              ? 'bg-indigo-600 text-white shadow-xs'
+              : 'text-slate-600 hover:bg-slate-100'
+          }`}
+        >
+          Clientes
+        </button>
+
+        <button
+          onClick={() => setActiveTab('comercial')}
+          className={`px-3.5 py-2 rounded-xl text-xs font-extrabold transition-all cursor-pointer whitespace-nowrap ${
+            activeTab === 'comercial' || activeTab === 'crm' || activeTab === 'contratos'
+              ? 'bg-indigo-600 text-white shadow-xs'
+              : 'text-slate-600 hover:bg-slate-100'
+          }`}
+        >
+          Comercial & CRM
+        </button>
+
+        <button
+          onClick={() => setActiveTab('financeiro')}
+          className={`px-3.5 py-2 rounded-xl text-xs font-extrabold transition-all cursor-pointer whitespace-nowrap ${
+            activeTab === 'financeiro' || activeTab === 'comissoes' || activeTab === 'despesas' || activeTab === 'relatorios'
+              ? 'bg-indigo-600 text-white shadow-xs'
+              : 'text-slate-600 hover:bg-slate-100'
+          }`}
+        >
+          Financeiro
+        </button>
+      </div>
+
       <main className="w-full space-y-6">
         {(activeTab === 'dashboard') && (
           <HeadhunterDashboard
@@ -233,7 +304,27 @@ export const HeadhunterView: React.FC<HeadhunterViewProps> = ({ initialSubTab = 
             onNavigateTab={tab => {
               if (tab === 'crm' || tab === 'contratos') setActiveTab('comercial');
               else if (tab === 'comissoes' || tab === 'despesas' || tab === 'relatorios') setActiveTab('financeiro');
+              else if (tab === 'candidatos') setActiveTab('prospeccao' as any);
               else setActiveTab(tab);
+            }}
+            onOpenAiModal={handleOpenAiModal}
+          />
+        )}
+
+        {(activeTab === ('prospeccao' as any) || activeTab === 'candidatos') && (
+          <HeadhunterCandidatos
+            candidates={candidates as any}
+            jobs={jobs as any}
+            onAddCandidate={(newCand) => {
+              setCandidates([newCand as any, ...candidates]);
+              recruitmentService.saveCandidate(newCand as any);
+            }}
+            onUpdateCandidate={(updatedCand) => {
+              setCandidates(candidates.map(c => c.id === updatedCand.id ? (updatedCand as any) : c));
+              recruitmentService.saveCandidate(updatedCand as any);
+            }}
+            onDeleteCandidate={(id) => {
+              setCandidates(candidates.filter(c => c.id !== id));
             }}
             onOpenAiModal={handleOpenAiModal}
           />

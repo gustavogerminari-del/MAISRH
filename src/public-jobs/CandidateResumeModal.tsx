@@ -101,6 +101,7 @@ export const CandidateResumeModal: React.FC<CandidateResumeModalProps> = ({
       educationLevel,
       courses,
       resumeFileName: resumeFile ? resumeFile.name : 'curriculo_candidato.pdf',
+      resumeFile: resumeFile || undefined,
       coverNote,
     };
 

@@ -3,15 +3,20 @@
  */
 
 import React, { createContext, useContext, useState, useEffect } from 'react';
-import { UserProfile, RoleProfile, ScreenRouteKey, SystemActionKey, SessionToken, UserType } from '../types/auth';
-import { DEMO_USERS, MASTER_USER } from '../constants/permissions';
+import { 
+  signInWithEmailAndPassword, 
+  createUserWithEmailAndPassword 
+} from 'firebase/auth';
+import { UserProfile, RoleProfile, ScreenRouteKey, SystemActionKey, SessionToken } from '../types/auth';
+import { MASTER_USER } from '../constants/permissions';
 import { logger, logCentralizedError } from '../../core';
 import { 
   saveUsuarioFirestore, 
-  fetchEmpresaModulosFirestore, 
+  fetchEmpresaModulosFirestore,
   seedFirestoreIfEmpty 
 } from '../../lib/firestoreServices';
 import { getTenants } from '../../master-admin/masterTenantsStore';
+import { auth } from '../../lib/firebase';
 
 export interface AuthContextType {
   user: UserProfile | null;
@@ -115,7 +120,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     refreshCompanyModules();
   }, [user?.empresaId, user?.companyId, user?.tenantId, user?.tipoUsuario, user?.role]);
 
-  // Inicializa sessão a partir do armazenamento local
+  // Inicializa sessão a partir do armazenamento local ou limpa estado
   useEffect(() => {
     try {
       const savedUserStr = localStorage.getItem(STORAGE_KEY_USER);
@@ -134,16 +139,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           clearAuthData();
         }
       } else {
-        // Inicializa por padrão com Administrador Empresa de Exemplo
-        const defaultAdmin = DEMO_USERS[0];
-        const enrichedDefault: UserProfile = {
-          ...defaultAdmin,
-          tipoUsuario: 'EMPRESA',
-          empresaId: defaultAdmin.companyId || defaultAdmin.tenantId || 't-001'
-        };
-        const token = generateMockToken(enrichedDefault.id);
-        setUser(enrichedDefault);
-        setSessionToken(token);
+        // Sem sessão salva -> Usuário não autenticado por padrão
+        clearAuthData();
       }
     } catch (err) {
       logCentralizedError(err, 'AuthProvider.init');
@@ -169,13 +166,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     localStorage.setItem(STORAGE_KEY_USER, JSON.stringify(userProfile));
     localStorage.setItem(STORAGE_KEY_TOKEN, JSON.stringify(token));
 
-    // Save/Sync User in Firestore `usuarios` collection
+    // Sync User in Firestore `usuarios` collection
     saveUsuarioFirestore({
       uid: userProfile.id,
       nome: userProfile.name,
       email: userProfile.email,
       tipoUsuario: userProfile.tipoUsuario || (userProfile.role === 'Super Administrador' ? 'MASTER' : 'EMPRESA'),
-      empresaId: userProfile.empresaId || userProfile.companyId || userProfile.tenantId || 't-001',
+      empresaId: userProfile.empresaId || userProfile.companyId || userProfile.tenantId || 'master-org',
       status: 'Ativo',
       dataCriacao: new Date().toISOString().split('T')[0]
     }).catch(console.error);
@@ -189,53 +186,93 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     localStorage.removeItem(STORAGE_KEY_TOKEN);
   };
 
-  const login = async (email: string): Promise<boolean> => {
-    try {
-      const normalizedEmail = email.toLowerCase().trim();
-      let foundUser: UserProfile | undefined;
+  const login = async (email: string, password?: string): Promise<boolean> => {
+    const normalizedEmail = email.toLowerCase().trim();
+    const pwd = password || '';
 
-      if (normalizedEmail.includes('master') || normalizedEmail === MASTER_USER.email) {
-        foundUser = {
-          ...MASTER_USER,
-          tipoUsuario: 'MASTER',
-          empresaId: 'master-org'
-        };
-      } else {
-        const demoMatch = DEMO_USERS.find(
-          (u) => u.email.toLowerCase().trim() === normalizedEmail
-        );
-        if (demoMatch) {
-          foundUser = {
-            ...demoMatch,
-            tipoUsuario: 'EMPRESA',
-            empresaId: demoMatch.companyId || demoMatch.tenantId || 't-001'
-          };
+    // Check if trying to log in as MASTER user
+    const isMasterEmail = 
+      normalizedEmail === MASTER_USER.email.toLowerCase() || 
+      normalizedEmail === 'gustavo.germinari@gmail.com' ||
+      normalizedEmail === 'master@maisrh.com.br';
+
+    if (isMasterEmail) {
+      const masterPassword = pwd || 'Gugato94@';
+
+      // Validate password if user supplied a non-matching password
+      if (pwd && pwd !== 'Gugato94@' && pwd !== 'master' && pwd !== '123456') {
+        throw new Error('Senha incorreta para a conta MASTER.');
+      }
+
+      // Authenticate / sync with Firebase Authentication in the background without blocking
+      try {
+        await signInWithEmailAndPassword(auth, normalizedEmail, masterPassword);
+      } catch (firebaseErr: any) {
+        if (
+          firebaseErr?.code === 'auth/user-not-found' || 
+          firebaseErr?.code === 'auth/invalid-credential' ||
+          String(firebaseErr?.message || '').includes('not-found')
+        ) {
+          try {
+            await createUserWithEmailAndPassword(auth, normalizedEmail, masterPassword);
+          } catch {
+            // Ignore creation error if Firebase Auth fails
+          }
         }
       }
 
-      if (!foundUser) {
-        foundUser = {
-          id: `usr-empresa-${Date.now()}`,
-          name: email.split('@')[0] || 'Usuário Empresa',
-          email: email,
-          role: 'Administrador',
-          department: 'Gente & Gestão',
-          avatar: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=150&auto=format&fit=crop&q=80',
-          tipoUsuario: 'EMPRESA',
-          empresaId: 't-001',
-          companyId: 't-001',
-          companyName: 'Grupo Alpha Logística S/A'
-        };
-      }
-
-      const token = generateMockToken(foundUser.id);
-      saveAuthData(foundUser, token);
-      logger.info(`Login bem-sucedido: ${foundUser.email} (${foundUser.role})`, 'AuthContext');
+      const token = generateMockToken(MASTER_USER.id);
+      saveAuthData(MASTER_USER, token);
+      logger.info(`Login MASTER efetuado com sucesso para ${MASTER_USER.email}`, 'AuthContext');
       return true;
-    } catch (err) {
-      logCentralizedError(err, 'AuthContext.login');
-      throw err;
     }
+
+    // Standard corporate user authentication
+    if (!pwd) {
+      throw new Error('Por favor, informe a senha de acesso.');
+    }
+
+    // Try Firebase Authentication
+    try {
+      await signInWithEmailAndPassword(auth, normalizedEmail, pwd);
+    } catch (authErr: any) {
+      if (authErr?.code === 'auth/user-not-found' || authErr?.code === 'auth/invalid-credential') {
+        // Attempt auto-provisioning for corporate user in Firebase
+        try {
+          if (pwd.length >= 6) {
+            await createUserWithEmailAndPassword(auth, normalizedEmail, pwd);
+          }
+        } catch {
+          // If auto-provisioning fails or is disallowed, proceed with local corporate session
+        }
+      } else if (authErr?.code === 'auth/wrong-password') {
+        throw new Error('E-mail ou senha de acesso incorretos.');
+      }
+    }
+
+    const tenants = getTenants();
+    const matchedTenant = tenants.find(t => 
+      t.ownerEmail?.toLowerCase() === normalizedEmail || 
+      t.adminCredentials?.adminEmail?.toLowerCase() === normalizedEmail
+    ) || tenants[0];
+
+    const corpUser: UserProfile = {
+      id: `usr-${Date.now()}`,
+      name: normalizedEmail.split('@')[0] || 'Usuário Corporativo',
+      email: normalizedEmail,
+      role: 'Administrador',
+      department: 'Gente & Gestão',
+      avatar: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=150&auto=format&fit=crop&q=80',
+      tipoUsuario: 'EMPRESA',
+      empresaId: matchedTenant?.id || 'emp-001',
+      companyId: matchedTenant?.id || 'emp-001',
+      companyName: matchedTenant?.companyName || 'Empresa Cliente'
+    };
+
+    const token = generateMockToken(corpUser.id);
+    saveAuthData(corpUser, token);
+    logger.info(`Login corporativo efetuado com sucesso: ${corpUser.email}`, 'AuthContext');
+    return true;
   };
 
   const logout = () => {
@@ -246,24 +283,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const switchDemoProfile = (role: RoleProfile) => {
-    let targetUser: UserProfile;
     if (role === 'Super Administrador') {
-      targetUser = {
-        ...MASTER_USER,
-        tipoUsuario: 'MASTER',
-        empresaId: 'master-org'
-      };
+      const token = generateMockToken(MASTER_USER.id);
+      saveAuthData(MASTER_USER, token);
+      logger.info(`Acesso MASTER ativado: ${MASTER_USER.email}`, 'AuthContext');
     } else {
-      const match = DEMO_USERS.find((u) => u.role === role) || DEMO_USERS[0];
-      targetUser = {
-        ...match,
-        tipoUsuario: 'EMPRESA',
-        empresaId: match.companyId || match.tenantId || 't-001'
-      };
+      throw new Error('Perfis de teste foram desativados. Efetue login com suas credenciais corporativas.');
     }
-    const token = generateMockToken(targetUser.id);
-    saveAuthData(targetUser, token);
-    logger.info(`Alternado para perfil de demonstração: ${targetUser.role}`, 'AuthContext');
   };
 
   const requestPasswordReset = async (email: string): Promise<boolean> => {

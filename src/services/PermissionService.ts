@@ -58,7 +58,15 @@ export const ROLE_PERMISSIONS_MAP: Record<SystemRole, string[]> = {
     'settings:read',
     'settings:write',
     'modules:manage',
-    'subscriptions:read'
+    'subscriptions:read',
+    'headhunter.visualizar',
+    'headhunter.criar',
+    'headhunter.editar',
+    'headhunter.contatar',
+    'headhunter.vincular_vaga',
+    'headhunter.converter_candidato',
+    'headhunter.excluir',
+    'headhunter.exportar'
   ],
   RH: [
     'company:read',
@@ -77,7 +85,13 @@ export const ROLE_PERMISSIONS_MAP: Record<SystemRole, string[]> = {
     'benefits:write',
     'documents:read',
     'documents:write',
-    'reports:read'
+    'reports:read',
+    'headhunter.visualizar',
+    'headhunter.criar',
+    'headhunter.editar',
+    'headhunter.contatar',
+    'headhunter.vincular_vaga',
+    'headhunter.converter_candidato'
   ],
   GESTOR: [
     'company:read',
@@ -161,6 +175,7 @@ export class PermissionService {
 
     // Module checks
     if (enabledModules) {
+      if (route.includes('headhunter') && enabledModules.headhunter === false) return false;
       if (route.includes('payroll') || route.includes('folha') && enabledModules.folhaPagamento === false) return false;
       if (route.includes('ponto') && enabledModules.pontoDigital === false) return false;
       if (route.includes('beneficios') && enabledModules.beneficios === false) return false;

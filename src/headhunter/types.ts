@@ -16,7 +16,19 @@ export type CandidateClassification = 'Recomendado' | 'Alto potencial' | 'Penden
 
 export type ProcessStage = 'Mapeado' | 'Abordado' | 'Interessado' | 'Triagem' | 'Entrevista com headhunter' | 'Apresentado ao cliente' | 'Entrevista com cliente' | 'Referências' | 'Proposta' | 'Contratado' | 'Reprovado' | 'Desistiu';
 
-export type CandidateStatus = 'Triagem' | 'Entrevista Headhunter' | 'Entrevista Cliente' | 'Proposta' | 'Contratado' | 'Reprovado' | ProcessStage;
+export type HeadhunterStage = 
+  | 'Identificado'
+  | 'Em análise'
+  | 'Contato pendente'
+  | 'Contatado'
+  | 'Interessado'
+  | 'Vinculado à vaga'
+  | 'Entrevista'
+  | 'Recusado'
+  | 'Sem retorno'
+  | 'Contratado';
+
+export type CandidateStatus = 'Triagem' | 'Entrevista Headhunter' | 'Entrevista Cliente' | 'Proposta' | 'Contratado' | 'Reprovado' | ProcessStage | HeadhunterStage;
 
 export type ReceitaStatus = 'Prevista' | 'Aguardando' | 'Parcialmente Recebida' | 'Recebida' | 'Vencida' | 'Cancelada' | 'Estornada';
 export type CommissionStatus = 'Prevista' | 'Aguardando recebimento' | 'Liberada' | 'Parcialmente paga' | 'Paga' | 'Cancelada';
@@ -286,6 +298,7 @@ export interface HeadhunterCandidate extends HeadhunterBaseDoc {
   clienteNome?: string;
   nome: string;
   email: string;
+  cpf?: string;
   telefone: string;
   fotoUrl?: string;
   cidade?: string;
@@ -297,6 +310,7 @@ export interface HeadhunterCandidate extends HeadhunterBaseDoc {
   disponibilidade?: string;
   experienciaAnos?: number;
   competencias?: string[];
+  palavrasChave?: string[];
   classificacao?: CandidateClassification;
   curriculoTexto: string;
   compatibilidadePercent: number;
@@ -305,14 +319,25 @@ export interface HeadhunterCandidate extends HeadhunterBaseDoc {
   triagemRhStatus: string;
   parecerTecnico: string;
   etapaPipeline: CandidateStatus;
+  etapaHeadhunter?: HeadhunterStage;
   etapaProcesso?: ProcessStage;
   diasNaEtapa?: number;
   dataEntradaEtapa?: string;
-  ultimaMovimentacao?: string;
+  dataUltimoContato?: string;
   proximaAcao?: string;
   responsavelNome?: string;
+  responsavelId?: string;
+  origem: string;
+  observacoes?: string;
+  convertidoCandidatoOficial?: boolean;
+  incluidoBancoTalentos?: boolean;
+  conviteEnviado?: boolean;
+  historicoContatos?: Array<{ data: string; descricao: string; autor: string; canal?: string }>;
   historico: Array<{ data: string; evento: string }>;
   linhaDoTempo: Array<{ data: string; titulo: string; detalhe: string }>;
+  createdAt?: string;
+  updatedAt?: string;
+  createdBy?: string;
 }
 
 export interface HeadhunterInterview extends HeadhunterBaseDoc {

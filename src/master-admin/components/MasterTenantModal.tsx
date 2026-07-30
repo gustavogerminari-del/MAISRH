@@ -73,6 +73,7 @@ export const MasterTenantModal: React.FC<MasterTenantModalProps> = ({
   const [modules, setModules] = useState<TenantModulePermissions>(
     tenant?.modules || {
       vagas: true,
+      headhunter: true,
       bancoTalentos: true,
       entrevistas: true,
       equipeInterna: true,

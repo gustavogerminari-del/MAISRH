@@ -92,6 +92,7 @@ export const JobsPortalSection: React.FC<JobsPortalSectionProps> = ({
       cityState,
       linkedinUrl,
       resumeFileName: resumeFile ? resumeFile.name : 'curriculo_candidato.pdf',
+      resumeFile: resumeFile || undefined,
       coverNote: coverNote ? `Pretensão Salarial: ${salaryExpectation || 'A combinar'}. ${coverNote}` : `Inscrição para ${selectedJob.title}. Pretensão: ${salaryExpectation || 'A combinar'}.`,
       pne: isPne
     });
