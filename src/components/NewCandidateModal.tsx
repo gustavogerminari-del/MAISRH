@@ -46,7 +46,7 @@ export const NewCandidateModal: React.FC<NewCandidateModalProps> = ({
       currentStageId: currentJobId ? 'triagem' : undefined,
       rating: 4,
       notes: notes || 'Cadastrado no Banco de Talentos MAIS RH.',
-      avatar: `https://images.unsplash.com/photo-${1500000000000 + Math.floor(Math.random() * 100000)}?w=150&auto=format&fit=crop&q=80`,
+      avatar: '',
       source,
       salaryExpectation,
     });

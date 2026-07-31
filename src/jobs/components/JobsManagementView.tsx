@@ -20,6 +20,7 @@ import { JobCandidatesManagementView } from './JobCandidatesManagementView';
 import { useAuth } from '../../auth';
 import { Button, Card } from '../../shared';
 import { logger } from '../../core';
+import { JobService } from '../../services/JobService';
 
 export interface JobsManagementViewProps {
   initialJobsList?: Job[];
@@ -41,9 +42,7 @@ export const JobsManagementView: React.FC<JobsManagementViewProps> = ({
   const userCompanyId = user?.empresaId || user?.companyId || user?.tenantId;
   const isMaster = user?.role === 'Super Administrador' || user?.role === 'MASTER' || user?.tipoUsuario === 'MASTER' || user?.isMaster === true;
 
-  const rawJobs = initialJobsList !== undefined
-    ? initialJobsList
-    : (import.meta.env.DEV ? INITIAL_JOBS_DATA : []);
+  const rawJobs = initialJobsList !== undefined ? initialJobsList : [];
 
   const companyJobs = useMemo(() => {
     if (isMaster || !userCompanyId) {
@@ -136,32 +135,47 @@ export const JobsManagementView: React.FC<JobsManagementViewProps> = ({
     });
   }, [jobs, filters]);
 
-  const handleSaveJob = (
+  const handleSaveJob = async (
     jobData: Omit<Job, 'id' | 'applicantsCount' | 'createdAt'>,
     existingId?: string
   ) => {
     let updatedList: Job[] = [];
+    const resolvedCompanyId = userCompanyId || (user as any)?.companyId || (user as any)?.empresaId || 'emp-001';
+    
     if (existingId) {
       updatedList = jobs.map((j) => (j.id === existingId ? { ...j, ...jobData } : j));
       setJobs(updatedList);
       logger.info(`Vaga atualizada: ${existingId}`, 'JobsManagement');
+      try {
+        await JobService.update(existingId, jobData);
+      } catch (err) {
+        console.error('Erro ao atualizar vaga no Firestore:', err);
+      }
     } else {
       const newJob: Job = {
         ...jobData,
         id: `vaga-${Date.now()}`,
+        companyId: resolvedCompanyId,
+        empresaId: resolvedCompanyId,
         applicantsCount: 0,
         createdAt: new Date().toISOString().split('T')[0],
+        publicada: true,
       };
       updatedList = [newJob, ...jobs];
       setJobs(updatedList);
       logger.info(`Nova vaga criada: ${newJob.title}`, 'JobsManagement');
+      try {
+        await JobService.create(newJob);
+      } catch (err) {
+        console.error('Erro ao criar vaga no Firestore:', err);
+      }
     }
     if (onUpdateJobs) {
       onUpdateJobs(updatedList);
     }
   };
 
-  const handleStatusChange = (jobId: string, newStatus: JobStatus) => {
+  const handleStatusChange = async (jobId: string, newStatus: JobStatus) => {
     const updatedList = jobs.map((j) => (j.id === jobId ? { ...j, status: newStatus } : j));
     setJobs(updatedList);
     if (selectedJob?.id === jobId) {
@@ -171,6 +185,11 @@ export const JobsManagementView: React.FC<JobsManagementViewProps> = ({
       onUpdateJobs(updatedList);
     }
     logger.info(`Status da vaga ${jobId} alterado para ${newStatus}`, 'JobsManagement');
+    try {
+      await JobService.update(jobId, { status: newStatus });
+    } catch (err) {
+      console.error('Erro ao atualizar status no Firestore:', err);
+    }
   };
 
   const handleArchiveJob = (jobId: string) => {

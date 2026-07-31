@@ -35,7 +35,7 @@ export class EmployeeService {
       departmentId: empData.departmentId || 'dep-1',
       departmentName: empData.departmentName || 'Recursos Humanos',
       specialty: empData.specialty || 'Geral',
-      avatar: empData.avatar || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150',
+      avatar: empData.avatar || '',
       status: empData.status || 'Ativo',
       hireDate: empData.hireDate || new Date().toISOString().split('T')[0],
       processControl: empData.processControl || { maxJobCapacity: 10, activeJobsCount: 0, assignedProcesses: [] },
@@ -123,7 +123,7 @@ export class EmployeeService {
     } catch (err) {
       console.warn('Erro em EmployeeService.getById:', err);
     }
-    return INITIAL_INTERNAL_TEAM.find(e => e.id === id) || null;
+    return null;
   }
 
   static async get(id: string): Promise<InternalTeamMember | null> {
@@ -144,7 +144,7 @@ export class EmployeeService {
     } catch (err) {
       console.warn('Erro em EmployeeService.list:', err);
     }
-    return INITIAL_INTERNAL_TEAM;
+    return [];
   }
 
   static async search(term: string, companyId?: string): Promise<InternalTeamMember[]> {

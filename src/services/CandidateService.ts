@@ -52,7 +52,7 @@ export class CandidateService {
       currentStageId: candidateData.currentStageId || 'triagem',
       rating: candidateData.rating || 4,
       notes: candidateData.notes || 'Candidato promissor',
-      avatar: candidateData.avatar || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150',
+      avatar: candidateData.avatar || '',
       appliedDate: candidateData.appliedDate || now,
       source: candidateData.source || 'LinkedIn',
       salaryExpectation: candidateData.salaryExpectation || 'A combinar',
@@ -119,7 +119,7 @@ export class CandidateService {
     } catch (err) {
       console.warn('Erro em CandidateService.getById:', err);
     }
-    return INITIAL_CANDIDATES.find(c => c.id === id) || null;
+    return null;
   }
 
   static async get(id: string): Promise<Candidate | null> {
@@ -140,7 +140,7 @@ export class CandidateService {
     } catch (err) {
       console.warn('Erro em CandidateService.list:', err);
     }
-    return INITIAL_CANDIDATES;
+    return [];
   }
 
   static async search(term: string, companyId?: string): Promise<Candidate[]> {

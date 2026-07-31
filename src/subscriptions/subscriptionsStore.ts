@@ -17,11 +17,11 @@ export function getSubscriptions(): ClientSubscription[] {
   }
 
   try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(MOCK_SUBSCRIPTIONS));
+    localStorage.setItem(STORAGE_KEY, JSON.stringify([]));
   } catch (err) {
     console.error('Erro ao inicializar assinaturas no localStorage:', err);
   }
-  return MOCK_SUBSCRIPTIONS;
+  return [];
 }
 
 export function saveSubscriptionsToStorage(subs: ClientSubscription[]): void {

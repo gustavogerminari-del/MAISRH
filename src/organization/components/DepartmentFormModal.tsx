@@ -118,9 +118,7 @@ export const DepartmentFormModal: React.FC<DepartmentFormModalProps> = ({
           name: managerName.trim(),
           role: managerRole.trim() || 'Gerente de Departamento',
           email: managerEmail.trim() || 'lider@maisrh.com.br',
-          avatar:
-            initialDepartment?.manager.avatar ||
-            'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=250&q=80',
+          avatar: initialDepartment?.manager.avatar || '',
         },
         employeeCount: Number(employeeCount) || 0,
         monthlyBudgetLimit: Number(monthlyBudgetLimit) || 0,

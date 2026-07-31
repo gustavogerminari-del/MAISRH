@@ -33,7 +33,6 @@ service cloud.firestore {
 
     function isMaster() {
       return signedIn() && (
-        true ||
         (request.auth.token != null && request.auth.token.email != null && request.auth.token.email.lower() in ['gustavo.germinari@gmail.com', 'master@maisrh.com.br']) ||
         (request.auth.token != null && request.auth.token.isMaster == true) ||
         (request.auth.token != null && request.auth.token.role in ['MASTER', 'master', 'SUPER_ADMIN', 'Super Administrador', 'ADMIN_MASTER']) ||

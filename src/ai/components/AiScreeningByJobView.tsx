@@ -225,11 +225,17 @@ export const AiScreeningByJobView: React.FC = () => {
                 
                 {/* Candidate Photo & Basic Info */}
                 <div className="flex items-center gap-4">
-                  <img
-                    src={cand.photo || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150'}
-                    alt={cand.name}
-                    className="w-14 h-14 rounded-2xl object-cover border-2 border-slate-100 shadow-2xs shrink-0"
-                  />
+                  {(cand.photo || cand.avatar) ? (
+                    <img
+                      src={cand.photo || cand.avatar}
+                      alt={cand.name}
+                      className="w-14 h-14 rounded-2xl object-cover border-2 border-slate-100 shadow-2xs shrink-0"
+                    />
+                  ) : (
+                    <div className="w-14 h-14 rounded-2xl bg-emerald-100 text-emerald-700 font-bold flex items-center justify-center text-sm border-2 border-slate-100 shadow-2xs shrink-0">
+                      {cand.name ? cand.name.split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase() : 'C'}
+                    </div>
+                  )}
                   <div>
                     <div className="flex items-center gap-2">
                       <h4 

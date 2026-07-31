@@ -39,6 +39,8 @@ import {
 
 import { Job, Candidate, Interview, StageId } from './types/rh';
 import { JobService } from './services/JobService';
+import { CandidateService } from './services/CandidateService';
+import { JobCandidateService } from './services/JobCandidateService';
 
 function MainAppContent() {
   const { user, isAuthenticated } = useAuth();
@@ -62,7 +64,7 @@ function MainAppContent() {
   const [departments] = useState(INITIAL_DEPARTMENTS);
   const [recruiters] = useState(INITIAL_RECRUITERS);
 
-  // Load company jobs from Firestore
+  // Load company jobs and candidates from Firestore
   React.useEffect(() => {
     if (!isAuthenticated) return;
 
@@ -85,6 +87,16 @@ function MainAppContent() {
       })
       .catch(err => {
         console.warn('Erro ao carregar vagas do Firestore:', err);
+      });
+
+    CandidateService.list(userCompanyId)
+      .then(loadedCands => {
+        if (loadedCands && Array.isArray(loadedCands) && loadedCands.length > 0) {
+          setCandidates(loadedCands);
+        }
+      })
+      .catch(err => {
+        console.warn('Erro ao carregar candidatos do Firestore:', err);
       });
   }, [isAuthenticated, user?.empresaId, user?.companyId, user?.tenantId, user?.role, user?.tipoUsuario, user?.isMaster]);
 
@@ -142,17 +154,53 @@ function MainAppContent() {
     setJobs(prev => [newJob, ...prev]);
   };
 
-  const handleAddCandidate = (newCandData: Omit<Candidate, 'id' | 'appliedDate'>) => {
-    const newCandidate: Candidate = {
+  const handleAddCandidate = async (newCandData: Omit<Candidate, 'id' | 'appliedDate'>) => {
+    const userCompanyId = user?.empresaId || user?.companyId || user?.tenantId || 'emp-001';
+    const nowIsoDate = new Date().toISOString().split('T')[0];
+
+    let savedCand;
+    try {
+      savedCand = await CandidateService.create({
+        ...newCandData,
+        companyId: userCompanyId,
+        appliedDate: nowIsoDate
+      });
+    } catch (err) {
+      console.warn('Erro ao salvar candidato no Firestore:', err);
+    }
+
+    const candidateId = savedCand?.id || `cand-${Date.now()}`;
+    const newCandidate: Candidate = savedCand || {
       ...newCandData,
-      id: `cand-${Date.now()}`,
-      appliedDate: new Date().toISOString().split('T')[0],
+      id: candidateId,
+      appliedDate: nowIsoDate,
     };
 
     setCandidates(prev => [newCandidate, ...prev]);
 
-    // If candidate assigned to a job, increment applicants count
+    // If candidate assigned to a job, create application document too
     if (newCandData.currentJobId) {
+      try {
+        await JobCandidateService.create({
+          jobId: newCandData.currentJobId,
+          companyId: userCompanyId,
+          candidateId: candidateId,
+          name: newCandData.name,
+          email: newCandData.email,
+          phone: newCandData.phone,
+          role: newCandData.role || 'Candidato',
+          city: newCandData.location?.split('-')[0]?.trim() || 'São Paulo',
+          state: newCandData.location?.split('-')[1]?.trim() || 'SP',
+          status: 'Novos',
+          resumeUrl: newCandData.resumeUrl || '',
+          experienceYears: newCandData.experienceYears || 1,
+          salaryExpectation: newCandData.salaryExpectation || 'A combinar',
+          notes: newCandData.notes ? [newCandData.notes] : []
+        });
+      } catch (err) {
+        console.warn('Erro ao criar candidatura no Firestore:', err);
+      }
+
       setJobs(prev => prev.map(j => {
         if (j.id === newCandData.currentJobId) {
           return { ...j, applicantsCount: (j.applicantsCount || 0) + 1 };

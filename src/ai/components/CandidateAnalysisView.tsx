@@ -242,11 +242,17 @@ export const CandidateAnalysisView: React.FC = () => {
                     {/* Candidate Name & Info */}
                     <td className="py-4 px-4">
                       <div className="flex items-center gap-3">
-                        <img
-                          src={cand.photo || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150'}
-                          alt={cand.name}
-                          className="w-10 h-10 rounded-xl object-cover border border-slate-200 shrink-0"
-                        />
+                        {(cand.photo || cand.avatar) ? (
+                          <img
+                            src={cand.photo || cand.avatar}
+                            alt={cand.name}
+                            className="w-10 h-10 rounded-xl object-cover border border-slate-200 shrink-0"
+                          />
+                        ) : (
+                          <div className="w-10 h-10 rounded-xl bg-emerald-100 text-emerald-700 font-bold flex items-center justify-center text-xs border border-slate-200 shrink-0">
+                            {cand.name ? cand.name.split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase() : 'C'}
+                          </div>
+                        )}
                         <div>
                           <span 
                             onClick={() => handleOpenCandidate(cand)}

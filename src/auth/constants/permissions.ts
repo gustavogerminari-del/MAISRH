@@ -10,7 +10,7 @@ export const MASTER_USER: UserProfile = {
   email: 'gustavo.germinari@gmail.com',
   role: 'Super Administrador',
   department: 'Diretoria de Tecnologia & SaaS',
-  avatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80',
+  avatar: '',
   tipoUsuario: 'MASTER',
   empresaId: 'master-org',
   companyId: 'master-org',

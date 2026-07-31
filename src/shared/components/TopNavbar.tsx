@@ -29,9 +29,9 @@ export const TopNavbar: React.FC<TopNavbarProps> = ({
   onSearchChange,
   primaryAction,
   secondaryActions = [],
-  userAvatar = 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=150&auto=format&fit=crop&q=80',
-  userName = 'Luciana Mello',
-  userRole = 'Administradora RH',
+  userAvatar,
+  userName = 'Usuário',
+  userRole = 'RH',
 }) => {
   return (
     <header className="bg-white border-b border-[#D5DEE8] sticky top-0 z-30 px-4 sm:px-6 py-3 shadow-xs">
@@ -72,7 +72,13 @@ export const TopNavbar: React.FC<TopNavbarProps> = ({
 
           {/* User badge */}
           <div className="flex items-center gap-2.5 pl-1">
-            <img src={userAvatar} alt={userName} className="w-8 h-8 rounded-full object-cover border border-[#D5DEE8]" />
+            {userAvatar ? (
+              <img src={userAvatar} alt={userName} className="w-8 h-8 rounded-full object-cover border border-[#D5DEE8]" />
+            ) : (
+              <div className="w-8 h-8 rounded-full bg-[#123657] text-white font-black text-xs flex items-center justify-center border border-[#D5DEE8]">
+                {userName ? userName.split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase() : 'U'}
+              </div>
+            )}
             <div className="hidden lg:block text-left">
               <p className="text-xs font-extrabold text-[#0F172A] leading-none">{userName}</p>
               <p className="text-[10px] text-[#123657] font-bold mt-0.5">{userRole}</p>

@@ -185,11 +185,17 @@ export const PainelAcessosPortal: React.FC<PainelAcessosPortalProps> = ({
                     <tr key={colab.id} className="hover:bg-slate-50/80 transition-colors">
                       <td className="p-4">
                         <div className="flex items-center gap-3">
-                          <img
-                            src={colab.fotoUrl || "https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?w=150&auto=format&fit=crop&q=80"}
-                            alt={colab.nomeCompleto}
-                            className="w-9 h-9 rounded-full object-cover border border-slate-200"
-                          />
+                          {colab.fotoUrl ? (
+                            <img
+                              src={colab.fotoUrl}
+                              alt={colab.nomeCompleto}
+                              className="w-9 h-9 rounded-full object-cover border border-slate-200"
+                            />
+                          ) : (
+                            <div className="w-9 h-9 rounded-full bg-indigo-100 text-indigo-700 font-bold flex items-center justify-center text-xs border border-slate-200">
+                              {colab.nomeCompleto ? colab.nomeCompleto.split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase() : 'RH'}
+                            </div>
+                          )}
                           <div>
                             <p className="font-bold text-slate-900">{colab.nomeCompleto}</p>
                             <span className="text-[10px] text-slate-500 font-mono">CPF: {colab.pessoais?.cpf || '000.000.000-00'}</span>

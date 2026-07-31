@@ -44,14 +44,17 @@ export const InterviewCard: React.FC<InterviewCardProps> = ({
         {/* Header: Candidate Avatar + Name & Status Badges */}
         <div className="flex items-start justify-between gap-3">
           <div className="flex items-center gap-3">
-            <img
-              src={
-                interview.candidateAvatar ||
-                'https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&w=250&q=80'
-              }
-              alt={interview.candidateName}
-              className="w-12 h-12 rounded-full object-cover border-2 border-indigo-100 shadow-2xs shrink-0"
-            />
+            {interview.candidateAvatar ? (
+              <img
+                src={interview.candidateAvatar}
+                alt={interview.candidateName}
+                className="w-12 h-12 rounded-full object-cover border-2 border-indigo-100 shadow-2xs shrink-0"
+              />
+            ) : (
+              <div className="w-12 h-12 rounded-full bg-indigo-100 text-indigo-700 font-extrabold flex items-center justify-center text-sm border-2 border-indigo-100 shadow-2xs shrink-0">
+                {interview.candidateName ? interview.candidateName.split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase() : 'C'}
+              </div>
+            )}
             <div className="min-w-0">
               <div className="flex items-center gap-1.5 flex-wrap">
                 <h3 className="text-base font-extrabold text-slate-900 group-hover:text-indigo-600 transition-colors leading-snug truncate">

@@ -304,7 +304,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         email: normalizedEmail,
         role: profileDoc?.role || 'Administrador',
         department: 'Gente & Gestão',
-        avatar: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=150&auto=format&fit=crop&q=80',
+        avatar: '',
         tipoUsuario: 'EMPRESA',
         empresaId: matchedTenant?.id || profileDoc?.empresaId || 'emp-001',
         companyId: matchedTenant?.id || profileDoc?.empresaId || 'emp-001',

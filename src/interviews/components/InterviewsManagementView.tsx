@@ -49,13 +49,13 @@ export const InterviewsManagementView: React.FC<InterviewsManagementViewProps> =
   const isMaster = user?.role === 'Super Administrador' || user?.role === 'MASTER' || user?.tipoUsuario === 'MASTER' || user?.isMaster === true;
 
   const [interviews, setInterviews] = useState<Interview[]>(
-    initialInterviewsList || INITIAL_INTERVIEWS_DATA
+    initialInterviewsList || []
   );
   const [candidates] = useState<Candidate[]>(
-    candidatesList || INITIAL_CANDIDATES_DATA
+    candidatesList || []
   );
 
-  const rawJobs = jobsList !== undefined ? jobsList : (import.meta.env.DEV ? INITIAL_JOBS_DATA : []);
+  const rawJobs = jobsList !== undefined ? jobsList : [];
   const jobs = useMemo(() => {
     if (isMaster || !userCompanyId) return rawJobs;
     return rawJobs.filter((j: any) => {

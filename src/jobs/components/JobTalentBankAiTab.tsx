@@ -163,7 +163,7 @@ export const JobTalentBankAiTab: React.FC<JobTalentBankAiTabProps> = ({
               status: 'Ativo',
               rating: 5,
               notes: m.analiseCurriculo?.compatibilidadeComVaga || '',
-              avatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150',
+              avatar: '',
               appliedDate: new Date().toISOString().split('T')[0],
               source: 'LinkedIn',
             },
@@ -530,11 +530,17 @@ export const JobTalentBankAiTab: React.FC<JobTalentBankAiTabProps> = ({
                     {/* Candidate Identity */}
                     <div className="flex items-start gap-4">
                       <div className="relative shrink-0">
-                        <img
-                          src={candidate.avatar || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150'}
-                          alt={candidate.name}
-                          className="w-14 h-14 rounded-2xl object-cover border-2 border-slate-100 shadow-2xs"
-                        />
+                        {candidate.avatar ? (
+                          <img
+                            src={candidate.avatar}
+                            alt={candidate.name}
+                            className="w-14 h-14 rounded-2xl object-cover border-2 border-slate-100 shadow-2xs"
+                          />
+                        ) : (
+                          <div className="w-14 h-14 rounded-2xl bg-indigo-100 text-indigo-700 font-extrabold flex items-center justify-center text-base border-2 border-slate-100 shadow-2xs">
+                            {candidate.name ? candidate.name.split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase() : 'C'}
+                          </div>
+                        )}
                         <span className="absolute -bottom-1 -right-1 bg-slate-900 text-white text-[10px] font-black px-1.5 py-0.5 rounded-full border border-white">
                           #{index + 1}
                         </span>

@@ -17,6 +17,7 @@ export interface JobBudgetInfo {
 export interface Job {
   id: string;
   empresaId?: string;
+  companyId?: string;
   nomeEmpresa?: string;
   titulo?: string;
   title: string;

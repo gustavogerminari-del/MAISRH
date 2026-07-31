@@ -103,7 +103,7 @@ export const TeamMemberModal: React.FC<TeamMemberModalProps> = ({
       setJobTitle('');
       setSeniority('Sênior');
       setDepartmentId(departments[0]?.id || 'dept-1');
-      setAvatar('https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80');
+      setAvatar('');
       setHireDate(new Date().toISOString().split('T')[0]);
       setStatus('Ativo');
       setNotes('');
@@ -165,7 +165,7 @@ export const TeamMemberModal: React.FC<TeamMemberModalProps> = ({
       departmentId: departmentId || 'dept-1',
       departmentName,
       specialty: 'Geral',
-      avatar: avatar.trim() || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150',
+      avatar: avatar.trim(),
       status: (status as any) || 'Ativo',
       hireDate,
       permissions,

@@ -29,6 +29,7 @@ import { ContactSection } from './ContactSection';
 import { CandidateResumeModal } from './CandidateResumeModal';
 import { CompanyRegistrationModal } from './CompanyRegistrationModal';
 import { JobCandidateService } from '../services/JobCandidateService';
+import { CandidateService } from '../services/CandidateService';
 import { JobService } from '../services/JobService';
 import { formatFirestoreDate } from '../lib/firestoreUtils';
 
@@ -112,10 +113,7 @@ export const PublicJobsView: React.FC<PublicJobsViewProps> = ({
         };
       });
 
-    const customIds = new Set(customJobsMapped.map(cj => cj.id));
-    const extraMockJobs = MOCK_PUBLIC_JOBS.filter(mj => !customIds.has(mj.id));
-
-    return [...customJobsMapped, ...extraMockJobs];
+    return customJobsMapped;
   }, [jobs, fetchedPublicJobs]);
 
   const handleHeroSearch = (keyword: string, location: string) => {
@@ -148,27 +146,55 @@ export const PublicJobsView: React.FC<PublicJobsViewProps> = ({
     const targetJob = (jobs || []).find(j => j.id === targetJobId);
     const targetCompanyId = (targetJob as any)?.empresaId || (targetJob as any)?.companyId || 'emp-001';
 
-    // 1. Persist directly to Firestore candidate_applications collection
+    // 1. Create candidate in Talent Bank (candidates collection)
+    let candidateRecord;
+    try {
+      candidateRecord = await CandidateService.create({
+        name: payload.fullName,
+        email: payload.email,
+        phone: payload.phone,
+        role: payload.interestArea || targetJob?.title || 'Candidato',
+        location: payload.cityState || 'São Paulo - SP',
+        experienceYears: Number(payload.experienceYears) || 1,
+        skills: ['Comunicação', payload.interestArea || 'Geral'],
+        status: 'Em Processo',
+        currentJobId: targetJobId,
+        currentStageId: 'inscritos',
+        rating: 5,
+        notes: payload.coverNote ? `[Portal]: ${payload.coverNote}` : 'Candidatura enviada via Portal Público MAIS RH',
+        avatar: '',
+        source: 'Site Institucional',
+        resumeUrl: fileUrl,
+        salaryExpectation: 'A combinar',
+        companyId: targetCompanyId,
+      });
+    } catch (err) {
+      console.warn('⚠️ Erro ao salvar candidato no Banco de Talentos:', err);
+    }
+
+    // 2. Persist directly to Firestore candidate_applications collection
     try {
       await JobCandidateService.create({
         jobId: targetJobId,
         companyId: targetCompanyId,
+        candidateId: candidateRecord?.id || `cand-${Date.now()}`,
         name: payload.fullName,
         email: payload.email,
         phone: payload.phone,
         role: payload.interestArea || targetJob?.title || 'Candidato',
         city: payload.cityState?.split(',')[0]?.trim() || 'São Paulo',
         state: payload.cityState?.split(',')[1]?.trim() || 'SP',
-        experienceYears: Number(payload.experienceYears) || 3,
+        experienceYears: Number(payload.experienceYears) || 1,
         education: payload.educationLevel || 'Superior Completo',
         resumeUrl: fileUrl,
+        status: 'Novos',
         notes: payload.coverNote ? [payload.coverNote] : [`Candidatura enviada via Portal Público MAIS RH`],
       });
     } catch (err) {
       console.warn('⚠️ Erro ao registrar candidatura no Firestore:', err);
     }
 
-    // 2. Callback for local React state
+    // 3. Callback for local React state
     if (onApplyCandidate) {
       onApplyCandidate({
         name: payload.fullName,
@@ -176,7 +202,7 @@ export const PublicJobsView: React.FC<PublicJobsViewProps> = ({
         phone: payload.phone,
         role: payload.interestArea || targetJob?.title || 'Candidato Banco de Talentos',
         location: payload.cityState,
-        experienceYears: Number(payload.experienceYears) || 3,
+        experienceYears: Number(payload.experienceYears) || 1,
         skills: ['Comunicação', 'Qualificações Diversas', payload.interestArea || 'Geral'],
         status: 'Em Processo',
         currentJobId: targetJobId,
@@ -185,7 +211,7 @@ export const PublicJobsView: React.FC<PublicJobsViewProps> = ({
         notes: payload.coverNote 
           ? `[Análise MAIS RH IA]: ${payload.coverNote}` 
           : `Candidato cadastrado via Portal Público MAIS RH. Formação: ${payload.educationLevel || 'Superior'}. Cursos: ${payload.courses || 'Não informado'}.`,
-        avatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150',
+        avatar: '',
         source: 'Portal MAIS RH',
         resumeUrl: fileUrl,
         salaryExpectation: 'A combinar',

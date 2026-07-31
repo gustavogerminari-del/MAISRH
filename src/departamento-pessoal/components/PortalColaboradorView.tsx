@@ -624,11 +624,17 @@ export const PortalColaboradorView: React.FC<PortalColaboradorViewProps> = ({
 
             {/* Profile Pill */}
             <div className="hidden sm:flex items-center gap-2.5 bg-slate-50 px-3 py-1.5 rounded-xl border border-slate-200/80">
-              <img
-                src={currentColab.fotoUrl || user?.avatar || "https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?w=150&auto=format&fit=crop&q=80"}
-                alt={currentColab.nomeCompleto}
-                className="w-8 h-8 rounded-full object-cover border border-blue-500"
-              />
+              {(currentColab.fotoUrl || user?.avatar) ? (
+                <img
+                  src={currentColab.fotoUrl || user?.avatar}
+                  alt={currentColab.nomeCompleto}
+                  className="w-8 h-8 rounded-full object-cover border border-blue-500"
+                />
+              ) : (
+                <div className="w-8 h-8 rounded-full bg-blue-100 text-blue-700 font-bold flex items-center justify-center text-xs border border-blue-500">
+                  {currentColab.nomeCompleto ? currentColab.nomeCompleto.split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase() : 'RH'}
+                </div>
+              )}
               <div className="text-left">
                 <p className="text-xs font-bold text-slate-800 leading-tight">{currentColab.nomeCompleto}</p>
                 <p className="text-[10px] text-slate-500">{currentColab.profissionais?.cargo || 'Colaborador(a)'}</p>

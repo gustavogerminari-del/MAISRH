@@ -145,11 +145,17 @@ export const SmartCandidateDrawer: React.FC<SmartCandidateDrawerProps> = ({
 
           <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 pr-10">
             <div className="flex items-center gap-4">
-              <img
-                src={candidate.photo || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150'}
-                alt={candidate.name}
-                className="w-16 h-16 rounded-2xl object-cover border-2 border-emerald-500 shadow-md shrink-0"
-              />
+              {(candidate.photo || candidate.avatar) ? (
+                <img
+                  src={candidate.photo || candidate.avatar}
+                  alt={candidate.name}
+                  className="w-16 h-16 rounded-2xl object-cover border-2 border-emerald-500 shadow-md shrink-0"
+                />
+              ) : (
+                <div className="w-16 h-16 rounded-2xl bg-slate-800 text-emerald-400 font-extrabold flex items-center justify-center text-lg border-2 border-emerald-500 shadow-md shrink-0">
+                  {candidate.name ? candidate.name.split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase() : 'C'}
+                </div>
+              )}
               <div className="space-y-1">
                 <div className="flex items-center gap-2 flex-wrap">
                   <h2 className="text-xl font-black text-white">{candidate.name}</h2>

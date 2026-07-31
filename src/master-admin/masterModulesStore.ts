@@ -23,41 +23,6 @@ export function getPlatformModules(): PlatformModule[] {
     console.error('Erro ao carregar módulos do localStorage:', err);
   }
 
-  // Auto-detection & auto-merging: ensure every implemented system module exists in list
-  if (existing.length === 0) {
-    existing = MOCK_PLATFORM_MODULES;
-  } else {
-    let hasChanges = false;
-    MOCK_PLATFORM_MODULES.forEach(mockMod => {
-      const foundIndex = existing.findIndex(m => m.id === mockMod.id || m.key === mockMod.key || m.slug === mockMod.slug);
-      if (foundIndex === -1) {
-        // Module exists in system code but not in local storage -> auto register!
-        existing.push(mockMod);
-        hasChanges = true;
-      } else {
-        // Ensure missing schema attributes (e.g. route, slug, version) are backfilled
-        const curr = existing[foundIndex];
-        if (!curr.route || !curr.slug || !curr.version || !curr.moduleType) {
-          existing[foundIndex] = {
-            ...mockMod,
-            ...curr,
-            route: curr.route || mockMod.route,
-            slug: curr.slug || mockMod.slug,
-            version: curr.version || mockMod.version,
-            moduleType: curr.moduleType || mockMod.moduleType,
-            category: curr.category || mockMod.category,
-            status: curr.status || mockMod.status,
-          };
-          hasChanges = true;
-        }
-      }
-    });
-
-    if (hasChanges) {
-      savePlatformModulesToStorage(existing);
-    }
-  }
-
   return existing;
 }
 
@@ -170,16 +135,7 @@ export function getModuleAuditLogs(): PlatformModuleAuditLog[] {
   } catch (e) {
     console.error('Erro ao ler logs de auditoria:', e);
   }
-  return [
-    {
-      id: 'log-mod-01',
-      moduleId: 'mod-102',
-      action: 'DETECÇÃO_AUTOMÁTICA',
-      changedBy: 'Auto-Audit MAIS RH',
-      details: 'Módulo Headhunter detectado e ativado automaticamente no Gerenciador MASTER.',
-      timestamp: new Date().toISOString().replace('T', ' ').substring(0, 16)
-    }
-  ];
+  return [];
 }
 
 export function logModuleAuditAction(

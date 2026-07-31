@@ -101,7 +101,7 @@ export const CandidateFormModal: React.FC<CandidateFormModalProps> = ({
       setRole('');
       setDepartmentArea(DEPARTMENT_AREAS[0]);
       setLocation('São Paulo - SP');
-      setAvatar('https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=250&q=80');
+      setAvatar('');
       setExperienceYears(4);
       setSalaryExpectation('R$ 9.500 / mês');
       setAvailability('Imediata');
@@ -189,9 +189,7 @@ export const CandidateFormModal: React.FC<CandidateFormModalProps> = ({
         role,
         departmentArea,
         location,
-        avatar:
-          avatar ||
-          'https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&w=250&q=80',
+        avatar: avatar || '',
         experienceYears: Number(experienceYears) || 1,
         salaryExpectation,
         availability,

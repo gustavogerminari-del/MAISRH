@@ -217,7 +217,7 @@ export const CadastroColaboradores: React.FC<CadastroColaboradoresProps> = ({
       id: editingColab.id || `colab-${Date.now()}`,
       companyId: editingColab.companyId || companyId,
       nomeCompleto: editingColab.nomeCompleto,
-      fotoUrl: editingColab.fotoUrl || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80',
+      fotoUrl: editingColab.fotoUrl || '',
       pessoais: editingColab.pessoais as any,
       profissionais: editingColab.profissionais as any,
       trabalhistas: editingColab.trabalhistas as any,
@@ -416,11 +416,17 @@ export const CadastroColaboradores: React.FC<CadastroColaboradoresProps> = ({
             <div>
               <div className="flex items-start justify-between gap-3 mb-4">
                 <div className="flex items-center gap-3">
-                  <img
-                    src={c.fotoUrl || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80'}
-                    alt={c.nomeCompleto}
-                    className="w-12 h-12 rounded-full object-cover border border-slate-200 shrink-0"
-                  />
+                  {c.fotoUrl ? (
+                    <img
+                      src={c.fotoUrl}
+                      alt={c.nomeCompleto}
+                      className="w-12 h-12 rounded-full object-cover border border-slate-200 shrink-0"
+                    />
+                  ) : (
+                    <div className="w-12 h-12 rounded-full bg-indigo-100 text-indigo-700 font-bold flex items-center justify-center text-sm border border-slate-200 shrink-0">
+                      {c.nomeCompleto ? c.nomeCompleto.split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase() : 'RH'}
+                    </div>
+                  )}
                   <div>
                     <h3 className="font-bold text-[#1E293B] text-sm leading-tight">{c.nomeCompleto}</h3>
                     <p className="text-xs font-medium text-[#2563EB] mt-0.5">{c.profissionais.cargo}</p>

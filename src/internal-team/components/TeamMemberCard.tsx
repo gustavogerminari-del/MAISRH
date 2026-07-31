@@ -66,11 +66,17 @@ export const TeamMemberCard: React.FC<TeamMemberCardProps> = ({
         <div className="flex items-start justify-between gap-3">
           <div className="flex items-center gap-3">
             <div className="relative">
-              <img
-                src={member.avatar || 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=150'}
-                alt={member.name}
-                className="w-13 h-13 rounded-full object-cover border-2 border-slate-100 shadow-2xs"
-              />
+              {member.avatar ? (
+                <img
+                  src={member.avatar}
+                  alt={member.name}
+                  className="w-13 h-13 rounded-full object-cover border-2 border-slate-100 shadow-2xs"
+                />
+              ) : (
+                <div className="w-13 h-13 rounded-full bg-indigo-100 text-indigo-700 font-extrabold flex items-center justify-center text-base border-2 border-slate-100 shadow-2xs">
+                  {member.name ? member.name.split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase() : 'RH'}
+                </div>
+              )}
               <span className={`absolute bottom-0 right-0 w-3.5 h-3.5 rounded-full border-2 border-white ${
                 member.status === 'Ativo' ? 'bg-emerald-500' : member.status === 'Em Férias' ? 'bg-amber-500' : 'bg-slate-400'
               }`} />

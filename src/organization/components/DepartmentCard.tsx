@@ -60,14 +60,17 @@ export const DepartmentCard: React.FC<DepartmentCardProps> = ({
 
         {/* Manager / Leader Section */}
         <div className="bg-slate-50 p-3 rounded-2xl border border-slate-200 flex items-center gap-3">
-          <img
-            src={
-              department.manager.avatar ||
-              'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?auto=format&fit=crop&w=250&q=80'
-            }
-            alt={department.manager.name}
-            className="w-10 h-10 rounded-full object-cover border border-slate-300 shrink-0"
-          />
+          {department.manager.avatar ? (
+            <img
+              src={department.manager.avatar}
+              alt={department.manager.name}
+              className="w-10 h-10 rounded-full object-cover border border-slate-300 shrink-0"
+            />
+          ) : (
+            <div className="w-10 h-10 rounded-full bg-indigo-100 text-indigo-700 font-bold flex items-center justify-center text-xs border border-slate-300 shrink-0">
+              {department.manager.name ? department.manager.name.split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase() : 'LD'}
+            </div>
+          )}
           <div className="min-w-0 flex-1 text-xs">
             <span className="text-[10px] font-bold text-slate-400 uppercase block">Líder do Departamento</span>
             <h4 className="font-extrabold text-slate-900 truncate">{department.manager.name}</h4>

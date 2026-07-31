@@ -205,9 +205,9 @@ export async function fetchEmpresasFirestore(): Promise<ClientTenant[]> {
     }
   }
 
-  // Fallback local storage or mocks
+  // Fallback local storage or empty
   const saved = localStorage.getItem('mais_rh_master_tenants');
-  return saved ? JSON.parse(saved) : MOCK_TENANTS;
+  return saved ? JSON.parse(saved) : [];
 }
 
 export async function saveEmpresaFirestore(tenantData: Partial<ClientTenant>): Promise<void> {
@@ -295,7 +295,7 @@ export async function fetchModulosFirestore(): Promise<PlatformModule[]> {
   }
 
   const saved = localStorage.getItem('mais_rh_platform_modules');
-  return saved ? JSON.parse(saved) : MOCK_PLATFORM_MODULES;
+  return saved ? JSON.parse(saved) : [];
 }
 
 export async function saveModuloFirestore(moduleData: PlatformModule): Promise<void> {
