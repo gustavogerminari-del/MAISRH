@@ -5,6 +5,7 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { 
   signInWithEmailAndPassword, 
+  createUserWithEmailAndPassword,
   onAuthStateChanged,
   signOut
 } from 'firebase/auth';
@@ -64,35 +65,38 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       return;
     }
 
-    const defaultModules: Record<string, boolean> = {
-      recrutamento: true,
-      vagas: true,
-      bancoTalentos: true,
-      entrevistas: true,
-      headhunter: true,
-      dp: true,
-      equipeInterna: true,
-      ponto: true,
-      folha: true,
-      beneficios: true,
-      feriasBeneficios: true,
-      consultorRH: true,
-      documentosAssinatura: true,
-      auditoriaLogs: true,
-      relatoriosAvancados: true,
-      siteVagasPersonalizado: true,
-      desempenho: true
-    };
-
     // Super Admin / MASTER has all modules enabled by default
     if (user.role === 'Super Administrador' || user.tipoUsuario === 'MASTER') {
-      setActiveModules(defaultModules);
+      setActiveModules({
+        vagas: true,
+        bancoTalentos: true,
+        entrevistas: true,
+        headhunter: true,
+        equipeInterna: true,
+        consultorRH: true,
+        pontoDigital: true,
+        beneficios: true,
+        folhaPagamento: true,
+        feriasBeneficios: true,
+        rescisao: true,
+        documentosAssinatura: true,
+        afastamentos: true,
+        sst: true,
+        agenda: true,
+        relatoriosAvancados: true,
+        siteVagasPersonalizado: true,
+        iaConsultora: true
+      });
       return;
     }
 
-    const empresaId = user.empresaId || user.companyId || user.tenantId || 't-001';
+    const empresaId = user.empresaId || user.companyId || user.tenantId;
+    if (!empresaId) {
+      setActiveModules({});
+      return;
+    }
 
-    // 1. Fetch from Firestore `empresa_modulos`
+    // Fetch exclusively from Firestore `empresa_modulos`
     try {
       const remoteMods = await fetchEmpresaModulosFirestore(empresaId);
       if (remoteMods && Object.keys(remoteMods).length > 0) {
@@ -103,66 +107,73 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       console.warn('Erro ao consultar módulos da empresa no Firestore:', err);
     }
 
-    // 2. Fallback to Local Tenant Store
-    try {
-      const tenants = getTenants();
-      const currentTenant = tenants.find(t => t.id === empresaId) || tenants[0];
-      if (currentTenant && currentTenant.modules && Object.keys(currentTenant.modules).length > 0) {
-        setActiveModules(currentTenant.modules as any);
-        return;
-      }
-    } catch (err) {
-      console.warn('Erro ao carregar tenant do armazenamento local:', err);
-    }
-
-    // 3. Fallback se Firestore não retornar, empresa não existir localmente ou modules estiver vazio
-    setActiveModules(defaultModules);
+    // If no Firestore config found for company, no modules are enabled by default
+    setActiveModules({});
   };
 
   useEffect(() => {
     refreshCompanyModules();
   }, [user?.empresaId, user?.companyId, user?.tenantId, user?.tipoUsuario, user?.role]);
 
-  // On auth state change, keep Firebase Auth user synchronized
+  // On auth state change, keep Firebase Auth user synchronized and query usuarios/{uid}
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
       if (firebaseUser) {
         logger.info(`Firebase Auth ativo: ${firebaseUser.email} (UID: ${firebaseUser.uid})`, 'AuthContext');
-      } else {
-        logger.info('Firebase Auth: nenhum usuário ativo no momento', 'AuthContext');
-      }
-    });
-    return () => unsubscribe();
-  }, []);
+        try {
+          const profileDoc = await fetchUsuarioFirestore(firebaseUser.uid);
+          const isMasterEmail = 
+            firebaseUser.email?.toLowerCase() === MASTER_USER.email.toLowerCase() || 
+            firebaseUser.email?.toLowerCase() === 'gustavo.germinari@gmail.com' ||
+            firebaseUser.email?.toLowerCase() === 'master@maisrh.com.br' ||
+            profileDoc?.tipoUsuario === 'MASTER' ||
+            profileDoc?.role === 'MASTER';
 
-  // Inicializa sessão a partir do armazenamento local ou limpa estado
-  useEffect(() => {
-    try {
-      const savedUserStr = localStorage.getItem(STORAGE_KEY_USER);
-      const savedTokenStr = localStorage.getItem(STORAGE_KEY_TOKEN);
+          let userProfile: UserProfile;
+          if (isMasterEmail) {
+            userProfile = {
+              ...MASTER_USER,
+              id: firebaseUser.uid,
+              email: firebaseUser.email || MASTER_USER.email,
+              tipoUsuario: 'MASTER',
+              role: 'Super Administrador',
+              empresaId: 'master-org',
+              companyId: 'master-org',
+              companyName: 'MAIS RH SaaS'
+            };
+          } else {
+            userProfile = {
+              id: firebaseUser.uid,
+              name: profileDoc?.nome || firebaseUser.displayName || firebaseUser.email?.split('@')[0] || 'Usuário Corporativo',
+              email: firebaseUser.email || '',
+              role: profileDoc?.role || 'Administrador',
+              department: 'Gente & Gestão',
+              avatar: firebaseUser.photoURL || '',
+              tipoUsuario: 'EMPRESA',
+              empresaId: profileDoc?.empresaId || 'emp-001',
+              companyId: profileDoc?.empresaId || 'emp-001',
+              companyName: 'Empresa Cliente'
+            };
+          }
 
-      if (savedUserStr && savedTokenStr) {
-        const parsedUser: UserProfile = JSON.parse(savedUserStr);
-        const parsedToken: SessionToken = JSON.parse(savedTokenStr);
-
-        if (new Date(parsedToken.expiresAt) > new Date()) {
-          setUser(parsedUser);
-          setSessionToken(parsedToken);
-          logger.info(`Sessão restaurada para usuário ${parsedUser.email}`, 'AuthContext');
-        } else {
-          logger.warn('Sessão expirada. Efetuando logout automático.', 'AuthContext');
-          clearAuthData();
+          const token = generateMockToken(firebaseUser.uid);
+          setUser(userProfile);
+          setSessionToken(token);
+          localStorage.setItem(STORAGE_KEY_USER, JSON.stringify(userProfile));
+          localStorage.setItem(STORAGE_KEY_TOKEN, JSON.stringify(token));
+        } catch (err) {
+          logger.warn('Erro ao carregar usuario do Firestore em onAuthStateChanged:', err);
         }
       } else {
-        // Sem sessão salva -> Usuário não autenticado por padrão
-        clearAuthData();
+        logger.info('Firebase Auth: nenhum usuário ativo no momento', 'AuthContext');
+        setUser(null);
+        setSessionToken(null);
+        localStorage.removeItem(STORAGE_KEY_USER);
+        localStorage.removeItem(STORAGE_KEY_TOKEN);
       }
-    } catch (err) {
-      logCentralizedError(err, 'AuthProvider.init');
-      clearAuthData();
-    } finally {
       setIsLoading(false);
-    }
+    });
+    return () => unsubscribe();
   }, []);
 
   const generateMockToken = (userId: string): SessionToken => {
@@ -227,40 +238,50 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       logger.info(`Autenticado com sucesso no Firebase Auth: ${normalizedEmail} (UID: ${firebaseAuthUid})`, 'AuthContext');
     } catch (authErr: any) {
       const errorCode = authErr?.code || '';
-      const isApiKeyIssue = errorCode.includes('api-key-not-valid') || errorCode === 'auth/invalid-api-key' || errorCode === 'auth/operation-not-allowed';
-
-      if (isApiKeyIssue) {
-        logger.warn(`[Firebase Auth Notice]: ${errorCode} | Prosseguindo com autenticação do perfil.`, 'AuthContext');
-        if (pwd !== 'Gugato94@' && pwd !== 'master' && pwd !== '123456' && pwd.length < 6) {
+      if (
+        errorCode === 'auth/user-not-found' || 
+        errorCode === 'auth/invalid-credential'
+      ) {
+        // Automatically create account in Firebase Auth for master / enterprise user
+        try {
+          const cred = await createUserWithEmailAndPassword(auth, normalizedEmail, pwd);
+          firebaseAuthUid = cred.user.uid;
+          logger.info(`Conta criada com sucesso no Firebase Auth: ${normalizedEmail} (UID: ${firebaseAuthUid})`, 'AuthContext');
+        } catch (createErr) {
+          logger.warn(`[Firebase Auth Registration Error]: ${createErr}`, 'AuthContext');
           throw new Error('E-mail ou senha de acesso incorretos.');
         }
+      } else if (errorCode === 'auth/user-disabled') {
+        throw new Error('Esta conta foi desativada pelo administrador.');
+      } else if (errorCode === 'auth/wrong-password') {
+        throw new Error('E-mail ou senha de acesso incorretos.');
+      } else if (errorCode === 'auth/too-many-requests') {
+        throw new Error('Muitas tentativas de login. Tente novamente mais tarde.');
+      } else if (errorCode === 'auth/network-request-failed') {
+        throw new Error('Falha na conexão de rede. Verifique sua internet.');
+      } else if (errorCode === 'auth/invalid-email') {
+        throw new Error('O endereço de e-mail informado é inválido.');
       } else {
-        logger.warn(`[Firebase Auth Notice]: ${errorCode} | ${authErr?.message || authErr}`, 'AuthContext');
-        if (errorCode === 'auth/user-disabled') {
-          throw new Error('Esta conta foi desativada pelo administrador.');
-        } else if (
-          errorCode === 'auth/user-not-found' || 
-          errorCode === 'auth/wrong-password' || 
-          errorCode === 'auth/invalid-credential'
-        ) {
-          throw new Error('E-mail ou senha de acesso incorretos.');
-        } else if (errorCode === 'auth/too-many-requests') {
-          throw new Error('Muitas tentativas de login. Tente novamente mais tarde.');
-        } else if (errorCode === 'auth/network-request-failed') {
-          throw new Error('Falha na conexão de rede. Verifique sua internet.');
-        } else if (errorCode === 'auth/invalid-email') {
-          throw new Error('O endereço de e-mail informado é inválido.');
-        } else {
+        // Fallback: create or re-throw
+        try {
+          const cred = await createUserWithEmailAndPassword(auth, normalizedEmail, pwd);
+          firebaseAuthUid = cred.user.uid;
+        } catch (fErr) {
           throw new Error('E-mail ou senha de acesso incorretos.');
         }
       }
     }
 
-    // 2. Fetch User Profile from Firestore (`usuarios/{uid}`)
-    let profileDoc: any = null;
-    if (firebaseAuthUid) {
-      profileDoc = await fetchUsuarioFirestore(firebaseAuthUid);
+    if (!firebaseAuthUid && auth.currentUser) {
+      firebaseAuthUid = auth.currentUser.uid;
     }
+
+    if (!firebaseAuthUid) {
+      throw new Error('Não foi possível obter a identificação de autenticação.');
+    }
+
+    // 2. Fetch User Profile from Firestore (`usuarios/{uid}`)
+    let profileDoc: any = await fetchUsuarioFirestore(firebaseAuthUid);
 
     // Check if user account is disabled in Firestore
     if (profileDoc && (profileDoc.status === 'Inativo' || profileDoc.status === 'Bloqueado' || profileDoc.ativo === false)) {
@@ -282,7 +303,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     if (isMasterEmail) {
       userProfile = {
         ...MASTER_USER,
-        id: firebaseAuthUid || MASTER_USER.id,
+        id: firebaseAuthUid,
         email: normalizedEmail,
         tipoUsuario: 'MASTER',
         role: 'Super Administrador',
@@ -299,7 +320,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       ) || tenants[0];
 
       userProfile = {
-        id: firebaseAuthUid || `usr-${Date.now()}`,
+        id: firebaseAuthUid,
         name: profileDoc?.nome || normalizedEmail.split('@')[0] || 'Usuário Corporativo',
         email: normalizedEmail,
         role: profileDoc?.role || 'Administrador',
@@ -318,10 +339,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return true;
   };
 
-  const logout = () => {
+  const logout = async () => {
     if (user) {
       logger.info(`Logout encerrado para ${user.email}`, 'AuthContext');
     }
+    await signOut(auth).catch(() => {});
     clearAuthData();
   };
 
@@ -340,69 +362,162 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return new Promise((resolve) => setTimeout(() => resolve(true), 800));
   };
 
-  const hasScreenAccess = (screenKey: ScreenRouteKey): boolean => {
-    if (!user) return false;
-    return true;
-  };
-
-  const hasActionAccess = (actionKey: SystemActionKey): boolean => {
-    if (!user) return false;
-    return true;
-  };
-
   const isModuleActive = (moduleKey: string): boolean => {
     if (!user) return false;
     if (user.role === 'Super Administrador' || user.tipoUsuario === 'MASTER') {
       return true;
     }
 
-    // Regra especial de fallback para módulos de recrutamento
-    const recruitmentModules = [
-      'recrutamento',
-      'vagas',
-      'bancoTalentos',
-      'entrevistas'
-    ];
+    if (!activeModules) return false;
 
-    if (recruitmentModules.includes(moduleKey)) {
-      const possuiConfiguracao =
-        Object.prototype.hasOwnProperty.call(activeModules, 'recrutamento') ||
-        Object.prototype.hasOwnProperty.call(activeModules, 'vagas') ||
-        Object.prototype.hasOwnProperty.call(activeModules, 'bancoTalentos') ||
-        Object.prototype.hasOwnProperty.call(activeModules, 'entrevistas');
-
-      if (!possuiConfiguracao) {
-        return true;
-      }
-
-      return (
-        activeModules.recrutamento === true ||
-        activeModules.vagas === true ||
-        activeModules.bancoTalentos === true ||
-        activeModules.entrevistas === true
-      );
-    }
-
-    // Direct match in activeModules
+    // Direct key match
     if (activeModules[moduleKey] === true) return true;
 
-    if ((moduleKey === 'dp' || moduleKey === 'equipeInterna') && (activeModules['dp'] || activeModules['equipeInterna'])) {
+    // Module key normalized aliases
+    if ((moduleKey === 'vagas' || moduleKey === 'recrutamento') &&
+        (activeModules['vagas'] === true || activeModules['recrutamento'] === true)) {
       return true;
     }
 
-    if ((moduleKey === 'beneficios' || moduleKey === 'feriasBeneficios') && (activeModules['beneficios'] || activeModules['feriasBeneficios'])) {
+    if ((moduleKey === 'bancoTalentos' || moduleKey === 'banco-talentos' || moduleKey === 'candidatos') &&
+        (activeModules['bancoTalentos'] === true || activeModules['recrutamento'] === true)) {
       return true;
     }
 
-    if ((moduleKey === 'documentos' || moduleKey === 'documentosAssinatura') && (activeModules['documentos'] || activeModules['documentosAssinatura'])) {
+    if (moduleKey === 'entrevistas' &&
+        (activeModules['entrevistas'] === true || activeModules['recrutamento'] === true)) {
       return true;
     }
 
-    if ((moduleKey === 'folha' || moduleKey === 'folhaPagamento' || moduleKey === 'folha-pagamento') && (activeModules['folha'] || activeModules['folhaPagamento'] || activeModules['folha'] !== false)) {
+    if (moduleKey === 'headhunter' && activeModules['headhunter'] === true) {
+      return true;
+    }
+
+    if ((moduleKey === 'equipeInterna' || moduleKey === 'colaboradores' || moduleKey === 'dp') &&
+        (activeModules['equipeInterna'] === true || activeModules['colaboradores'] === true || activeModules['dp'] === true)) {
+      return true;
+    }
+
+    if ((moduleKey === 'pontoDigital' || moduleKey === 'ponto-digital' || moduleKey === 'jornada' || moduleKey === 'ponto') &&
+        (activeModules['pontoDigital'] === true || activeModules['ponto'] === true)) {
+      return true;
+    }
+
+    if ((moduleKey === 'beneficios' || moduleKey === 'feriasBeneficios') &&
+        (activeModules['beneficios'] === true || activeModules['feriasBeneficios'] === true)) {
+      return true;
+    }
+
+    if ((moduleKey === 'ferias' || moduleKey === 'feriasBeneficios') &&
+        (activeModules['ferias'] === true || activeModules['feriasBeneficios'] === true)) {
+      return true;
+    }
+
+    if (moduleKey === 'rescisao' &&
+        (activeModules['rescisao'] === true || activeModules['equipeInterna'] === true || activeModules['dp'] === true)) {
+      return true;
+    }
+
+    if ((moduleKey === 'documentos' || moduleKey === 'documentosAssinatura') &&
+        (activeModules['documentos'] === true || activeModules['documentosAssinatura'] === true)) {
+      return true;
+    }
+
+    if (moduleKey === 'afastamentos' &&
+        (activeModules['afastamentos'] === true || activeModules['equipeInterna'] === true || activeModules['dp'] === true)) {
+      return true;
+    }
+
+    if (moduleKey === 'sst' &&
+        (activeModules['sst'] === true || activeModules['equipeInterna'] === true || activeModules['dp'] === true)) {
+      return true;
+    }
+
+    if (moduleKey === 'agenda' && activeModules['agenda'] === true) {
+      return true;
+    }
+
+    if ((moduleKey === 'relatorios' || moduleKey === 'relatoriosAvancados') &&
+        (activeModules['relatorios'] === true || activeModules['relatoriosAvancados'] === true)) {
+      return true;
+    }
+
+    if ((moduleKey === 'siteVagas' || moduleKey === 'siteVagasPersonalizado' || moduleKey === 'site-vagas') &&
+        (activeModules['siteVagas'] === true || activeModules['siteVagasPersonalizado'] === true)) {
+      return true;
+    }
+
+    if ((moduleKey === 'consultorRH' || moduleKey === 'iaConsultora' || moduleKey === 'mais-rh-ia') &&
+        (activeModules['consultorRH'] === true || activeModules['iaConsultora'] === true)) {
+      return true;
+    }
+
+    if ((moduleKey === 'folha' || moduleKey === 'folhaPagamento' || moduleKey === 'folha-pagamento') &&
+        (activeModules['folha'] === true || activeModules['folhaPagamento'] === true)) {
       return true;
     }
 
     return false;
+  };
+
+  const hasScreenAccess = (screenKey: ScreenRouteKey): boolean => {
+    if (!user) return false;
+
+    // Master / Admin screens
+    if (screenKey === 'acesso-master' || screenKey?.startsWith('master-') || screenKey === 'auditoria') {
+      return user.role === 'Super Administrador' || user.tipoUsuario === 'MASTER';
+    }
+
+    // Base dashboard & settings screens are always accessible
+    if (screenKey === 'dashboard' || screenKey === 'configuracoes' || screenKey === 'empresa') {
+      return true;
+    }
+
+    const screenModuleMap: Record<string, string> = {
+      'vagas': 'vagas',
+      'candidatos': 'bancoTalentos',
+      'banco-talentos': 'bancoTalentos',
+      'processos-seletivos': 'vagas',
+      'entrevistas': 'entrevistas',
+      'contratacoes': 'vagas',
+      'headhunter': 'headhunter',
+      'headhunter-clientes': 'headhunter',
+      'headhunter-comercial': 'headhunter',
+      'headhunter-crm': 'headhunter',
+      'headhunter-propostas': 'headhunter',
+      'headhunter-contratos': 'headhunter',
+      'headhunter-comissoes': 'headhunter',
+      'headhunter-financeiro': 'headhunter',
+      'headhunter-despesas': 'headhunter',
+      'headhunter-garantias': 'headhunter',
+      'headhunter-relatorios': 'headhunter',
+      'colaboradores': 'equipeInterna',
+      'equipe-interna': 'equipeInterna',
+      'ponto-digital': 'pontoDigital',
+      'jornada': 'pontoDigital',
+      'beneficios': 'beneficios',
+      'ferias': 'feriasBeneficios',
+      'rescisao': 'rescisao',
+      'documentos': 'documentosAssinatura',
+      'afastamentos': 'afastamentos',
+      'sst': 'sst',
+      'agenda': 'agenda',
+      'relatorios': 'relatoriosAvancados',
+      'site-vagas': 'siteVagasPersonalizado',
+      'folha-pagamento': 'folhaPagamento',
+      'mais-rh-ia': 'iaConsultora',
+      'consultor-rh': 'iaConsultora'
+    };
+
+    const targetModule = screenModuleMap[screenKey];
+    if (!targetModule) return true;
+
+    return isModuleActive(targetModule);
+  };
+
+  const hasActionAccess = (actionKey: SystemActionKey): boolean => {
+    if (!user) return false;
+    return true;
   };
 
   return (

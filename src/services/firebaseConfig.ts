@@ -6,13 +6,34 @@ import firebaseAppletConfig from '../../firebase-applet-config.json';
 
 const metaEnv = (import.meta as any).env || {};
 
+const getApiKey = (): string => {
+  const envKey = import.meta.env.VITE_FIREBASE_API_KEY;
+  if (envKey && typeof envKey === 'string' && envKey.startsWith('AIza')) {
+    return envKey.trim();
+  }
+  if (firebaseAppletConfig?.apiKey && firebaseAppletConfig.apiKey.startsWith('AIza')) {
+    return firebaseAppletConfig.apiKey.trim();
+  }
+  return firebaseAppletConfig?.apiKey || '';
+};
+
+const getVal = (envKey: string | undefined, configKey: string | undefined): string => {
+  if (envKey && typeof envKey === 'string' && envKey.trim().length > 0 && envKey !== 'undefined' && !envKey.includes('MY_FIREBASE')) {
+    return envKey.trim();
+  }
+  if (configKey && typeof configKey === 'string' && configKey.trim().length > 0) {
+    return configKey.trim();
+  }
+  return '';
+};
+
 export const firebaseConfig = {
-  apiKey: import.meta.env.VITE_FIREBASE_API_KEY || firebaseAppletConfig?.apiKey || '',
-  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN || firebaseAppletConfig?.authDomain || '',
-  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID || firebaseAppletConfig?.projectId || '',
-  storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET || firebaseAppletConfig?.storageBucket || '',
-  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID || firebaseAppletConfig?.messagingSenderId || '',
-  appId: import.meta.env.VITE_FIREBASE_APP_ID || firebaseAppletConfig?.appId || '',
+  apiKey: getApiKey(),
+  authDomain: getVal(import.meta.env.VITE_FIREBASE_AUTH_DOMAIN, firebaseAppletConfig?.authDomain),
+  projectId: getVal(import.meta.env.VITE_FIREBASE_PROJECT_ID, firebaseAppletConfig?.projectId),
+  storageBucket: getVal(import.meta.env.VITE_FIREBASE_STORAGE_BUCKET, firebaseAppletConfig?.storageBucket),
+  messagingSenderId: getVal(import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID, firebaseAppletConfig?.messagingSenderId),
+  appId: getVal(import.meta.env.VITE_FIREBASE_APP_ID, firebaseAppletConfig?.appId),
 };
 
 /**

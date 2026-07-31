@@ -34,13 +34,13 @@ export interface ModuleContextType {
 const ModuleContext = createContext<ModuleContextType | undefined>(undefined);
 
 export const ModuleProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const { user, activeModules } = useAuth();
+  const { user, activeModules, isModuleActive, refreshCompanyModules: syncAuthCompanyModules } = useAuth();
   const [modules, setModules] = useState<SystemModule[]>([]);
   const [companyModulesMap, setCompanyModulesMap] = useState<Record<string, boolean>>({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const companyId = user?.companyId || user?.empresaId || user?.tenantId || 't-001';
+  const companyId = user?.companyId || user?.empresaId || user?.tenantId;
 
   const refreshModules = async () => {
     setLoading(true);
@@ -56,9 +56,11 @@ export const ModuleProvider: React.FC<{ children: React.ReactNode }> = ({ childr
           fullAccess[m.id] = true;
         });
         setCompanyModulesMap(fullAccess);
-      } else {
+      } else if (companyId) {
         const compMods = await fetchCompanyReleasedModules(companyId);
         setCompanyModulesMap(compMods);
+      } else {
+        setCompanyModulesMap({});
       }
     } catch (err: any) {
       console.warn('Aviso/Erro ao carregar módulos no ModuleProvider:', err);
@@ -78,12 +80,15 @@ export const ModuleProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       return true;
     }
     if (companyModulesMap[moduleKey] !== undefined) {
-      return companyModulesMap[moduleKey];
+      return Boolean(companyModulesMap[moduleKey]);
     }
-    if (activeModules[moduleKey] !== undefined) {
-      return activeModules[moduleKey];
+    if (isModuleActive) {
+      return isModuleActive(moduleKey);
     }
-    return true; // fallback
+    if (activeModules && activeModules[moduleKey] !== undefined) {
+      return Boolean(activeModules[moduleKey]);
+    }
+    return false;
   };
 
   // CRUD Functions for 'modulos'
@@ -123,6 +128,9 @@ export const ModuleProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       ...prev,
       [moduleKey]: enabled
     }));
+    if (syncAuthCompanyModules) {
+      await syncAuthCompanyModules();
+    }
   };
 
   return (

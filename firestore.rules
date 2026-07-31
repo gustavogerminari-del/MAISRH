@@ -82,25 +82,19 @@ service cloud.firestore {
     // CORE SYSTEM & MASTER COLLECTIONS
     // =========================================================================
 
+    match /_health/{docId} {
+      allow read: if true;
+    }
+
     match /usuarios/{userId} {
-      allow read: if isMaster() || (signedIn() && request.auth.uid == userId);
-      allow create: if signedIn() && request.auth.uid == userId;
-      allow update: if isMaster() || (
-        signedIn() && request.auth.uid == userId
-        && request.resource.data.role == resource.data.role
-        && request.resource.data.tipoUsuario == resource.data.tipoUsuario
-        && request.resource.data.isMaster == resource.data.isMaster
-        && request.resource.data.empresaId == resource.data.empresaId
-      );
+      allow read: if signedIn();
+      allow create, update: if signedIn() && (request.auth.uid == userId || isMaster());
       allow delete: if isMaster();
     }
 
     match /users/{userId} {
-      allow read: if isMaster() || (signedIn() && request.auth.uid == userId);
-      allow create: if signedIn() && request.auth.uid == userId;
-      allow update: if isMaster() || (
-        signedIn() && request.auth.uid == userId
-      );
+      allow read: if signedIn();
+      allow create, update: if signedIn() && (request.auth.uid == userId || isMaster());
       allow delete: if isMaster();
     }
 

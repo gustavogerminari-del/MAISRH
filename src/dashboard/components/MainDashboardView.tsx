@@ -43,7 +43,14 @@ export const MainDashboardView: React.FC<MainDashboardViewProps> = ({
   onNavigateToInterviews,
   onNavigateToReports,
 }) => {
-  const { user, hasActionAccess } = useAuth();
+  const { user, hasActionAccess, isModuleActive } = useAuth();
+  const isMaster = user?.role === 'Super Administrador' || user?.tipoUsuario === 'MASTER';
+
+  const showVagas = isMaster || isModuleActive('vagas');
+  const showTalentos = isMaster || isModuleActive('bancoTalentos');
+  const showEntrevistas = isMaster || isModuleActive('entrevistas');
+  const showContratacoes = isMaster || isModuleActive('vagas');
+  const showIA = isMaster || isModuleActive('iaConsultora') || isModuleActive('relatoriosAvancados');
 
   const [metrics] = useState(INITIAL_DASHBOARD_METRICS);
   const [departments] = useState(INITIAL_DEPARTMENTS_SUMMARY);
@@ -94,7 +101,7 @@ export const MainDashboardView: React.FC<MainDashboardViewProps> = ({
             Atualizar Dados
           </Button>
 
-          {onNavigateToReports && (
+          {onNavigateToReports && (isMaster || isModuleActive('relatoriosAvancados')) && (
             <Button
               variant="secondary"
               size="sm"
@@ -108,77 +115,87 @@ export const MainDashboardView: React.FC<MainDashboardViewProps> = ({
         </div>
       </div>
 
-      {/* Official 5 KPI Cards Grid */}
+      {/* Official KPI Cards Grid - Filtered by Company Enabled Modules */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
         {/* 1. Vagas Abertas */}
-        <MetricCard
-          title="Vagas Abertas"
-          value={metrics.totalOpenJobs}
-          subtitle="Processos ativos"
-          icon={<Briefcase className="w-5 h-5 text-[#2563EB]" />}
-          accentColor="blue"
-          trend={{ value: '+2 esta semana', isPositive: true }}
-          onClick={onNavigateToJobs}
-        />
+        {showVagas && (
+          <MetricCard
+            title="Vagas Abertas"
+            value={metrics.totalOpenJobs}
+            subtitle="Processos ativos"
+            icon={<Briefcase className="w-5 h-5 text-[#2563EB]" />}
+            accentColor="blue"
+            trend={{ value: '+2 esta semana', isPositive: true }}
+            onClick={onNavigateToJobs}
+          />
+        )}
 
         {/* 2. Candidatos */}
-        <MetricCard
-          title="Candidatos"
-          value={metrics.activeProcesses}
-          subtitle="Cadastrados no funil"
-          icon={<Users className="w-5 h-5 text-[#2563EB]" />}
-          accentColor="blue"
-          trend={{ value: 'Em análise', neutral: true }}
-          onClick={onNavigateToTalentBank}
-        />
+        {showTalentos && (
+          <MetricCard
+            title="Candidatos"
+            value={metrics.activeProcesses}
+            subtitle="Cadastrados no funil"
+            icon={<Users className="w-5 h-5 text-[#2563EB]" />}
+            accentColor="blue"
+            trend={{ value: 'Em análise', neutral: true }}
+            onClick={onNavigateToTalentBank}
+          />
+        )}
 
         {/* 3. Entrevistas */}
-        <MetricCard
-          title="Entrevistas"
-          value={metrics.scheduledInterviews}
-          subtitle="Agendadas na semana"
-          icon={<Calendar className="w-5 h-5 text-[#2563EB]" />}
-          accentColor="blue"
-          trend={{ value: '3 hoje', isPositive: true }}
-          onClick={onNavigateToInterviews}
-        />
+        {showEntrevistas && (
+          <MetricCard
+            title="Entrevistas"
+            value={metrics.scheduledInterviews}
+            subtitle="Agendadas na semana"
+            icon={<Calendar className="w-5 h-5 text-[#2563EB]" />}
+            accentColor="blue"
+            trend={{ value: '3 hoje', isPositive: true }}
+            onClick={onNavigateToInterviews}
+          />
+        )}
 
         {/* 4. Contratações */}
-        <MetricCard
-          title="Contratações"
-          value={14}
-          subtitle="Finalizadas este mês"
-          icon={<CheckCircle2 className="w-5 h-5 text-emerald-600" />}
-          accentColor="emerald"
-          trend={{ value: '100% da meta', isPositive: true }}
-        />
+        {showContratacoes && (
+          <MetricCard
+            title="Contratações"
+            value={14}
+            subtitle="Finalizadas este mês"
+            icon={<CheckCircle2 className="w-5 h-5 text-emerald-600" />}
+            accentColor="emerald"
+            trend={{ value: '100% da meta', isPositive: true }}
+          />
+        )}
 
         {/* 5. Indicadores IA (Gold Premium #B8963E) */}
-        <Card
-          className="p-4 flex flex-col justify-between space-y-3 bg-white border border-[#E5E7EB] hover:border-[#B8963E]/40 transition-all cursor-pointer group shadow-2xs"
-          onClick={onNavigateToReports}
-        >
-          <div className="flex items-start justify-between">
-            <div>
-              <p className="text-[11px] font-black text-[#B8963E] uppercase tracking-wider flex items-center gap-1">
-                <Sparkles className="w-3 h-3" />
-                Indicadores IA
-              </p>
-              <h4 className="text-2xl font-black text-[#1E293B] mt-1 leading-none">
-                94.8%
-              </h4>
+        {showIA && (
+          <Card
+            className="p-4 flex flex-col justify-between space-y-3 bg-white border border-[#E5E7EB] hover:border-[#B8963E]/40 transition-all cursor-pointer group shadow-2xs"
+            onClick={onNavigateToReports}
+          >
+            <div className="flex items-start justify-between">
+              <div>
+                <p className="text-[11px] font-black text-[#B8963E] uppercase tracking-wider flex items-center gap-1">
+                  <Sparkles className="w-3 h-3" />
+                  Indicadores IA
+                </p>
+                <h4 className="text-2xl font-black text-[#1E293B] mt-1 leading-none">
+                  94.8%
+                </h4>
+              </div>
+              <div className="w-9 h-9 rounded-xl bg-[#B8963E]/10 border border-[#B8963E]/30 text-[#B8963E] flex items-center justify-center shrink-0">
+                <Award className="w-4 h-4" />
+              </div>
             </div>
-            <div className="w-9 h-9 rounded-xl bg-[#B8963E]/10 border border-[#B8963E]/30 text-[#B8963E] flex items-center justify-center shrink-0">
-              <Award className="w-4 h-4" />
+            <div className="flex items-center justify-between text-xs pt-1 border-t border-[#E5E7EB]">
+              <span className="text-[#64748B] text-[11px]">Aderência Preditiva</span>
+              <span className="bg-[#B8963E]/10 text-[#B8963E] text-[10px] font-bold px-1.5 py-0.2 rounded">
+                Alta Precisão
+              </span>
             </div>
-          </div>
-          <div className="flex items-center justify-between text-xs pt-1 border-t border-[#E5E7EB]">
-            <span className="text-[#64748B] text-[11px]">Aderência Preditiva</span>
-            <span className="bg-[#B8963E]/10 text-[#B8963E] text-[10px] font-bold px-1.5 py-0.2 rounded">
-              Alta Precisão
-            </span>
-          </div>
-        </Card>
+          </Card>
+        )}
       </div>
 
       {/* Secondary Performance SLA Cards */}

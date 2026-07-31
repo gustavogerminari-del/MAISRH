@@ -117,9 +117,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
   isOpenMobile = false,
   onCloseMobile
 }) => {
-  const { user, isModuleActive } = useAuth();
+  const { user, isModuleActive, hasScreenAccess } = useAuth();
   const isMaster = user?.role === 'Super Administrador' || user?.tipoUsuario === 'MASTER';
-  const isHeadhunterEnabled = isMaster || (isModuleActive ? isModuleActive('headhunter') : true);
 
   const [isCollapsed, setIsCollapsed] = useState<boolean>(() => {
     const saved = localStorage.getItem(COLLAPSED_STORAGE_KEY);
@@ -130,7 +129,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
     localStorage.setItem(COLLAPSED_STORAGE_KEY, String(isCollapsed));
   }, [isCollapsed]);
 
-  const navGroups: NavGroup[] = [
+  const rawNavGroups: NavGroup[] = [
     {
       id: 'inicio',
       title: 'INÍCIO',
@@ -150,7 +149,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
         { id: 'contratacoes', label: 'Contratações', icon: UserCheck },
       ]
     },
-    ...(isHeadhunterEnabled ? [{
+    {
       id: 'headhunter',
       title: 'HEADHUNTER',
       items: [
@@ -159,7 +158,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
         { id: 'headhunter-comercial' as MainTab, label: 'Comercial', icon: TrendingUp },
         { id: 'headhunter-financeiro' as MainTab, label: 'Financeiro', icon: Wallet },
       ]
-    }] : []),
+    },
     {
       id: 'colaboradores',
       title: 'COLABORADORES',
@@ -204,6 +203,16 @@ export const Sidebar: React.FC<SidebarProps> = ({
       ]
     }] : [])
   ];
+
+  // Filter groups and items strictly according to enabled company modules
+  const navGroups = rawNavGroups.map(group => ({
+    ...group,
+    items: group.items.filter(item => {
+      if (isMaster) return true;
+      if (item.id === 'dashboard' || item.id === 'configuracoes') return true;
+      return hasScreenAccess(item.id as any);
+    })
+  })).filter(group => group.items.length > 0);
 
   const handleSelectTab = (tab: MainTab) => {
     setActiveTab(tab);
@@ -323,24 +332,26 @@ export const Sidebar: React.FC<SidebarProps> = ({
             ))}
 
             {/* Portal de Vagas Público */}
-            <div className="pt-2 border-t border-white/10">
-              <button
-                onClick={() => handleSelectTab('site-vagas')}
-                title={isCollapsed && !isOpenMobile ? "Portal de Vagas" : undefined}
-                className={`w-full rounded-xl text-xs font-semibold transition-all flex items-center cursor-pointer min-h-[38px] ${
-                  isCollapsed && !isOpenMobile
-                    ? 'justify-center p-2'
-                    : 'px-3 py-2 gap-3 text-left'
-                } ${
-                  activeTab === 'site-vagas'
-                    ? 'bg-[#1D4F7A] text-white shadow-xs font-bold border border-white/10'
-                    : 'text-white/90 hover:bg-white/10 hover:text-white'
-                }`}
-              >
-                <Globe className={`w-4 h-4 shrink-0 ${activeTab === 'site-vagas' ? 'text-white' : 'text-[#EAF2F8]'}`} />
-                {(!isCollapsed || isOpenMobile) && <span>Portal de Vagas</span>}
-              </button>
-            </div>
+            {(isMaster || hasScreenAccess('site-vagas')) && (
+              <div className="pt-2 border-t border-white/10">
+                <button
+                  onClick={() => handleSelectTab('site-vagas')}
+                  title={isCollapsed && !isOpenMobile ? "Portal de Vagas" : undefined}
+                  className={`w-full rounded-xl text-xs font-semibold transition-all flex items-center cursor-pointer min-h-[38px] ${
+                    isCollapsed && !isOpenMobile
+                      ? 'justify-center p-2'
+                      : 'px-3 py-2 gap-3 text-left'
+                  } ${
+                    activeTab === 'site-vagas'
+                      ? 'bg-[#1D4F7A] text-white shadow-xs font-bold border border-white/10'
+                      : 'text-white/90 hover:bg-white/10 hover:text-white'
+                  }`}
+                >
+                  <Globe className={`w-4 h-4 shrink-0 ${activeTab === 'site-vagas' ? 'text-white' : 'text-[#EAF2F8]'}`} />
+                  {(!isCollapsed || isOpenMobile) && <span>Portal de Vagas</span>}
+                </button>
+              </div>
+            )}
           </nav>
         </div>
 

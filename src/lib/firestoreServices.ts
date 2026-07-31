@@ -198,16 +198,10 @@ export async function fetchEmpresasFirestore(): Promise<ClientTenant[]> {
       return list;
     }
   } catch (err: any) {
-    if (err?.message?.includes('offline') || err?.code === 'unavailable') {
-      console.warn('Firestore offline ao consultar empresas. Utilizando fallback de empresas local.');
-    } else {
-      console.warn('Erro ao buscar empresas do Firestore:', err?.message || err);
-    }
+    console.warn('Erro ao buscar empresas do Firestore:', err?.message || err);
   }
 
-  // Fallback local storage or empty
-  const saved = localStorage.getItem('mais_rh_master_tenants');
-  return saved ? JSON.parse(saved) : [];
+  return [];
 }
 
 export async function saveEmpresaFirestore(tenantData: Partial<ClientTenant>): Promise<void> {
@@ -287,15 +281,10 @@ export async function fetchModulosFirestore(): Promise<PlatformModule[]> {
       return list;
     }
   } catch (err: any) {
-    if (err?.message?.includes('offline') || err?.code === 'unavailable') {
-      console.warn('Firestore offline ao consultar módulos. Utilizando fallback de módulos local.');
-    } else {
-      console.warn('Erro ao buscar módulos do Firestore:', err?.message || err);
-    }
+    console.warn('Erro ao buscar módulos do Firestore:', err?.message || err);
   }
 
-  const saved = localStorage.getItem('mais_rh_platform_modules');
-  return saved ? JSON.parse(saved) : [];
+  return [];
 }
 
 export async function saveModuloFirestore(moduleData: PlatformModule): Promise<void> {
@@ -348,36 +337,46 @@ export async function saveEmpresaModuloFirestore(
 }
 
 export async function fetchEmpresaModulosFirestore(empresaId: string): Promise<Record<string, boolean>> {
-  const result: Record<string, boolean> = {};
+  if (!empresaId) return {};
   try {
+    const docRef = doc(db, COLLECTIONS.EMPRESA_MODULOS, empresaId);
+    const snap = await getDoc(docRef);
+    if (snap.exists()) {
+      const data = snap.data();
+      if (data && data.modulos && typeof data.modulos === 'object') {
+        return data.modulos as Record<string, boolean>;
+      }
+    }
+
     const q = query(
       collection(db, COLLECTIONS.EMPRESA_MODULOS), 
       where('empresaId', '==', empresaId)
     );
-    const snap = await getDocs(q);
-    snap.forEach(docSnap => {
+    const snapCollection = await getDocs(q);
+    const result: Record<string, boolean> = {};
+    snapCollection.forEach(docSnap => {
       const data = docSnap.data() as EmpresaModuloDoc;
-      result[data.moduloId] = data.ativo;
-    });
-    
-    // If empty result, check rawTenantData in EMPRESAS
-    if (Object.keys(result).length === 0) {
-      const empresaRef = doc(db, COLLECTIONS.EMPRESAS, empresaId);
-      const empSnap = await getDoc(empresaRef);
-      if (empSnap.exists()) {
-        const empData = empSnap.data() as EmpresaFirestoreDoc;
-        return (empData.rawTenantData?.modules as unknown as Record<string, boolean>) || {};
+      if (data.moduloId) {
+        result[data.moduloId] = data.ativo;
       }
+    });
+
+    if (Object.keys(result).length > 0) {
+      return result;
+    }
+    
+    // Check rawTenantData in EMPRESAS
+    const empresaRef = doc(db, COLLECTIONS.EMPRESAS, empresaId);
+    const empSnap = await getDoc(empresaRef);
+    if (empSnap.exists()) {
+      const empData = empSnap.data() as EmpresaFirestoreDoc;
+      return (empData.rawTenantData?.modules as unknown as Record<string, boolean>) || {};
     }
   } catch (err: any) {
-    if (err?.message?.includes('offline') || err?.code === 'unavailable') {
-      console.warn('Firestore offline ao consultar empresa_modulos. Utilizando permissões locais do Tenant.');
-    } else {
-      console.warn('Informação de empresa_modulos indisponível no Firestore:', err?.message || err);
-    }
+    console.warn('Informação de empresa_modulos indisponível no Firestore:', err?.message || err);
   }
 
-  return result;
+  return {};
 }
 
 // ----------------------------------------------------------------------------

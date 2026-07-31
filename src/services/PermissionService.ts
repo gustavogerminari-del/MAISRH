@@ -167,7 +167,7 @@ export class PermissionService {
     const normRole = this.normalizeRole(userRole);
 
     // Master admin routes
-    if (route.startsWith('/master') || route === 'master') {
+    if (route.startsWith('/master') || route === 'master' || route === 'acesso-master') {
       return normRole === 'MASTER';
     }
 
@@ -175,12 +175,17 @@ export class PermissionService {
 
     // Module checks
     if (enabledModules) {
-      if (route.includes('headhunter') && enabledModules.headhunter === false) return false;
-      if (route.includes('payroll') || route.includes('folha') && enabledModules.folhaPagamento === false) return false;
-      if (route.includes('ponto') && enabledModules.pontoDigital === false) return false;
-      if (route.includes('beneficios') && enabledModules.beneficios === false) return false;
-      if (route.includes('banco-talentos') && enabledModules.bancoTalentos === false) return false;
-      if (route.includes('rh-consultant') && enabledModules.iaConsultora === false) return false;
+      if (route.includes('headhunter') && enabledModules.headhunter !== true) return false;
+      if ((route.includes('folha') || route.includes('payroll')) && enabledModules.folhaPagamento !== true && enabledModules.folha !== true) return false;
+      if (route.includes('ponto') && enabledModules.pontoDigital !== true && enabledModules.ponto !== true) return false;
+      if (route.includes('beneficios') && enabledModules.beneficios !== true && enabledModules.feriasBeneficios !== true) return false;
+      if (route.includes('ferias') && enabledModules.ferias !== true && enabledModules.feriasBeneficios !== true) return false;
+      if (route.includes('banco-talentos') && enabledModules.bancoTalentos !== true && enabledModules.recrutamento !== true) return false;
+      if (route.includes('vagas') && enabledModules.vagas !== true && enabledModules.recrutamento !== true) return false;
+      if (route.includes('entrevistas') && enabledModules.entrevistas !== true && enabledModules.recrutamento !== true) return false;
+      if (route.includes('sst') && enabledModules.sst !== true) return false;
+      if (route.includes('ia') && enabledModules.iaConsultora !== true && enabledModules.consultorRH !== true) return false;
+      if (route.includes('site-vagas') && enabledModules.siteVagasPersonalizado !== true && enabledModules.siteVagas !== true) return false;
     }
 
     return true;

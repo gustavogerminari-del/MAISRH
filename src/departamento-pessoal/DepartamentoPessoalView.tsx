@@ -98,8 +98,9 @@ interface DepartamentoPessoalViewProps {
 export const DepartamentoPessoalView: React.FC<DepartamentoPessoalViewProps> = ({
   initialSubTab = 'visao-geral'
 }) => {
-  const { user } = useAuth();
-  const companyId = user?.companyId || user?.empresaId || user?.tenantId || 'emp-001';
+  const { user, isModuleActive } = useAuth();
+  const companyId = user?.companyId || user?.empresaId || user?.tenantId;
+  const isMaster = user?.role === 'Super Administrador' || user?.tipoUsuario === 'MASTER';
 
   const [activeSubTab, setActiveSubTab] = useState<DPSubTab>(initialSubTab);
   const [loadingFirestore, setLoadingFirestore] = useState(true);
@@ -249,21 +250,27 @@ export const DepartamentoPessoalView: React.FC<DepartamentoPessoalViewProps> = (
     await saveConfigTrabalhistaFirestore(cfg);
   };
 
-  const subMenuItems = [
-    { id: 'visao-geral', label: 'Visão Geral', icon: LayoutDashboard },
-    { id: 'colaboradores', label: 'Colaboradores', icon: Users },
-    { id: 'ponto-digital', label: 'Jornada', icon: Clock },
-    { id: 'admissoes', label: 'Admissões', icon: UserPlus },
-    { id: 'beneficios', label: 'Benefícios', icon: Gift },
-    { id: 'ferias-afastamentos', label: 'Férias e Afastamentos', icon: Umbrella },
-    { id: 'sst', label: 'Saúde e Segurança (SST)', icon: HeartPulse },
-    { id: 'documentos', label: 'Documentos', icon: FileText },
-    { id: 'rescisao', label: 'Rescisões', icon: LogOut },
-    { id: 'folha-pagamento', label: 'Folha de Pagamento', icon: Calculator },
-    { id: 'relatorios-dp', label: 'Relatórios', icon: BarChart2 },
-    { id: 'acessos-portal', label: 'Acessos ao Portal', icon: Key },
-    { id: 'configuracoes-trabalhistas', label: 'Configurações Trabalhistas', icon: Settings },
+  const allSubMenuItems = [
+    { id: 'visao-geral', label: 'Visão Geral', icon: LayoutDashboard, module: 'dp' },
+    { id: 'colaboradores', label: 'Colaboradores', icon: Users, module: 'equipeInterna' },
+    { id: 'ponto-digital', label: 'Jornada', icon: Clock, module: 'pontoDigital' },
+    { id: 'admissoes', label: 'Admissões', icon: UserPlus, module: 'equipeInterna' },
+    { id: 'beneficios', label: 'Benefícios', icon: Gift, module: 'beneficios' },
+    { id: 'ferias-afastamentos', label: 'Férias e Afastamentos', icon: Umbrella, module: 'feriasBeneficios' },
+    { id: 'sst', label: 'Saúde e Segurança (SST)', icon: HeartPulse, module: 'sst' },
+    { id: 'documentos', label: 'Documentos', icon: FileText, module: 'documentosAssinatura' },
+    { id: 'rescisao', label: 'Rescisões', icon: LogOut, module: 'rescisao' },
+    { id: 'folha-pagamento', label: 'Folha de Pagamento', icon: Calculator, module: 'folhaPagamento' },
+    { id: 'relatorios-dp', label: 'Relatórios', icon: BarChart2, module: 'relatoriosAvancados' },
+    { id: 'acessos-portal', label: 'Acessos ao Portal', icon: Key, module: 'dp' },
+    { id: 'configuracoes-trabalhistas', label: 'Configurações Trabalhistas', icon: Settings, module: 'dp' },
   ];
+
+  const subMenuItems = allSubMenuItems.filter(item => {
+    if (isMaster) return true;
+    if (item.id === 'visao-geral' || item.id === 'configuracoes-trabalhistas') return true;
+    return isModuleActive(item.module);
+  });
 
   return (
     <div className="space-y-6">
