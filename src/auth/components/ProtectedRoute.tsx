@@ -18,7 +18,7 @@ export const ProtectedRoute: React.FC<ProtectedRouteProps> = ({
   children,
   fallback,
 }) => {
-  const { user, isAuthenticated, hasScreenAccess, hasActionAccess, switchDemoProfile } = useAuth();
+  const { user, isAuthenticated, hasScreenAccess, hasActionAccess } = useAuth();
 
   if (!isAuthenticated || !user) {
     return (

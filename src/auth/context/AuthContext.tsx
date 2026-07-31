@@ -7,7 +7,8 @@ import {
   signInWithEmailAndPassword, 
   createUserWithEmailAndPassword,
   onAuthStateChanged,
-  signOut
+  signOut,
+  sendPasswordResetEmail
 } from 'firebase/auth';
 import { UserProfile, RoleProfile, ScreenRouteKey, SystemActionKey, SessionToken } from '../types/auth';
 import { MASTER_USER } from '../constants/permissions';
@@ -43,8 +44,22 @@ const STORAGE_KEY_TOKEN = 'MAIS_RH_AUTH_TOKEN';
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [user, setUser] = useState<UserProfile | null>(null);
-  const [sessionToken, setSessionToken] = useState<SessionToken | null>(null);
+  const [user, setUser] = useState<UserProfile | null>(() => {
+    try {
+      const saved = localStorage.getItem(STORAGE_KEY_USER);
+      return saved ? JSON.parse(saved) : null;
+    } catch {
+      return null;
+    }
+  });
+  const [sessionToken, setSessionToken] = useState<SessionToken | null>(() => {
+    try {
+      const saved = localStorage.getItem(STORAGE_KEY_TOKEN);
+      return saved ? JSON.parse(saved) : null;
+    } catch {
+      return null;
+    }
+  });
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [activeModules, setActiveModules] = useState<Record<string, boolean>>({
     recrutamento: true,
@@ -165,7 +180,20 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           logger.warn('Erro ao carregar usuario do Firestore em onAuthStateChanged:', err);
         }
       } else {
-        logger.info('Firebase Auth: nenhum usuário ativo no momento', 'AuthContext');
+        logger.info('Firebase Auth: nenhum usuário ativo no SDK cliente', 'AuthContext');
+        const savedUserRaw = localStorage.getItem(STORAGE_KEY_USER);
+        if (savedUserRaw) {
+          try {
+            const savedUser = JSON.parse(savedUserRaw);
+            if (savedUser && (savedUser.id || savedUser.email)) {
+              setUser(savedUser);
+              const savedTokenRaw = localStorage.getItem(STORAGE_KEY_TOKEN);
+              if (savedTokenRaw) setSessionToken(JSON.parse(savedTokenRaw));
+              setIsLoading(false);
+              return;
+            }
+          } catch (e) {}
+        }
         setUser(null);
         setSessionToken(null);
         localStorage.removeItem(STORAGE_KEY_USER);
@@ -229,6 +257,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       throw new Error('Por favor, informe a senha de acesso.');
     }
 
+    if (pwd.length < 6) {
+      throw new Error('A senha de acesso no Firebase Auth deve ter no mínimo 6 caracteres.');
+    }
+
     let firebaseAuthUid: string | null = null;
 
     // 1. Authenticate with Firebase Authentication
@@ -238,37 +270,50 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       logger.info(`Autenticado com sucesso no Firebase Auth: ${normalizedEmail} (UID: ${firebaseAuthUid})`, 'AuthContext');
     } catch (authErr: any) {
       const errorCode = authErr?.code || '';
+      const errorMessage = authErr?.message || '';
+      logger.warn(`[Firebase Auth Error]: ${errorCode} - ${errorMessage}`, 'AuthContext');
+
+      // Attempt server authentication fallback for API key, network, internal, or auth errors
+      try {
+        logger.info('[AuthContext] Executando autenticação via servidor de retaguarda...', 'AuthContext');
+        const resp = await fetch('/api/auth/login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email: normalizedEmail, password: pwd })
+        });
+        const data = await resp.json();
+        if (data.success && data.user) {
+          const serverUser = data.user;
+          const token = generateMockToken(serverUser.id);
+          saveAuthData(serverUser, token);
+          logger.info(`Autenticado com sucesso via servidor de retaguarda: ${normalizedEmail} (UID: ${serverUser.id})`, 'AuthContext');
+          return true;
+        } else if (data.error) {
+          throw new Error(data.error);
+        }
+      } catch (serverErr: any) {
+        logger.warn('[AuthContext] Falha no login via servidor:', serverErr?.message || serverErr);
+        if (serverErr.message && !serverErr.message.includes('Failed to fetch')) {
+          throw serverErr;
+        }
+      }
+
       if (
-        errorCode === 'auth/user-not-found' || 
-        errorCode === 'auth/invalid-credential'
+        errorCode === 'auth/wrong-password' || 
+        errorCode === 'auth/invalid-credential' || 
+        errorCode === 'auth/user-not-found'
       ) {
-        // Automatically create account in Firebase Auth for master / enterprise user
-        try {
-          const cred = await createUserWithEmailAndPassword(auth, normalizedEmail, pwd);
-          firebaseAuthUid = cred.user.uid;
-          logger.info(`Conta criada com sucesso no Firebase Auth: ${normalizedEmail} (UID: ${firebaseAuthUid})`, 'AuthContext');
-        } catch (createErr) {
-          logger.warn(`[Firebase Auth Registration Error]: ${createErr}`, 'AuthContext');
-          throw new Error('E-mail ou senha de acesso incorretos.');
-        }
+        throw new Error('E-mail ou senha incorretos no Firebase Auth. Se você esqueceu sua senha, clique em "Esqueceu a senha?" para receber o link de redefinição.');
       } else if (errorCode === 'auth/user-disabled') {
-        throw new Error('Esta conta foi desativada pelo administrador.');
-      } else if (errorCode === 'auth/wrong-password') {
-        throw new Error('E-mail ou senha de acesso incorretos.');
+        throw new Error('Esta conta foi desativada no Firebase Auth.');
       } else if (errorCode === 'auth/too-many-requests') {
-        throw new Error('Muitas tentativas de login. Tente novamente mais tarde.');
+        throw new Error('Muitas tentativas malsucedidas de login. Aguarde alguns instantes ou redefina sua senha.');
       } else if (errorCode === 'auth/network-request-failed') {
-        throw new Error('Falha na conexão de rede. Verifique sua internet.');
+        throw new Error('Falha de conexão. Verifique sua conexão de internet.');
       } else if (errorCode === 'auth/invalid-email') {
-        throw new Error('O endereço de e-mail informado é inválido.');
+        throw new Error('O e-mail informado é inválido.');
       } else {
-        // Fallback: create or re-throw
-        try {
-          const cred = await createUserWithEmailAndPassword(auth, normalizedEmail, pwd);
-          firebaseAuthUid = cred.user.uid;
-        } catch (fErr) {
-          throw new Error('E-mail ou senha de acesso incorretos.');
-        }
+        throw new Error(`Falha de autenticação (${errorCode || 'erro'}). Verifique seu e-mail e senha.`);
       }
     }
 
@@ -348,18 +393,22 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const switchDemoProfile = (role: RoleProfile) => {
-    if (role === 'Super Administrador') {
-      const token = generateMockToken(MASTER_USER.id);
-      saveAuthData(MASTER_USER, token);
-      logger.info(`Acesso MASTER ativado: ${MASTER_USER.email}`, 'AuthContext');
-    } else {
-      throw new Error('Perfis de teste foram desativados. Efetue login com suas credenciais corporativas.');
-    }
+    throw new Error('Modo de teste desativado em produção. Efetue login com e-mail e senha no Firebase Auth.');
   };
 
   const requestPasswordReset = async (email: string): Promise<boolean> => {
-    logger.info(`Solicitação de recuperação de senha enviada para: ${email}`, 'AuthContext');
-    return new Promise((resolve) => setTimeout(() => resolve(true), 800));
+    const normalizedEmail = email.toLowerCase().trim();
+    if (!normalizedEmail) {
+      throw new Error('Informe o e-mail de acesso.');
+    }
+    try {
+      await sendPasswordResetEmail(auth, normalizedEmail);
+      logger.info(`Link de redefinição de senha enviado com sucesso no Firebase Auth para: ${normalizedEmail}`, 'AuthContext');
+      return true;
+    } catch (err: any) {
+      logger.warn(`Erro ao enviar e-mail de redefinição no Firebase Auth: ${err?.message}`, 'AuthContext');
+      throw new Error('Não foi possível enviar o e-mail de redefinição. Verifique se o e-mail está correto.');
+    }
   };
 
   const isModuleActive = (moduleKey: string): boolean => {
