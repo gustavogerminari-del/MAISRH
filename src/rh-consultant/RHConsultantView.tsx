@@ -22,6 +22,7 @@ import {
 } from 'lucide-react';
 import { ConsultantClient, ConsultantJob, ConsultantCandidateScreening, JobExpense } from './types';
 import { MOCK_CONSULTANT_CLIENTS, MOCK_CONSULTANT_JOBS, MOCK_CONSULTANT_SCREENINGS } from './mockData';
+import { formatFirestoreDate } from '../lib/firestoreUtils';
 
 export const RHConsultantView: React.FC = () => {
   const [activeTab, setActiveTab] = useState<'dashboard' | 'vagas' | 'clientes' | 'financeiro'>('dashboard');
@@ -335,7 +336,7 @@ export const RHConsultantView: React.FC = () => {
                         {job.clientName}
                       </span>
                       <h4 className="text-base font-bold text-slate-900 mt-1">{job.title}</h4>
-                      <p className="text-xs text-slate-500 mt-0.5">Código: {job.code} • Criada em {job.createdAt}</p>
+                      <p className="text-xs text-slate-500 mt-0.5">Código: {job.code} • Criada em {formatFirestoreDate(job.createdAt)}</p>
                     </div>
 
                     <span className={`px-2.5 py-1 rounded-full text-xs font-bold ${

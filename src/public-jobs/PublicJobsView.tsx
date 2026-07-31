@@ -29,6 +29,8 @@ import { ContactSection } from './ContactSection';
 import { CandidateResumeModal } from './CandidateResumeModal';
 import { CompanyRegistrationModal } from './CompanyRegistrationModal';
 import { JobCandidateService } from '../services/JobCandidateService';
+import { JobService } from '../services/JobService';
+import { formatFirestoreDate } from '../lib/firestoreUtils';
 
 export interface PublicJobsViewProps {
   jobs?: Job[];
@@ -50,10 +52,27 @@ export const PublicJobsView: React.FC<PublicJobsViewProps> = ({
 
   const [searchKeyword, setSearchKeyword] = useState('');
   const [searchLocation, setSearchLocation] = useState('');
+  const [fetchedPublicJobs, setFetchedPublicJobs] = useState<Job[]>([]);
+
+  React.useEffect(() => {
+    JobService.listPublicJobs().then(res => {
+      if (res && res.length > 0) {
+        setFetchedPublicJobs(res);
+      }
+    }).catch(err => console.warn('Aviso ao buscar vagas públicas:', err));
+  }, []);
 
   // Map internal system jobs + mock jobs into unified public jobs list
   const activeJobsList: PublicJob[] = useMemo(() => {
-    const customJobsMapped: PublicJob[] = (jobs || [])
+    const allSourceJobsMap = new Map<string, Job>();
+    (jobs || []).forEach(j => allSourceJobsMap.set(j.id, j));
+    fetchedPublicJobs.forEach(j => {
+      if (!allSourceJobsMap.has(j.id)) {
+        allSourceJobsMap.set(j.id, j);
+      }
+    });
+
+    const customJobsMapped: PublicJob[] = Array.from(allSourceJobsMap.values())
       .filter(j => 
         j.status === 'ativa' || 
         j.status === 'Aberta' || 
@@ -62,16 +81,17 @@ export const PublicJobsView: React.FC<PublicJobsViewProps> = ({
       )
       .map(j => {
         const title = j.title || j.titulo || 'Vaga em Aberto';
-        const description = j.description || j.descricao || 'Oportunidade de carreira no portal oficial MAIS RH.';
-        const companyName = j.nomeEmpresa || 'MAIS RH Consultoria';
-        const empresaId = j.empresaId || 'emp-001';
+        const description = j.description || j.descricao || 'Oportunidade de carreira no portal oficial RL CONNECT.';
+        const companyName = j.nomeEmpresa || (j as any).companyName || 'RL CONNECT';
+        const empresaId = j.empresaId || (j as any).companyId || 'emp-001';
         const location = j.location || (j.cidade ? `${j.cidade} - ${j.estado || 'SP'}` : 'São Paulo - SP');
-        const workMode = j.locationType || 'Híbrido';
+        const workMode = j.locationType || (j as any).modalidade || 'Híbrido';
         const contractType = j.type || j.tipoContrato || 'CLT';
         const salaryRange = j.salaryRange || j.salario || 'A combinar';
         const requirements = (j.requirements && j.requirements.length > 0) ? j.requirements : (j.requisitos || ['Ensino Superior Completo', 'Boa comunicação']);
-        const benefits = (j.benefits && j.benefits.length > 0) ? j.benefits : (j.beneficios || ['Vale Refeição R$ 1.200/mês', 'Plano de Saúde', 'Seguro de Vida']);
-        const publishedAt = j.createdAt || j.dataCriacao || new Date().toISOString().split('T')[0];
+        const benefits = (j.benefits && j.benefits.length > 0) ? j.benefits : (j.beneficios || ['Vale Refeição', 'Plano de Saúde', 'Seguro de Vida']);
+        const rawDate = j.createdAt || j.dataCriacao || (j as any).publishedAt;
+        const publishedAt = formatFirestoreDate(rawDate) || new Date().toLocaleDateString('pt-BR');
 
         return {
           id: j.id,
@@ -96,7 +116,7 @@ export const PublicJobsView: React.FC<PublicJobsViewProps> = ({
     const extraMockJobs = MOCK_PUBLIC_JOBS.filter(mj => !customIds.has(mj.id));
 
     return [...customJobsMapped, ...extraMockJobs];
-  }, [jobs]);
+  }, [jobs, fetchedPublicJobs]);
 
   const handleHeroSearch = (keyword: string, location: string) => {
     setSearchKeyword(keyword);

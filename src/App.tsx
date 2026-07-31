@@ -238,7 +238,7 @@ function MainAppContent() {
 
   if (isColaborador) {
     return (
-      <div className="min-h-screen bg-slate-50 text-slate-800 flex flex-col font-sans">
+      <div className="min-h-screen bg-[#F7F9FC] text-[#0F172A] flex flex-col font-sans">
         <ProfileSwitchSelector />
         <PortalColaboradorView />
       </div>
@@ -246,7 +246,7 @@ function MainAppContent() {
   }
 
   return (
-    <div className="min-h-screen bg-slate-50 text-slate-800 flex flex-col font-sans antialiased">
+    <div className="min-h-screen bg-[#F7F9FC] text-[#0F172A] flex flex-col font-sans antialiased">
       {/* Top Profile Switch Bar */}
       <ProfileSwitchSelector />
 
@@ -280,7 +280,7 @@ function MainAppContent() {
         )}
 
         {/* View Router Protected by Role */}
-        <main className="flex-1 overflow-y-auto p-4 sm:p-6 lg:p-8 bg-slate-50/50">
+        <main className="flex-1 overflow-y-auto p-4 sm:p-6 lg:p-8 bg-[#F7F9FC]">
 
           <ProtectedRoute screenKey={activeTab as any}>
             {activeTab === 'dashboard' && (

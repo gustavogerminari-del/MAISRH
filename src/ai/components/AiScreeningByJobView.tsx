@@ -21,6 +21,7 @@ import { JobService } from '../../services/JobService';
 import { Job } from '../../types/rh';
 import { useAuth } from '../../auth';
 import { SmartCandidateDrawer } from './SmartCandidateDrawer';
+import { formatFirestoreDate } from '../../lib/firestoreUtils';
 
 export const AiScreeningByJobView: React.FC = () => {
   const { user } = useAuth();
@@ -247,7 +248,7 @@ export const AiScreeningByJobView: React.FC = () => {
                       {cand.role} • {cand.city}, {cand.state} • {cand.experienceYears} anos exp.
                     </p>
                     <span className="text-[10px] font-bold text-slate-400 block mt-0.5">
-                      Aplicou em: {cand.appliedDate}
+                      Aplicou em: {formatFirestoreDate(cand.appliedDate)}
                     </span>
                   </div>
                 </div>

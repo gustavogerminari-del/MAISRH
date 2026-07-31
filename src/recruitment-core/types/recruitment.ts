@@ -44,6 +44,7 @@ export type InterviewType =
 export interface UnifiedJob {
   id: string;
   empresaId: string;
+  companyId?: string;
   origemProcesso: OrigemProcesso;
   
   // Cliente (Headhunter)

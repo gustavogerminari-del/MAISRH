@@ -22,6 +22,7 @@ import {
 } from 'lucide-react';
 import { PublicJob, CandidateApplicationPayload } from './types';
 import { Job, Candidate } from '../types/rh';
+import { formatFirestoreDate } from '../lib/firestoreUtils';
 
 interface JobsPortalSectionProps {
   jobsList: PublicJob[];
@@ -237,7 +238,7 @@ export const JobsPortalSection: React.FC<JobsPortalSectionProps> = ({
             {filteredJobs.length === 0 ? (
               <div className="bg-white rounded-2xl p-12 text-center border border-[#E5E7EB] shadow-2xs space-y-3">
                 <Briefcase className="w-12 h-12 text-[#64748B] mx-auto opacity-50" />
-                <h3 className="text-base font-bold text-[#1E293B]">Nenhuma vaga atende aos filtros selecionados</h3>
+                <h3 className="text-base font-bold text-[#1E293B]">Nenhum registro encontrado</h3>
                 <p className="text-xs text-[#64748B] max-w-sm mx-auto">
                   Tente alterar os termos de busca ou cadastrar seu currículo no nosso Banco Geral de Talentos.
                 </p>
@@ -309,7 +310,7 @@ export const JobsPortalSection: React.FC<JobsPortalSectionProps> = ({
                     <div className="mt-4 pt-3 border-t border-[#E5E7EB] flex items-center justify-between text-xs text-[#64748B] font-medium">
                       <span className="flex items-center gap-1">
                         <Clock className="w-3.5 h-3.5 text-[#64748B]" />
-                        Publicado em {job.publishedAt}
+                        Publicado em {formatFirestoreDate(job.publishedAt)}
                       </span>
                       <button
                         onClick={(e) => {

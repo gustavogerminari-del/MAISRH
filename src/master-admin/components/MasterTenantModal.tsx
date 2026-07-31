@@ -304,9 +304,13 @@ export const MasterTenantModal: React.FC<MasterTenantModalProps> = ({
 
     try {
       // 1. Salvar os módulos liberados da empresa em 'empresa_modulos/{empresaId}' no Firestore
-      await saveCompanyReleasedModules(tenantId, modules as Record<string, boolean>);
+      try {
+        await saveCompanyReleasedModules(tenantId, modules as Record<string, boolean>);
+      } catch (modErr) {
+        console.warn('Aviso ao sincronizar módulos da empresa no Firestore:', modErr);
+      }
 
-      // 2. Chover handler de salvamento no app
+      // 2. Chamar handler de salvamento no app
       await onSave({
         id: tenantId,
         code: tenant?.code || companyName.substring(0, 5).toUpperCase().replace(/\s/g, ''),
@@ -362,11 +366,11 @@ export const MasterTenantModal: React.FC<MasterTenantModalProps> = ({
         notes
       });
 
-      // Fechar modal apenas após confirmação do Firestore
+      // Fechar modal
       onClose();
     } catch (err: any) {
-      console.error('Erro ao salvar empresa no Firestore:', err);
-      setSaveError(err?.message || 'Erro ao persistir dados da empresa no Firestore. Não foi possível salvar.');
+      console.error('Erro ao salvar empresa:', err);
+      setSaveError(err?.message || 'Erro ao salvar dados da empresa.');
     } finally {
       setIsSaving(false);
     }
@@ -1042,10 +1046,8 @@ export const MasterTenantModal: React.FC<MasterTenantModalProps> = ({
                 <button
                   type="button"
                   onClick={() => {
-                    if (confirm(`Tem certeza que deseja excluir a empresa "${companyName || tenant.companyName}"? Esta ação é irreversível.`)) {
-                      onDelete(tenant.id);
-                      onClose();
-                    }
+                    onDelete(tenant.id);
+                    onClose();
                   }}
                   disabled={isSaving}
                   className="px-3.5 py-2 text-xs font-bold text-rose-600 hover:text-rose-700 bg-rose-50 hover:bg-rose-100 rounded-xl transition-all flex items-center gap-1.5 cursor-pointer disabled:opacity-50"

@@ -83,27 +83,27 @@ export const HeadhunterFinanceiro: React.FC<HeadhunterFinanceiroProps> = ({
 
   // Unified available entities fallback to mock data
   const availableClients = useMemo(() => {
-    return clients && clients.length > 0 ? clients : MOCK_HEADHUNTER_CLIENTS;
+    return clients || [];
   }, [clients]);
 
   const availableJobs = useMemo(() => {
-    return jobs && jobs.length > 0 ? jobs : MOCK_HEADHUNTER_JOBS;
+    return jobs || [];
   }, [jobs]);
 
   const availableCandidates = useMemo(() => {
-    return candidates && candidates.length > 0 ? candidates : MOCK_HEADHUNTER_CANDIDATES;
+    return candidates || [];
   }, [candidates]);
 
   const availableHirings = useMemo(() => {
-    return hirings && hirings.length > 0 ? hirings : MOCK_HEADHUNTER_HIRINGS;
+    return hirings || [];
   }, [hirings]);
 
   const availableContracts = useMemo(() => {
-    return contracts && contracts.length > 0 ? contracts : MOCK_HEADHUNTER_CONTRACTS;
+    return contracts || [];
   }, [contracts]);
 
   const availableProposals = useMemo(() => {
-    return proposals && proposals.length > 0 ? proposals : MOCK_HEADHUNTER_PROPOSALS;
+    return proposals || [];
   }, [proposals]);
 
   // Local state initialized from Service

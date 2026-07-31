@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { formatFirestoreDate } from '../../lib/firestoreUtils';
 import { 
   Gift, 
   Plus, 
@@ -840,7 +841,7 @@ export const GestaoBeneficios: React.FC<GestaoBeneficiosProps> = ({
                   <div className="flex-1 space-y-1">
                     <div className="flex items-center justify-between">
                       <span className="font-bold text-xs text-[#1E293B]">{evt.employeeName || 'Colaborador'}</span>
-                      <span className="text-[11px] text-slate-400 font-mono">{new Date(evt.createdAt).toLocaleString('pt-BR')}</span>
+                      <span className="text-[11px] text-slate-400 font-mono">{formatFirestoreDate(evt.createdAt)}</span>
                     </div>
 
                     <p className="text-xs text-purple-900 font-semibold">

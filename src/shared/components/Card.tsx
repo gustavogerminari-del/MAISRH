@@ -19,7 +19,7 @@ export const Card: React.FC<CardProps> = ({
   };
 
   return (
-    <div className={`bg-white rounded-2xl border border-slate-200 shadow-2xs ${paddingStyles[padding]} ${className}`}>
+    <div className={`bg-white rounded-2xl border border-[#D5DEE8] shadow-xs ${paddingStyles[padding]} ${className}`}>
       {children}
     </div>
   );
@@ -29,7 +29,7 @@ export const CardHeader: React.FC<{ children: React.ReactNode; className?: strin
   children,
   className = '',
 }) => (
-  <div className={`border-b border-slate-100 pb-4 mb-4 ${className}`}>
+  <div className={`border-b border-[#D5DEE8] pb-4 mb-4 ${className}`}>
     {children}
   </div>
 );
@@ -45,7 +45,7 @@ export const CardFooter: React.FC<{ children: React.ReactNode; className?: strin
   children,
   className = '',
 }) => (
-  <div className={`border-t border-slate-100 pt-4 mt-4 flex items-center justify-between ${className}`}>
+  <div className={`border-t border-[#D5DEE8] pt-4 mt-4 flex items-center justify-between ${className}`}>
     {children}
   </div>
 );

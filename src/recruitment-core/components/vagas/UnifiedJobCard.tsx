@@ -15,6 +15,7 @@ import {
   Edit2
 } from 'lucide-react';
 import { UnifiedJob } from '../../types/recruitment';
+import { formatFirestoreDate } from '../../../lib/firestoreUtils';
 
 interface UnifiedJobCardProps {
   job: UnifiedJob;
@@ -110,7 +111,7 @@ export const UnifiedJobCard: React.FC<UnifiedJobCardProps> = ({
 
         <div className="flex items-center gap-1.5 text-slate-600">
           <Clock className="w-3.5 h-3.5 text-slate-400 shrink-0" />
-          <span>Abertura: {job.dataCriacao || job.createdAt || job.dataAbertura || 'Recentemente'}</span>
+          <span>Abertura: {formatFirestoreDate(job.dataCriacao || job.createdAt || job.dataAbertura) || 'Recentemente'}</span>
         </div>
       </div>
 

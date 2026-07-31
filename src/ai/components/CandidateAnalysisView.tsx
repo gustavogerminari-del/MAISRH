@@ -22,6 +22,7 @@ import { JobService } from '../../services/JobService';
 import { Job } from '../../types/rh';
 import { useAuth } from '../../auth';
 import { SmartCandidateDrawer } from './SmartCandidateDrawer';
+import { formatFirestoreDate } from '../../lib/firestoreUtils';
 
 export const CandidateAnalysisView: React.FC = () => {
   const { user } = useAuth();
@@ -296,7 +297,7 @@ export const CandidateAnalysisView: React.FC = () => {
 
                     {/* Date */}
                     <td className="py-4 px-4 text-slate-400 font-medium">
-                      {cand.appliedDate}
+                      {formatFirestoreDate(cand.appliedDate)}
                     </td>
 
                     {/* Actions */}

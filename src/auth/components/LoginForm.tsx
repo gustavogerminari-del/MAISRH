@@ -34,90 +34,60 @@ export const LoginForm: React.FC<LoginFormProps> = ({ onBackToJobs }) => {
     }
   };
 
-  // Dev helper to create initial accounts on the server and auto-login as MASTER
-  const handleDevBootstrapAndLogin = async () => {
-    setErrorMsg('');
-    setIsLoading(true);
-    try {
-      // Call server endpoint to sync initial users
-      const resp = await fetch('/api/users/sync-initial', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' }
-      });
-      const data = await resp.json();
-      if (!resp.ok) {
-        throw new Error(data?.error || data?.message || 'Falha ao sincronizar contas iniciais');
-      }
-
-      // Attempt login with MASTER demo credentials
-      const masterEmail = 'gustavo.germinari@gmail.com';
-      const masterPassword = 'Gugato94@';
-      setEmail(masterEmail);
-      setPassword(masterPassword);
-
-      await login(masterEmail, masterPassword);
-    } catch (err: any) {
-      console.error('Dev bootstrap/login error:', err);
-      setErrorMsg(err?.message || String(err));
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
   return (
-    <div className="min-h-screen bg-slate-100 flex items-center justify-center p-4">
-      <div className="max-w-4xl w-full grid grid-cols-1 md:grid-cols-2 gap-6 bg-white rounded-3xl border border-slate-200 shadow-xl overflow-hidden">
+    <div className="min-h-screen bg-[#F7F9FC] flex items-center justify-center p-4">
+      <div className="max-w-4xl w-full grid grid-cols-1 md:grid-cols-2 gap-0 bg-white rounded-2xl border border-[#D5DEE8] shadow-lg overflow-hidden">
         {/* Banner Left */}
-        <div className="bg-indigo-600 text-white p-8 flex flex-col justify-between space-y-6">
+        <div className="bg-gradient-to-br from-[#123657] to-[#082747] text-white p-8 flex flex-col justify-between space-y-6">
           <div className="space-y-4">
-            <div className="w-12 h-12 rounded-2xl bg-white/10 flex items-center justify-center font-black text-2xl border border-white/20">
-              M
+            <div className="w-14 h-14 rounded-2xl bg-white/10 flex items-center justify-center font-black text-2xl border border-white/20 tracking-wider text-white shadow-inner">
+              RL
             </div>
             <div>
-              <h2 className="text-2xl font-black tracking-tight">MAIS RH</h2>
-              <p className="text-xs text-indigo-100 mt-1 font-medium">
-                Plataforma Corporativa Integrada de Gestão de Pessoas & Seleção
+              <h2 className="text-2xl font-black tracking-tight text-white">RL Connect</h2>
+              <p className="text-sm text-white/90 mt-1 font-medium">
+                R Lourenço Recrutamento e Seleção
               </p>
             </div>
           </div>
 
-          <div className="space-y-3 bg-indigo-700/50 p-4 rounded-2xl border border-indigo-400/30 text-xs">
-            <div className="flex items-center gap-2 font-bold text-indigo-100">
-              <ShieldCheck className="w-4 h-4 text-emerald-300" />
+          <div className="space-y-3 bg-[#082747]/70 p-4 rounded-xl border border-white/15 text-xs">
+            <div className="flex items-center gap-2 font-bold text-white">
+              <ShieldCheck className="w-4 h-4 text-[#20D9A0]" />
               <span>Autenticação Segura Firebase Auth</span>
             </div>
-            <p className="text-[11px] text-indigo-200 leading-relaxed">
+            <p className="text-[11px] text-white/80 leading-relaxed">
               Acesso exclusivo via credenciais autenticadas. O perfil MASTER possui controle total sobre a plataforma SaaS.
             </p>
           </div>
 
-          <p className="text-[10px] text-indigo-200">
-            © 2026 Grupo MAIS RH Brasil. Todos os direitos reservados.
+          <p className="text-[11px] text-white/70">
+            © 2026 RL Connect / R Lourenço Recrutamento e Seleção. Todos os direitos reservados.
           </p>
         </div>
 
         {/* Login Form Right */}
-        <div className="p-6 sm:p-8 flex flex-col justify-between space-y-6">
+        <div className="p-6 sm:p-8 flex flex-col justify-between space-y-6 bg-white">
           <div className="space-y-2">
             {onBackToJobs && (
               <button
                 type="button"
                 onClick={onBackToJobs}
-                className="inline-flex items-center gap-1.5 text-xs font-semibold text-indigo-600 hover:text-indigo-800 bg-indigo-50 hover:bg-indigo-100 px-3 py-1.5 rounded-lg transition-colors mb-2"
+                className="inline-flex items-center gap-1.5 text-xs font-semibold text-[#123657] hover:text-[#082747] bg-[#EAF2F8] hover:bg-[#DCEAF4] px-3 py-1.5 rounded-lg transition-colors mb-2 cursor-pointer"
               >
                 <ArrowLeft className="w-3.5 h-3.5" />
                 <Globe className="w-3.5 h-3.5" />
                 Voltar ao Site de Vagas
               </button>
             )}
-            <h3 className="text-xl font-extrabold text-slate-900">Acessar Conta</h3>
-            <p className="text-xs text-slate-500">
+            <h3 className="text-xl font-extrabold text-[#0F172A]">Acessar sua conta</h3>
+            <p className="text-xs text-[#475569]">
               Digite suas credenciais de e-mail e senha para acessar o sistema.
             </p>
           </div>
 
           {errorMsg && (
-            <div className="p-3 bg-rose-50 border border-rose-200 text-rose-700 text-xs rounded-xl font-semibold">
+            <div className="p-3 bg-[#FFF1F2] border border-[#FCA5A5] text-[#DC2626] text-xs rounded-xl font-semibold">
               {errorMsg}
             </div>
           )}
@@ -129,7 +99,7 @@ export const LoginForm: React.FC<LoginFormProps> = ({ onBackToJobs }) => {
               placeholder="gustavo.germinari@gmail.com"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              leftIcon={<Mail className="w-4 h-4" />}
+              leftIcon={<Mail className="w-4 h-4 text-[#475569]" />}
               required
             />
 
@@ -139,7 +109,7 @@ export const LoginForm: React.FC<LoginFormProps> = ({ onBackToJobs }) => {
               placeholder="••••••••"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              leftIcon={<Lock className="w-4 h-4" />}
+              leftIcon={<Lock className="w-4 h-4 text-[#475569]" />}
               required
             />
 
@@ -147,34 +117,19 @@ export const LoginForm: React.FC<LoginFormProps> = ({ onBackToJobs }) => {
               <button
                 type="button"
                 onClick={() => setIsForgotOpen(true)}
-                className="text-xs font-bold text-indigo-600 hover:text-indigo-800 cursor-pointer"
+                className="text-xs font-bold text-[#123657] hover:text-[#082747] cursor-pointer"
               >
                 Esqueceu a senha?
               </button>
             </div>
 
-            <Button type="submit" variant="primary" className="w-full" isLoading={isLoading} rightIcon={<ArrowRight className="w-4 h-4" />}>
+            <Button type="submit" variant="primary" className="w-full bg-[#123657] hover:bg-[#082747]" isLoading={isLoading} rightIcon={<ArrowRight className="w-4 h-4" />}>
               Entrar no Sistema
             </Button>
-
-            {/* DEV helper: visible only in development builds */}
-            {(import.meta as any).env?.DEV && (
-              <div className="pt-2">
-                <button
-                  type="button"
-                  onClick={handleDevBootstrapAndLogin}
-                  className="w-full bg-amber-500 hover:bg-amber-600 text-white font-bold py-2 px-4 rounded-lg"
-                >
-                  Criar contas iniciais (DEV) e entrar como MASTER
-                </button>
-                <p className="text-[11px] text-slate-400 mt-2">Apenas para uso em desenvolvimento local. Não utilize em produção.</p>
-              </div>
-            )}
-
           </form>
 
-          <div className="pt-4 border-t border-slate-100 text-center">
-            <p className="text-[11px] text-slate-400 font-medium">
+          <div className="pt-4 border-t border-[#D5DEE8] text-center">
+            <p className="text-[11px] text-[#475569] font-medium">
               Acesso seguro criptografado via Firebase Auth
             </p>
           </div>

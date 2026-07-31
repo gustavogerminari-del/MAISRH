@@ -67,6 +67,7 @@ export interface UserProfile {
   companyName?: string;
   tenantId?: string;
   tenantName?: string;
+  isMaster?: boolean;
   colaboradorId?: string;
   portalAccessStatus?: 'Sem acesso' | 'Convite enviado' | 'Ativo' | 'Bloqueado';
   mustChangePassword?: boolean;

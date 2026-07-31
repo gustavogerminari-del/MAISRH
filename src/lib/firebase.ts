@@ -1,30 +1,15 @@
-import { initializeApp, getApps, getApp } from 'firebase/app';
-import { getFirestore, doc, getDocFromServer } from 'firebase/firestore';
-import { getAuth } from 'firebase/auth';
-import { getStorage } from 'firebase/storage';
-import firebaseAppletConfig from '../../firebase-applet-config.json';
+import { doc, getDocFromServer } from 'firebase/firestore';
+import {
+  app as firebaseApp,
+  db,
+  auth,
+  storage,
+  firebaseConfig,
+} from '../services/firebaseConfig';
+
+export { firebaseApp, db, auth, storage, firebaseConfig };
 
 const metaEnv = (import.meta as any).env || {};
-
-const firebaseConfig = {
-  apiKey: firebaseAppletConfig.apiKey || metaEnv.VITE_FIREBASE_API_KEY,
-  authDomain: firebaseAppletConfig.authDomain || metaEnv.VITE_FIREBASE_AUTH_DOMAIN,
-  projectId: firebaseAppletConfig.projectId || metaEnv.VITE_FIREBASE_PROJECT_ID,
-  storageBucket: firebaseAppletConfig.storageBucket || metaEnv.VITE_FIREBASE_STORAGE_BUCKET,
-  messagingSenderId: firebaseAppletConfig.messagingSenderId || metaEnv.VITE_FIREBASE_MESSAGING_SENDER_ID,
-  appId: firebaseAppletConfig.appId || metaEnv.VITE_FIREBASE_APP_ID,
-};
-
-if (!firebaseConfig.apiKey || !firebaseConfig.projectId) {
-  console.error('🔥 [Firebase Config Error] Configuração do Firebase incompleta:', firebaseConfig);
-}
-
-export const firebaseApp = !getApps().length ? initializeApp(firebaseConfig) : getApp();
-
-// CRITICAL: Always use standard default database getFirestore(firebaseApp)
-export const db = getFirestore(firebaseApp);
-export const auth = getAuth(firebaseApp);
-export const storage = getStorage(firebaseApp);
 
 if (metaEnv.DEV) {
   console.log('🔥 [Firebase Frontend Init]', {
@@ -53,4 +38,5 @@ async function testConnection() {
   }
 }
 testConnection();
+
 

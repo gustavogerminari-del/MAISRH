@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { formatFirestoreDate } from '../../lib/firestoreUtils';
 import { 
   ShieldAlert, 
   AlertTriangle, 
@@ -182,7 +183,7 @@ export const DpAlertsPanel: React.FC<DpAlertsPanelProps> = ({
                 <div className="flex items-center gap-2 text-xs font-bold shrink-0">
                   <span className="text-slate-400 flex items-center gap-1">
                     <Clock className="w-3.5 h-3.5" />
-                    {new Date(alert.createdAt).toLocaleDateString('pt-BR')}
+                    {formatFirestoreDate(alert.createdAt)}
                   </span>
                   <span className="text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded-lg border border-indigo-200">
                     {alert.assignedTo || 'DP'}

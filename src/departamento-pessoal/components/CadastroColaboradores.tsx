@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { formatFirestoreDate } from '../../lib/firestoreUtils';
 import { 
   Users, 
   UserPlus, 
@@ -1594,7 +1595,7 @@ export const CadastroColaboradores: React.FC<CadastroColaboradoresProps> = ({
                             </div>
                             <div className="flex items-center gap-2">
                               <span className="text-[10px] text-slate-400 font-mono">
-                                {new Date(n.createdAt).toLocaleString('pt-BR')}
+                                {formatFirestoreDate(n.createdAt)}
                               </span>
                               <button
                                 onClick={() => handleDeleteInternalNote(n.id)}

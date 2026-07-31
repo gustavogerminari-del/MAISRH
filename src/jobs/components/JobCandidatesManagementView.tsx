@@ -36,6 +36,7 @@ import { CandidateDrawerPanel } from './CandidateDrawerPanel';
 import { JobTalentBankAiTab } from './JobTalentBankAiTab';
 import { Button, Card } from '../../shared';
 import { useAuth } from '../../auth';
+import { formatFirestoreDate } from '../../lib/firestoreUtils';
 
 export type JobViewTab = 'inscritos' | 'banco_ia' | 'entrevistas' | 'avaliacoes' | 'historico';
 
@@ -243,7 +244,7 @@ export const JobCandidatesManagementView: React.FC<JobCandidatesManagementViewPr
                 {job.type}
               </span>
               <span>•</span>
-              <span>Abertura: {job.createdAt}</span>
+              <span>Abertura: {formatFirestoreDate(job.createdAt || (job as any).dataCriacao)}</span>
             </div>
           </div>
 
@@ -607,7 +608,7 @@ export const JobCandidatesManagementView: React.FC<JobCandidatesManagementViewPr
                           </td>
 
                           <td className="py-3.5 px-4 text-slate-500 font-semibold">
-                            {cand.appliedDate}
+                            {formatFirestoreDate(cand.appliedDate)}
                           </td>
 
                           <td className="py-3.5 px-4">
@@ -788,7 +789,7 @@ export const JobCandidatesManagementView: React.FC<JobCandidatesManagementViewPr
               <span className="absolute -left-[31px] top-0.5 w-4 h-4 rounded-full bg-indigo-600 border-2 border-white" />
               <div className="font-extrabold text-slate-900">Vaga Criada e Publicada</div>
               <p className="text-slate-500">Abertura da requisição para {job.title} no departamento de {job.department}.</p>
-              <span className="text-[10px] text-slate-400 font-semibold">{job.createdAt}</span>
+              <span className="text-[10px] text-slate-400 font-semibold">{formatFirestoreDate(job.createdAt)}</span>
             </div>
 
             {candidates.map((cand) => (

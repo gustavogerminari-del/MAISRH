@@ -26,11 +26,11 @@ export const Button: React.FC<ButtonProps> = ({
   const baseStyles = 'inline-flex items-center justify-center font-bold rounded-xl transition-all focus:outline-none focus:ring-2 focus:ring-offset-1 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed';
 
   const variantStyles: Record<ButtonVariant, string> = {
-    primary: 'bg-indigo-600 hover:bg-indigo-700 text-white focus:ring-indigo-500 shadow-xs',
-    secondary: 'bg-slate-100 hover:bg-slate-200 text-slate-800 focus:ring-slate-400',
-    outline: 'border border-slate-300 hover:bg-slate-50 text-slate-700 focus:ring-slate-400',
-    danger: 'bg-rose-600 hover:bg-rose-700 text-white focus:ring-rose-500 shadow-xs',
-    ghost: 'hover:bg-slate-100 text-slate-600 hover:text-slate-900 focus:ring-slate-300',
+    primary: 'bg-[#123657] hover:bg-[#082747] text-white focus:ring-[#1D4F7A] shadow-xs',
+    secondary: 'bg-[#EAF2F8] hover:bg-[#DCEAF4] text-[#123657] focus:ring-[#1D4F7A]',
+    outline: 'border border-[#D5DEE8] bg-white hover:bg-[#EAF2F8] text-[#0F172A] focus:ring-[#1D4F7A]',
+    danger: 'bg-[#DC2626] hover:bg-[#B91C1C] text-white focus:ring-rose-500 shadow-xs',
+    ghost: 'hover:bg-[#EAF2F8] text-[#475569] hover:text-[#123657] focus:ring-[#1D4F7A]',
   };
 
   const sizeStyles: Record<ButtonSize, string> = {

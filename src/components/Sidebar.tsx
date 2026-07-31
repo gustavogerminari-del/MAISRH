@@ -229,7 +229,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
       {/* Main Sidebar Element */}
       <aside 
-        className={`fixed lg:static top-0 bottom-0 left-0 z-50 bg-white border-r border-slate-200 flex flex-col justify-between shrink-0 select-none transition-all duration-300 ${
+        className={`fixed lg:static top-0 bottom-0 left-0 z-50 bg-[#123657] border-r border-[#082747] text-white flex flex-col justify-between shrink-0 select-none transition-all duration-300 ${
           isOpenMobile 
             ? 'translate-x-0 w-72 shadow-2xl' 
             : `-translate-x-full lg:translate-x-0 ${isCollapsed ? 'lg:w-16' : 'lg:w-60'}`
@@ -238,17 +238,17 @@ export const Sidebar: React.FC<SidebarProps> = ({
         <div className="p-3 space-y-4 overflow-y-auto max-h-[calc(100vh-50px)] scrollbar-thin">
           
           {/* Header & Logo */}
-          <div className={`flex items-center pb-2 border-b border-slate-100 ${isCollapsed && !isOpenMobile ? 'justify-center' : 'justify-between px-1'}`}>
+          <div className={`flex items-center pb-3 border-b border-white/10 ${isCollapsed && !isOpenMobile ? 'justify-center' : 'justify-between px-1'}`}>
             {(!isCollapsed || isOpenMobile) && (
               <div className="flex items-center gap-2.5">
-                <div className="w-8 h-8 rounded-xl bg-indigo-600 text-white font-black flex items-center justify-center text-sm shadow-xs">
-                  M
+                <div className="w-8 h-8 rounded-xl bg-white/10 text-white font-black flex items-center justify-center text-xs border border-white/20 tracking-wider shadow-inner">
+                  RL
                 </div>
                 <div>
-                  <span className="text-base font-black text-slate-900 tracking-tight">
-                    MAIS<span className="text-indigo-600">RH</span>
+                  <span className="text-sm font-black text-white tracking-tight block leading-tight">
+                    RL CONNECT
                   </span>
-                  <p className="text-[10px] text-slate-400 font-semibold -mt-1">SaaS Corporativo</p>
+                  <p className="text-[10px] text-white/80 font-medium -mt-0.5">R Lourenço RH</p>
                 </div>
               </div>
             )}
@@ -256,7 +256,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
             {/* Mobile close button */}
             <button
               onClick={onCloseMobile}
-              className="lg:hidden p-1.5 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-lg transition-colors cursor-pointer"
+              className="lg:hidden p-1.5 text-white/70 hover:text-white hover:bg-white/10 rounded-lg transition-colors cursor-pointer"
             >
               <X className="w-5 h-5" />
             </button>
@@ -265,7 +265,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
             <button
               onClick={() => setIsCollapsed(!isCollapsed)}
               title={isCollapsed ? "Expandir menu" : "Recolher menu"}
-              className="hidden lg:flex p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors cursor-pointer"
+              className="hidden lg:flex p-1.5 rounded-lg text-white/70 hover:text-white hover:bg-white/10 transition-colors cursor-pointer"
             >
               {isCollapsed ? <ChevronRight className="w-4 h-4" /> : <ChevronLeft className="w-4 h-4" />}
             </button>
@@ -276,11 +276,11 @@ export const Sidebar: React.FC<SidebarProps> = ({
             {navGroups.map((group, groupIdx) => (
               <div key={group.id} className="space-y-1">
                 {(!isCollapsed || isOpenMobile) ? (
-                  <span className="px-3 text-[10px] font-extrabold text-slate-400 uppercase tracking-wider block pt-1 pb-1">
+                  <span className="px-3 text-[10px] font-extrabold text-white/60 uppercase tracking-wider block pt-1 pb-1">
                     {group.title}
                   </span>
                 ) : (
-                  groupIdx > 0 && <div className="border-t border-slate-100 my-2" />
+                  groupIdx > 0 && <div className="border-t border-white/10 my-2" />
                 )}
 
                 {group.items.map(item => {
@@ -298,12 +298,12 @@ export const Sidebar: React.FC<SidebarProps> = ({
                           : 'px-3 py-2 gap-3 text-left justify-between'
                       } ${
                         active
-                          ? 'bg-indigo-600 text-white shadow-xs font-extrabold'
-                          : 'text-slate-700 hover:bg-slate-100 hover:text-slate-900'
+                          ? 'bg-[#1D4F7A] text-white shadow-xs font-bold border border-white/10'
+                          : 'text-white/90 hover:bg-white/10 hover:text-white'
                       }`}
                     >
                       <div className="flex items-center gap-3 min-w-0">
-                        <Icon className={`w-4 h-4 shrink-0 ${active ? 'text-white' : 'text-slate-500'}`} />
+                        <Icon className={`w-4 h-4 shrink-0 ${active ? 'text-white' : 'text-[#EAF2F8]'}`} />
                         {(!isCollapsed || isOpenMobile) && (
                           <span className="truncate">{item.label}</span>
                         )}
@@ -311,7 +311,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
                       {(!isCollapsed || isOpenMobile) && item.badge !== undefined && (
                         <span className={`px-1.5 py-0.2 text-[10px] rounded-full font-bold shrink-0 ${
-                          active ? 'bg-indigo-700 text-white' : 'bg-slate-100 text-slate-600'
+                          active ? 'bg-[#082747] text-white' : 'bg-white/15 text-white'
                         }`}>
                           {item.badge}
                         </span>
@@ -323,7 +323,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
             ))}
 
             {/* Portal de Vagas Público */}
-            <div className="pt-2 border-t border-slate-100">
+            <div className="pt-2 border-t border-white/10">
               <button
                 onClick={() => handleSelectTab('site-vagas')}
                 title={isCollapsed && !isOpenMobile ? "Portal de Vagas" : undefined}
@@ -333,11 +333,11 @@ export const Sidebar: React.FC<SidebarProps> = ({
                     : 'px-3 py-2 gap-3 text-left'
                 } ${
                   activeTab === 'site-vagas'
-                    ? 'bg-indigo-600 text-white shadow-xs font-extrabold'
-                    : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
+                    ? 'bg-[#1D4F7A] text-white shadow-xs font-bold border border-white/10'
+                    : 'text-white/90 hover:bg-white/10 hover:text-white'
                 }`}
               >
-                <Globe className={`w-4 h-4 shrink-0 ${activeTab === 'site-vagas' ? 'text-white' : 'text-slate-500'}`} />
+                <Globe className={`w-4 h-4 shrink-0 ${activeTab === 'site-vagas' ? 'text-white' : 'text-[#EAF2F8]'}`} />
                 {(!isCollapsed || isOpenMobile) && <span>Portal de Vagas</span>}
               </button>
             </div>
@@ -346,8 +346,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
         {/* Footer info */}
         {(!isCollapsed || isOpenMobile) && (
-          <div className="p-3 border-t border-slate-100 bg-slate-50/80 text-center">
-            <p className="text-[10px] text-slate-400 font-semibold">MAIS RH © 2026</p>
+          <div className="p-3 border-t border-white/10 bg-[#082747]/60 text-center">
+            <p className="text-[10px] text-white/70 font-semibold">RL Connect © 2026</p>
           </div>
         )}
       </aside>

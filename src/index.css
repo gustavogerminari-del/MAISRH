@@ -1,1 +1,61 @@
 @import "tailwindcss";
+
+:root {
+  --primary: #123657;
+  --primary-dark: #082747;
+  --primary-light: #1D4F7A;
+  --primary-support: #EAF2F8;
+  --background: #F7F9FC;
+  --surface: #FFFFFF;
+  --text-primary: #0F172A;
+  --text-secondary: #475569;
+  --border: #D5DEE8;
+  --success: #20D9A0;
+  --success-dark: #0F9F75;
+  --danger: #DC2626;
+  --danger-bg: #FFF1F2;
+}
+
+@layer base {
+  body {
+    background-color: #F7F9FC;
+    color: #0F172A;
+    font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
+  }
+
+  input,
+  textarea,
+  select {
+    color: #0F172A !important;
+    background-color: #FFFFFF !important;
+    border: 1px solid #CBD5E1;
+  }
+
+  input::placeholder,
+  textarea::placeholder {
+    color: #64748B !important;
+    opacity: 1;
+  }
+
+  input:focus,
+  textarea:focus,
+  select:focus {
+    border-color: #1D4F7A !important;
+    box-shadow: 0 0 0 3px rgba(29, 79, 122, 0.15) !important;
+    outline: none !important;
+  }
+
+  input:-webkit-autofill,
+  input:-webkit-autofill:hover,
+  input:-webkit-autofill:focus,
+  textarea:-webkit-autofill,
+  textarea:-webkit-autofill:hover,
+  textarea:-webkit-autofill:focus,
+  select:-webkit-autofill,
+  select:-webkit-autofill:hover,
+  select:-webkit-autofill:focus {
+    -webkit-text-fill-color: #0F172A !important;
+    box-shadow: 0 0 0px 1000px #FFFFFF inset !important;
+    transition: background-color 9999s ease-out 0s;
+  }
+}

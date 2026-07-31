@@ -4,6 +4,7 @@ import { MasterModulesByPlanView } from './MasterModulesByPlanView';
 import { auth } from '../../lib/firebase';
 import { onAuthStateChanged } from 'firebase/auth';
 import { validarAcessoMaster, MasterValidationResult } from '../../auth/masterValidation';
+import { useAuth } from '../../auth';
 import { 
   Crown, 
   Building2, 
@@ -90,7 +91,7 @@ import { MasterAnnouncementsModal } from './MasterAnnouncementsModal';
 import { MasterBackupModal } from './MasterBackupModal';
 import { MasterEditPlanModal } from './MasterEditPlanModal';
 import { MasterCreateModuleModal } from './MasterCreateModuleModal';
-import { getTenants, saveTenant, toggleTenantStatus, deleteTenant } from '../masterTenantsStore';
+import { getTenants, saveTenant, toggleTenantStatus, deleteTenant, syncTenantsFromFirestore } from '../masterTenantsStore';
 import { getPlatformModules, savePlatformModule, savePlatformModulesToStorage, togglePlatformModuleStatus, getModuleAuditLogs, syncPlatformModulesFromFirestore } from '../masterModulesStore';
 
 export type MasterNavigationSection = 
@@ -106,6 +107,7 @@ export type MasterNavigationSection =
   | 'seguranca';
 
 export const MasterAdminView: React.FC = () => {
+  const { logout } = useAuth();
   // Master Auth Verification State
   const [isValidating, setIsValidating] = useState(true);
   const [validationResult, setValidationResult] = useState<MasterValidationResult | null>(null);
@@ -122,6 +124,11 @@ export const MasterAdminView: React.FC = () => {
     const unsub = onAuthStateChanged(auth, () => {
       runMasterCheck();
     });
+    syncTenantsFromFirestore().then(synced => {
+      if (synced && synced.length > 0) {
+        setTenants(synced);
+      }
+    });
     return () => unsub();
   }, []);
 
@@ -130,6 +137,8 @@ export const MasterAdminView: React.FC = () => {
 
   // Core Data States
   const [tenants, setTenants] = useState<ClientTenant[]>(() => getTenants());
+  const [tenantToDelete, setTenantToDelete] = useState<ClientTenant | null>(null);
+  const [isDeletingTenant, setIsDeletingTenant] = useState(false);
   const [announcements, setAnnouncements] = useState<SystemAnnouncement[]>(MOCK_ANNOUNCEMENTS);
   const [backups, setBackups] = useState<BackupRecord[]>(MOCK_BACKUPS);
   const [plans, setPlans] = useState<SaaSPlan[]>(MOCK_SAAS_PLANS);
@@ -201,9 +210,23 @@ export const MasterAdminView: React.FC = () => {
   };
 
   const handleDeleteTenant = (tenantId: string) => {
-    if (confirm('Tem certeza que deseja excluir esta empresa do sistema? Essa ação é irreversível.')) {
-      const updated = deleteTenant(tenantId);
+    const target = tenants.find(t => t.id === tenantId);
+    if (target) {
+      setTenantToDelete(target);
+    }
+  };
+
+  const handleConfirmDeleteTenant = async () => {
+    if (!tenantToDelete) return;
+    setIsDeletingTenant(true);
+    try {
+      const updated = await deleteTenant(tenantToDelete.id);
       setTenants(updated);
+      setTenantToDelete(null);
+    } catch (err) {
+      console.error('Erro ao excluir empresa:', err);
+    } finally {
+      setIsDeletingTenant(false);
     }
   };
 
@@ -284,7 +307,7 @@ export const MasterAdminView: React.FC = () => {
     );
   }
 
-  if (!auth.currentUser || !validationResult?.autorizado) {
+  if (!validationResult?.autorizado) {
     return (
       <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col items-center justify-center p-6 -m-4 sm:-m-6 lg:-m-8">
         <div className="max-w-md w-full bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-2xl space-y-4 text-center">
@@ -294,26 +317,27 @@ export const MasterAdminView: React.FC = () => {
           <div>
             <h2 className="text-lg font-extrabold text-white">ACESSO MASTER RESTRITO</h2>
             <p className="text-xs text-slate-400 mt-1">
-              O acesso a este painel exige autenticação real no Firebase Auth e perfil de nível MASTER em <code className="text-amber-300">usuarios/{'{uid}'}</code>.
+              O acesso a este painel exige autenticação no Firebase Auth e perfil de nível MASTER.
             </p>
           </div>
 
           <div className="bg-slate-950 border border-slate-800 rounded-xl p-3 text-left text-xs font-mono space-y-1 text-slate-300">
-            <p><span className="text-slate-500">Firebase User:</span> {auth.currentUser ? auth.currentUser.email : 'Nulo (Não autenticado)'}</p>
-            <p><span className="text-slate-500">UID:</span> {auth.currentUser?.uid || 'N/A'}</p>
+            <p><span className="text-slate-500">Firebase User:</span> {auth.currentUser ? auth.currentUser.email || 'Autenticado' : 'Nulo (Não autenticado)'}</p>
+            <p><span className="text-slate-500">UID:</span> {auth.currentUser?.uid || validationResult?.uid || 'N/A'}</p>
             <p><span className="text-slate-500">Motivo:</span> {validationResult?.motivo || 'firebase-user-null'}</p>
             <p><span className="text-slate-500">Role no Firestore:</span> {validationResult?.role || 'N/A'}</p>
           </div>
 
           <button
             onClick={() => {
+              logout();
               window.location.hash = '#login';
               window.location.reload();
             }}
             className="w-full py-2.5 px-4 bg-amber-500 hover:bg-amber-400 text-slate-950 text-xs font-bold rounded-xl transition-all flex items-center justify-center gap-2 cursor-pointer font-sans"
           >
             <LogIn className="w-4 h-4" />
-            <span>Efetuar Login com Firebase Auth</span>
+            <span>Efetuar Login com Credenciais Reais</span>
           </button>
         </div>
       </div>
@@ -1614,6 +1638,61 @@ export const MasterAdminView: React.FC = () => {
           onSave={handleSaveTenant}
           onDelete={handleDeleteTenant}
         />
+      )}
+
+      {/* CUSTOM DELETE CONFIRMATION MODAL */}
+      {tenantToDelete && (
+        <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-in fade-in duration-200">
+          <div className="bg-slate-900 border border-slate-800 w-full max-w-md rounded-2xl shadow-2xl p-6 space-y-4 text-xs">
+            <div className="flex items-center gap-3">
+              <div className="p-3 bg-rose-500/10 border border-rose-500/20 rounded-xl text-rose-400">
+                <Trash2 className="w-6 h-6" />
+              </div>
+              <div>
+                <h3 className="text-base font-extrabold text-white">Excluir Empresa</h3>
+                <p className="text-slate-400 text-[11px]">Esta operação removerá os dados do cliente.</p>
+              </div>
+            </div>
+
+            <div className="p-3.5 rounded-xl bg-slate-950 border border-slate-800 space-y-1">
+              <p className="font-bold text-white text-sm">{tenantToDelete.companyName}</p>
+              <p className="text-slate-400 text-[11px]">CNPJ: {tenantToDelete.cnpj} • Gestor: {tenantToDelete.ownerName}</p>
+            </div>
+
+            <p className="text-slate-300 leading-relaxed">
+              Tem certeza que deseja excluir esta empresa do sistema? Todos os módulos e acessos configurados serão revogados permanentemente.
+            </p>
+
+            <div className="flex items-center justify-end gap-2 pt-3 border-t border-slate-800">
+              <button
+                type="button"
+                onClick={() => setTenantToDelete(null)}
+                disabled={isDeletingTenant}
+                className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold rounded-xl cursor-pointer disabled:opacity-50"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmDeleteTenant}
+                disabled={isDeletingTenant}
+                className="px-4 py-2 bg-rose-600 hover:bg-rose-500 text-white font-extrabold rounded-xl shadow-md transition-all flex items-center gap-2 cursor-pointer disabled:opacity-50"
+              >
+                {isDeletingTenant ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    <span>Excluindo...</span>
+                  </>
+                ) : (
+                  <>
+                    <Trash2 className="w-4 h-4" />
+                    <span>Sim, Excluir Empresa</span>
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
 
       {showAnnouncementsModal && (

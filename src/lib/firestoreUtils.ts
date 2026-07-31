@@ -52,6 +52,36 @@ export function handleFirestoreError(error: unknown, operationType: OperationTyp
 }
 
 /**
+ * Safely formats dates coming from Firestore (Timestamp, Date, seconds object, string)
+ */
+export function formatFirestoreDate(value: any): string {
+  if (!value) return '';
+
+  if (typeof value === 'string') {
+    const date = new Date(value);
+    return Number.isNaN(date.getTime())
+      ? value
+      : date.toLocaleDateString('pt-BR');
+  }
+
+  if (value instanceof Date) {
+    return value.toLocaleDateString('pt-BR');
+  }
+
+  if (typeof value?.toDate === 'function') {
+    return value.toDate().toLocaleDateString('pt-BR');
+  }
+
+  if (typeof value?.seconds === 'number') {
+    return new Date(
+      value.seconds * 1000
+    ).toLocaleDateString('pt-BR');
+  }
+
+  return '';
+}
+
+/**
  * Recursively cleans any object or array before writing to Firestore.
  * - Removes undefined keys from objects
  * - Converts undefined values in arrays or top-level to null/filtered

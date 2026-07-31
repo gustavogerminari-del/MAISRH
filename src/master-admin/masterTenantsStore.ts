@@ -17,7 +17,7 @@ export function getTenants(): ClientTenant[] {
     const saved = localStorage.getItem(STORAGE_KEY);
     if (saved) {
       const parsed = JSON.parse(saved);
-      if (Array.isArray(parsed) && parsed.length > 0) {
+      if (Array.isArray(parsed)) {
         return parsed;
       }
     }
@@ -25,13 +25,7 @@ export function getTenants(): ClientTenant[] {
     console.error('Erro ao carregar empresas do localStorage:', err);
   }
 
-  // Fallback and seed
-  try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(MOCK_TENANTS));
-  } catch (err) {
-    console.error('Erro ao inicializar empresas no localStorage:', err);
-  }
-  return MOCK_TENANTS;
+  return [];
 }
 
 /**
@@ -154,14 +148,18 @@ export function toggleTenantStatus(tenantId: string, currentStatus: string): Cli
 }
 
 /**
- * Removes a tenant by ID.
+ * Removes a tenant by ID and syncs with Firestore.
  */
-export function deleteTenant(tenantId: string): ClientTenant[] {
+export async function deleteTenant(tenantId: string): Promise<ClientTenant[]> {
   const current = getTenants();
   const updated = current.filter(t => t.id !== tenantId);
   saveTenantsToStorage(updated);
 
-  deleteEmpresaFirestore(tenantId).catch(console.error);
+  try {
+    await deleteEmpresaFirestore(tenantId);
+  } catch (err) {
+    console.error('Erro ao excluir empresa do Firestore:', err);
+  }
 
   return updated;
 }
