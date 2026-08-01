@@ -105,6 +105,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setActiveModules({});
     localStorage.removeItem(STORAGE_KEY_USER);
     localStorage.removeItem(STORAGE_KEY_TOKEN);
+    localStorage.removeItem('mais_rh_master_tenants');
+    localStorage.removeItem('mais_rh_platform_modules');
+    localStorage.removeItem('mais_rh_subscriptions');
   };
 
   const saveAuthData = (userProfile: UserProfile, token: SessionToken) => {

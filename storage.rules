@@ -14,9 +14,13 @@ service firebase.storage {
       return request.resource.size <= 10 * 1024 * 1024;
     }
 
+    function isUnder20MB() {
+      return request.resource.size <= 20 * 1024 * 1024;
+    }
+
     function isSafeFileType() {
       return request.resource.contentType.matches('image/(jpeg|png|webp|gif|svg\\+xml)')
-          || request.resource.contentType.matches('application/(pdf|msword|vnd\\.openxmlformats-officedocument\\.wordprocessingml\\.document)');
+          || request.resource.contentType.matches('application/(pdf|msword|vnd\\.openxmlformats-officedocument\\.wordprocessingml\\.document|zip|x-zip-compressed)');
     }
 
     function isSafeImage() {
@@ -28,7 +32,7 @@ service firebase.storage {
     }
 
     // =========================================================================
-    // PUBLIC ASSETS (e.g. Job Logos & Marketing Images)
+    // PUBLIC ASSETS (e.g. Company Logos & Public Job Images)
     // =========================================================================
 
     match /public/{allPaths=**} {
@@ -37,19 +41,46 @@ service firebase.storage {
     }
 
     // =========================================================================
-    // CANDIDATE RESUMES & APPLICATIONS (Upload Allowed, Read Restricted)
+    // PUBLIC JOB APPLICATION RESUMES (Public Uploads for Applicants)
+    // Path: public_applications/{jobId}/{fileName}
     // =========================================================================
 
-    match /companies/{companyId}/candidates/{candidateId}/{allPaths=**} {
-      allow read: if isSignedIn();
-      allow create: if isUnder10MB() && isNotDangerousExtension(request.resource.name) && isSafeFileType();
+    match /public_applications/{jobId}/{fileName} {
+      allow read: if isSignedIn(); // Only authenticated users (HR/Company) can view resumes
+      allow create: if isUnder10MB() && isNotDangerousExtension(fileName) && isSafeFileType(); // Public upload allowed
       allow update, delete: if isSignedIn();
     }
 
-    match /candidates/{candidateId}/{allPaths=**} {
+    // =========================================================================
+    // COMPANY TENANT ISOLATED STORAGE
+    // Path: companies/{companyId}/...
+    // =========================================================================
+
+    match /companies/{companyId}/candidates/{candidateId}/resume/{fileName} {
       allow read: if isSignedIn();
-      allow create: if isUnder10MB() && isNotDangerousExtension(request.resource.name) && isSafeFileType();
+      allow create: if isUnder10MB() && isNotDangerousExtension(fileName) && isSafeFileType();
       allow update, delete: if isSignedIn();
+    }
+
+    match /companies/{companyId}/documents/{documentId}/{fileName} {
+      allow read, write: if isSignedIn() && isUnder20MB() && isNotDangerousExtension(fileName) && isSafeFileType();
+    }
+
+    match /companies/{companyId}/employees/{employeeId}/{fileName} {
+      allow read, write: if isSignedIn() && isUnder20MB() && isNotDangerousExtension(fileName) && isSafeFileType();
+    }
+
+    match /companies/{companyId}/interviews/{interviewId}/{fileName} {
+      allow read, write: if isSignedIn() && isUnder20MB() && isNotDangerousExtension(fileName) && isSafeFileType();
+    }
+
+    match /companies/{companyId}/{allPaths=**} {
+      allow read, write: if isSignedIn() && isUnder20MB() && isNotDangerousExtension(request.resource.name) && isSafeFileType();
+    }
+
+    // Default tenant catch-all for backward compatibility
+    match /candidates/{candidateId}/{allPaths=**} {
+      allow read, write: if isSignedIn() && isUnder10MB() && isNotDangerousExtension(request.resource.name) && isSafeFileType();
     }
 
     match /resumes/{fileName} {
@@ -59,16 +90,7 @@ service firebase.storage {
     }
 
     // =========================================================================
-    // PRIVATE COMPANY DOCUMENTS & EMPLOYEE RECORDS
-    // =========================================================================
-
-    match /companies/{companyId}/{allPaths=**} {
-      allow read: if isSignedIn();
-      allow write: if isSignedIn() && isUnder10MB() && isNotDangerousExtension(request.resource.name) && isSafeFileType();
-    }
-
-    // =========================================================================
-    // STRICT CATCH-ALL (DENY ALL UNMATCHED)
+    // DEFAULT DENY ALL UNMATCHED PATHS
     // =========================================================================
 
     match /{allPaths=**} {

@@ -13,7 +13,6 @@ import {
 import { db, auth } from '../lib/firebase';
 import { sanitizeFirestoreData } from '../lib/firestoreUtils';
 import { AuditLogEntry, AuditActionType, AuditSeverity } from '../audit-logs/types';
-import { MOCK_AUDIT_LOGS } from '../audit-logs/mockData';
 
 const COLLECTION_NAME = 'auditLogs';
 
