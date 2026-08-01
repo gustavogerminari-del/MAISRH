@@ -49,8 +49,8 @@ service cloud.firestore {
       return signedIn() && (
         isMaster() ||
         (profileExists() && (
-          profile().role in ['ADMIN', 'admin', 'ADMINISTRADOR', 'administrador', 'Administrador', 'EMPRESA'] ||
-          profile().tipoUsuario == 'EMPRESA'
+          profile().role in ['ADMIN', 'admin', 'ADMINISTRADOR', 'administrador', 'Administrador', 'EMPRESA', 'ADMIN_EMPRESA', 'ADMINISTRADOR_EMPRESA', 'EMPRESA_ADMIN'] ||
+          profile().tipoUsuario in ['EMPRESA', 'ADMIN_EMPRESA', 'ADMINISTRADOR_EMPRESA', 'EMPRESA_ADMIN', 'ADMIN']
         ))
       );
     }

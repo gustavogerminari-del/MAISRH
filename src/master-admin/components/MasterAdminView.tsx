@@ -91,7 +91,7 @@ import { MasterAnnouncementsModal } from './MasterAnnouncementsModal';
 import { MasterBackupModal } from './MasterBackupModal';
 import { MasterEditPlanModal } from './MasterEditPlanModal';
 import { MasterCreateModuleModal } from './MasterCreateModuleModal';
-import { getTenants, saveTenant, toggleTenantStatus, deleteTenant, syncTenantsFromFirestore } from '../masterTenantsStore';
+import { getTenants, saveTenant, saveTenantAsync, toggleTenantStatus, deleteTenant, syncTenantsFromFirestore } from '../masterTenantsStore';
 import { getPlatformModules, savePlatformModule, savePlatformModulesToStorage, togglePlatformModuleStatus, getModuleAuditLogs, syncPlatformModulesFromFirestore } from '../masterModulesStore';
 
 export type MasterNavigationSection = 
@@ -197,8 +197,8 @@ export const MasterAdminView: React.FC = () => {
     setSelectedModuleForEdit(null);
   };
 
-  const handleSaveTenant = (tenantData: Partial<ClientTenant>) => {
-    const updated = saveTenant(tenantData);
+  const handleSaveTenant = async (tenantData: Partial<ClientTenant>) => {
+    const updated = await saveTenantAsync(tenantData);
     setTenants(updated);
     setSelectedTenantForEdit(null);
     setShowCreateTenantModal(false);

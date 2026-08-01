@@ -21,7 +21,7 @@ export const PermissionProvider: React.FC<{ children: React.ReactNode }> = ({ ch
 
   const userRoleRaw = user?.tipoUsuario === 'MASTER' || user?.role === 'Super Administrador' 
     ? 'MASTER' 
-    : user?.role || 'COLABORADOR';
+    : user?.role || user?.tipoUsuario || 'COLABORADOR';
 
   const role = PermissionService.normalizeRole(userRoleRaw);
   const permissions = PermissionService.getPermissionsForRole(role);

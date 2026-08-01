@@ -119,9 +119,16 @@ export const ROLE_PERMISSIONS_MAP: Record<SystemRole, string[]> = {
 export class PermissionService {
   static normalizeRole(roleString?: string): SystemRole {
     if (!roleString) return 'COLABORADOR';
-    const upper = roleString.toUpperCase().trim();
-    if (upper === 'MASTER' || upper === 'SUPER_ADMIN') return 'MASTER';
-    if (upper === 'EMPRESA_ADMIN' || upper === 'ADMIN_EMPRESA' || upper === 'ADMIN') return 'EMPRESA_ADMIN';
+    const upper = String(roleString).trim().toUpperCase().replace(/\s+/g, '_');
+    if (upper === 'MASTER' || upper === 'SUPER_ADMIN' || upper === 'SUPER_ADMINISTRADOR') return 'MASTER';
+    if (
+      upper === 'EMPRESA_ADMIN' ||
+      upper === 'ADMIN_EMPRESA' ||
+      upper === 'ADMIN' ||
+      upper === 'ADMINISTRADOR' ||
+      upper === 'ADMINISTRADOR_EMPRESA' ||
+      upper === 'EMPRESA'
+    ) return 'EMPRESA_ADMIN';
     if (upper === 'RH' || upper === 'RECURSOS_HUMANOS' || upper === 'RECRUTADOR') return 'RH';
     if (upper === 'GESTOR' || upper === 'GERENTE' || upper === 'LIDER') return 'GESTOR';
     return 'COLABORADOR';

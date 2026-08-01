@@ -1,25 +1,27 @@
 /**
- * Módulo AUTENTICAÇÃO E ACESSO - Provedor de Contexto de Autenticação e Sessão com Firebase
+ * Módulo AUTENTICAÇÃO E ACESSO
+ * Contexto de autenticação real com Firebase Auth e módulos por empresa no Firestore.
  */
 
-import React, { createContext, useContext, useState, useEffect } from 'react';
-import { 
-  signInWithEmailAndPassword, 
-  createUserWithEmailAndPassword,
+import React, { createContext, useContext, useEffect, useState } from 'react';
+import {
   onAuthStateChanged,
+  sendPasswordResetEmail,
+  signInWithEmailAndPassword,
   signOut,
-  sendPasswordResetEmail
 } from 'firebase/auth';
-import { UserProfile, RoleProfile, ScreenRouteKey, SystemActionKey, SessionToken } from '../types/auth';
-import { MASTER_USER } from '../constants/permissions';
-import { logger, logCentralizedError } from '../../core';
-import { 
-  saveUsuarioFirestore, 
-  fetchUsuarioFirestore,
+import {
+  RoleProfile,
+  ScreenRouteKey,
+  SessionToken,
+  SystemActionKey,
+  UserProfile,
+} from '../types/auth';
+import { logger } from '../../core';
+import {
   fetchEmpresaModulosFirestore,
-  seedFirestoreIfEmpty 
+  fetchUsuarioFirestore,
 } from '../../lib/firestoreServices';
-import { getTenants } from '../../master-admin/masterTenantsStore';
 import { auth } from '../../lib/firebase';
 
 export interface AuthContextType {
@@ -29,7 +31,7 @@ export interface AuthContextType {
   isLoading: boolean;
   activeModules: Record<string, boolean>;
   login: (email: string, password?: string) => Promise<boolean>;
-  logout: () => void;
+  logout: () => Promise<void>;
   switchDemoProfile: (role: RoleProfile) => void;
   requestPasswordReset: (email: string) => Promise<boolean>;
   hasScreenAccess: (screenKey: ScreenRouteKey) => boolean;
@@ -43,45 +45,143 @@ const STORAGE_KEY_TOKEN = 'MAIS_RH_AUTH_TOKEN';
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
+const normalizeRole = (value?: string | null): string =>
+  String(value || '')
+    .trim()
+    .toUpperCase()
+    .replace(/\s+/g, '_');
+
+const isMasterProfile = (profile: Partial<UserProfile> | null | undefined): boolean => {
+  const role = normalizeRole(profile?.role);
+  const tipoUsuario = normalizeRole(profile?.tipoUsuario);
+
+  return (
+    role === 'MASTER' ||
+    role === 'SUPER_ADMIN' ||
+    role === 'SUPER_ADMINISTRADOR' ||
+    role === 'SUPER_ADMINISTRADOR' ||
+    tipoUsuario === 'MASTER'
+  );
+};
+
+const createSessionToken = (userId: string): SessionToken => {
+  const now = new Date();
+  const expires = new Date(now.getTime() + 24 * 60 * 60 * 1000);
+
+  return {
+    token: `firebase_session_${userId}_${Date.now()}`,
+    createdAt: now.toISOString(),
+    expiresAt: expires.toISOString(),
+  };
+};
+
+const normalizeModules = (raw: unknown): Record<string, boolean> => {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return {};
+
+  const source = raw as Record<string, unknown>;
+  const possibleMap =
+    (source.modules && typeof source.modules === 'object' ? source.modules : null) ||
+    (source.modulos && typeof source.modulos === 'object' ? source.modulos : null) ||
+    source;
+
+  return Object.entries(possibleMap as Record<string, unknown>).reduce<Record<string, boolean>>(
+    (acc, [key, value]) => {
+      if (typeof value === 'boolean') acc[key] = value;
+      return acc;
+    },
+    {},
+  );
+};
+
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [user, setUser] = useState<UserProfile | null>(() => {
-    try {
-      const saved = localStorage.getItem(STORAGE_KEY_USER);
-      return saved ? JSON.parse(saved) : null;
-    } catch {
-      return null;
-    }
-  });
-  const [sessionToken, setSessionToken] = useState<SessionToken | null>(() => {
-    try {
-      const saved = localStorage.getItem(STORAGE_KEY_TOKEN);
-      return saved ? JSON.parse(saved) : null;
-    } catch {
-      return null;
-    }
-  });
-  const [isLoading, setIsLoading] = useState<boolean>(true);
-  const [activeModules, setActiveModules] = useState<Record<string, boolean>>({
-    recrutamento: true,
-    vagas: true,
-    bancoTalentos: true,
-    entrevistas: true,
-  });
+  const [user, setUser] = useState<UserProfile | null>(null);
+  const [sessionToken, setSessionToken] = useState<SessionToken | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [activeModules, setActiveModules] = useState<Record<string, boolean>>({});
 
-  // Trigger seeding of Firestore collections on load
-  useEffect(() => {
-    seedFirestoreIfEmpty().catch(console.error);
-  }, []);
+  const clearAuthData = () => {
+    setUser(null);
+    setSessionToken(null);
+    setActiveModules({});
+    localStorage.removeItem(STORAGE_KEY_USER);
+    localStorage.removeItem(STORAGE_KEY_TOKEN);
+  };
 
-  // Fetch company modules when user changes or companyId changes
-  const refreshCompanyModules = async () => {
+  const saveAuthData = (userProfile: UserProfile, token: SessionToken) => {
+    setUser(userProfile);
+    setSessionToken(token);
+    localStorage.setItem(STORAGE_KEY_USER, JSON.stringify(userProfile));
+    localStorage.setItem(STORAGE_KEY_TOKEN, JSON.stringify(token));
+  };
+
+  const buildUserProfile = async (
+    firebaseUser: NonNullable<typeof auth.currentUser>,
+  ): Promise<UserProfile> => {
+    const profileDoc: any = await fetchUsuarioFirestore(firebaseUser.uid);
+
+    if (!profileDoc) {
+      throw new Error('Perfil do usuário não encontrado no Firestore.');
+    }
+
+    if (
+      profileDoc.ativo === false ||
+      normalizeRole(profileDoc.status) === 'INATIVO' ||
+      normalizeRole(profileDoc.status) === 'BLOQUEADO'
+    ) {
+      throw new Error('Esta conta foi desativada pelo administrador.');
+    }
+
+    const role = profileDoc.role || profileDoc.tipoUsuario || '';
+    const tipoUsuario = profileDoc.tipoUsuario || profileDoc.role || '';
+    const master = isMasterProfile({ role, tipoUsuario } as Partial<UserProfile>);
+
+    if (master) {
+      return {
+        id: firebaseUser.uid,
+        name: profileDoc.nome || firebaseUser.displayName || 'Administrador Master',
+        email: firebaseUser.email || profileDoc.email || '',
+        role: 'Super Administrador',
+        tipoUsuario: 'MASTER',
+        department: profileDoc.departamento || '',
+        avatar: firebaseUser.photoURL || '',
+        empresaId: profileDoc.empresaId || profileDoc.companyId || null,
+        companyId: profileDoc.companyId || profileDoc.empresaId || null,
+        companyName: profileDoc.companyName || profileDoc.empresaNome || '',
+      } as UserProfile;
+    }
+
+    const resolvedCompanyId =
+      profileDoc.empresaId || profileDoc.companyId || profileDoc.tenantId || null;
+
+    if (!resolvedCompanyId) {
+      throw new Error('Usuário sem empresa vinculada no Firestore.');
+    }
+
+    return {
+      id: firebaseUser.uid,
+      name:
+        profileDoc.nome ||
+        firebaseUser.displayName ||
+        firebaseUser.email?.split('@')[0] ||
+        'Usuário',
+      email: firebaseUser.email || profileDoc.email || '',
+      role,
+      tipoUsuario,
+      department: profileDoc.departamento || '',
+      avatar: firebaseUser.photoURL || '',
+      empresaId: resolvedCompanyId,
+      companyId: resolvedCompanyId,
+      companyName: profileDoc.companyName || profileDoc.empresaNome || '',
+    } as UserProfile;
+  };
+
+  const refreshCompanyModules = async (): Promise<void> => {
     if (!user) {
       setActiveModules({});
       return;
     }
 
-    // Super Admin / MASTER has all modules enabled by default
-    if (user.role === 'Super Administrador' || user.tipoUsuario === 'MASTER') {
+    if (isMasterProfile(user)) {
       setActiveModules({
         vagas: true,
         bancoTalentos: true,
@@ -100,436 +200,204 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         agenda: true,
         relatoriosAvancados: true,
         siteVagasPersonalizado: true,
-        iaConsultora: true
+        iaConsultora: true,
       });
       return;
     }
 
-    const empresaId = user.empresaId || user.companyId || user.tenantId;
-    if (!empresaId) {
+    const companyId = user.empresaId || user.companyId || user.tenantId;
+
+    if (!companyId) {
       setActiveModules({});
       return;
     }
 
-    // Fetch exclusively from Firestore `empresa_modulos`
     try {
-      const remoteMods = await fetchEmpresaModulosFirestore(empresaId);
-      if (remoteMods && Object.keys(remoteMods).length > 0) {
-        setActiveModules(remoteMods);
-        return;
-      }
-    } catch (err) {
-      console.warn('Erro ao consultar módulos da empresa no Firestore:', err);
+      const remoteModules = await fetchEmpresaModulosFirestore(companyId);
+      setActiveModules(normalizeModules(remoteModules));
+    } catch (error) {
+      logger.warn('Erro ao carregar módulos reais da empresa no Firestore:', error);
+      setActiveModules({});
     }
-
-    // If no Firestore config found for company, no modules are enabled by default
-    setActiveModules({});
   };
 
   useEffect(() => {
-    refreshCompanyModules();
+    void refreshCompanyModules();
   }, [user?.empresaId, user?.companyId, user?.tenantId, user?.tipoUsuario, user?.role]);
 
-  // On auth state change, keep Firebase Auth user synchronized and query usuarios/{uid}
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
-      if (firebaseUser) {
-        logger.info(`Firebase Auth ativo: ${firebaseUser.email} (UID: ${firebaseUser.uid})`, 'AuthContext');
-        try {
-          const profileDoc = await fetchUsuarioFirestore(firebaseUser.uid);
-          const isMasterEmail = 
-            firebaseUser.email?.toLowerCase() === MASTER_USER.email.toLowerCase() || 
-            firebaseUser.email?.toLowerCase() === 'gustavo.germinari@gmail.com' ||
-            firebaseUser.email?.toLowerCase() === 'master@maisrh.com.br' ||
-            profileDoc?.tipoUsuario === 'MASTER' ||
-            profileDoc?.role === 'MASTER';
+      setIsLoading(true);
 
-          let userProfile: UserProfile;
-          if (isMasterEmail) {
-            userProfile = {
-              ...MASTER_USER,
-              id: firebaseUser.uid,
-              email: firebaseUser.email || MASTER_USER.email,
-              tipoUsuario: 'MASTER',
-              role: 'Super Administrador',
-              empresaId: 'master-org',
-              companyId: 'master-org',
-              companyName: 'MAIS RH SaaS'
-            };
-          } else {
-            userProfile = {
-              id: firebaseUser.uid,
-              name: profileDoc?.nome || firebaseUser.displayName || firebaseUser.email?.split('@')[0] || 'Usuário Corporativo',
-              email: firebaseUser.email || '',
-              role: profileDoc?.role || 'Administrador',
-              department: 'Gente & Gestão',
-              avatar: firebaseUser.photoURL || '',
-              tipoUsuario: 'EMPRESA',
-              empresaId: profileDoc?.empresaId || 'emp-001',
-              companyId: profileDoc?.empresaId || 'emp-001',
-              companyName: 'Empresa Cliente'
-            };
-          }
-
-          const token = generateMockToken(firebaseUser.uid);
-          setUser(userProfile);
-          setSessionToken(token);
-          localStorage.setItem(STORAGE_KEY_USER, JSON.stringify(userProfile));
-          localStorage.setItem(STORAGE_KEY_TOKEN, JSON.stringify(token));
-        } catch (err) {
-          logger.warn('Erro ao carregar usuario do Firestore em onAuthStateChanged:', err);
-        }
-      } else {
+      if (!firebaseUser) {
         logger.info('Firebase Auth: nenhum usuário ativo no SDK cliente', 'AuthContext');
-        const savedUserRaw = localStorage.getItem(STORAGE_KEY_USER);
-        if (savedUserRaw) {
-          try {
-            const savedUser = JSON.parse(savedUserRaw);
-            if (savedUser && (savedUser.id || savedUser.email)) {
-              setUser(savedUser);
-              const savedTokenRaw = localStorage.getItem(STORAGE_KEY_TOKEN);
-              if (savedTokenRaw) setSessionToken(JSON.parse(savedTokenRaw));
-              setIsLoading(false);
-              return;
-            }
-          } catch (e) {}
-        }
-        setUser(null);
-        setSessionToken(null);
-        localStorage.removeItem(STORAGE_KEY_USER);
-        localStorage.removeItem(STORAGE_KEY_TOKEN);
+        clearAuthData();
+        setIsLoading(false);
+        return;
       }
-      setIsLoading(false);
+
+      try {
+        logger.info(
+          `Firebase Auth ativo: ${firebaseUser.email} (UID: ${firebaseUser.uid})`,
+          'AuthContext',
+        );
+
+        const userProfile = await buildUserProfile(firebaseUser);
+        const token = createSessionToken(firebaseUser.uid);
+        saveAuthData(userProfile, token);
+      } catch (error: any) {
+        logger.warn('Erro ao carregar perfil autenticado:', error?.message || error);
+        await signOut(auth).catch(() => undefined);
+        clearAuthData();
+      } finally {
+        setIsLoading(false);
+      }
     });
+
     return () => unsubscribe();
   }, []);
-
-  const generateMockToken = (userId: string): SessionToken => {
-    const now = new Date();
-    const expires = new Date(now.getTime() + 24 * 60 * 60 * 1000); // 24h
-    return {
-      token: `mrh_sec_token_${userId}_${Date.now()}`,
-      createdAt: now.toISOString(),
-      expiresAt: expires.toISOString(),
-    };
-  };
-
-  const saveAuthData = (userProfile: UserProfile, token: SessionToken) => {
-    setUser(userProfile);
-    setSessionToken(token);
-    localStorage.setItem(STORAGE_KEY_USER, JSON.stringify(userProfile));
-    localStorage.setItem(STORAGE_KEY_TOKEN, JSON.stringify(token));
-
-    const isMaster = userProfile.tipoUsuario === 'MASTER' || userProfile.role === 'Super Administrador' || userProfile.email === 'gustavo.germinari@gmail.com';
-
-    // Sync User in Firestore `usuarios` collection
-    saveUsuarioFirestore({
-      uid: userProfile.id,
-      nome: userProfile.name || 'Gustavo Germinari',
-      email: userProfile.email,
-      role: isMaster ? 'MASTER' : (userProfile.role || 'Administrador'),
-      tipoUsuario: isMaster ? 'MASTER' : 'EMPRESA',
-      empresaId: isMaster ? null : (userProfile.empresaId || userProfile.companyId || userProfile.tenantId || 'emp-001'),
-      status: 'Ativo',
-      ativo: true,
-      isMaster: isMaster,
-      dataCriacao: new Date().toISOString().split('T')[0]
-    }).catch(console.error);
-  };
-
-  const clearAuthData = () => {
-    setUser(null);
-    setSessionToken(null);
-    setActiveModules({});
-    localStorage.removeItem(STORAGE_KEY_USER);
-    localStorage.removeItem(STORAGE_KEY_TOKEN);
-  };
 
   const login = async (email: string, password?: string): Promise<boolean> => {
     const normalizedEmail = email.toLowerCase().trim();
     const pwd = password || '';
 
-    if (!normalizedEmail) {
-      throw new Error('Informe o e-mail de acesso.');
-    }
+    if (!normalizedEmail) throw new Error('Informe o e-mail de acesso.');
+    if (!pwd) throw new Error('Informe a senha de acesso.');
+    if (pwd.length < 6) throw new Error('A senha deve ter no mínimo 6 caracteres.');
 
-    if (!pwd) {
-      throw new Error('Por favor, informe a senha de acesso.');
-    }
-
-    if (pwd.length < 6) {
-      throw new Error('A senha de acesso no Firebase Auth deve ter no mínimo 6 caracteres.');
-    }
-
-    let firebaseAuthUid: string | null = null;
-
-    // 1. Authenticate with Firebase Authentication
     try {
-      const cred = await signInWithEmailAndPassword(auth, normalizedEmail, pwd);
-      firebaseAuthUid = cred.user.uid;
-      logger.info(`Autenticado com sucesso no Firebase Auth: ${normalizedEmail} (UID: ${firebaseAuthUid})`, 'AuthContext');
-    } catch (authErr: any) {
-      const errorCode = authErr?.code || '';
-      const errorMessage = authErr?.message || '';
-      logger.warn(`[Firebase Auth Error]: ${errorCode} - ${errorMessage}`, 'AuthContext');
+      const credential = await signInWithEmailAndPassword(auth, normalizedEmail, pwd);
+      const userProfile = await buildUserProfile(credential.user);
+      const token = createSessionToken(credential.user.uid);
+      saveAuthData(userProfile, token);
 
-      // Attempt server authentication fallback for API key, network, internal, or auth errors
-      try {
-        logger.info('[AuthContext] Executando autenticação via servidor de retaguarda...', 'AuthContext');
-        const resp = await fetch('/api/auth/login', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ email: normalizedEmail, password: pwd })
-        });
-        const data = await resp.json();
-        if (data.success && data.user) {
-          const serverUser = data.user;
-          const token = generateMockToken(serverUser.id);
-          saveAuthData(serverUser, token);
-          logger.info(`Autenticado com sucesso via servidor de retaguarda: ${normalizedEmail} (UID: ${serverUser.id})`, 'AuthContext');
-          return true;
-        } else if (data.error) {
-          throw new Error(data.error);
-        }
-      } catch (serverErr: any) {
-        logger.warn('[AuthContext] Falha no login via servidor:', serverErr?.message || serverErr);
-        if (serverErr.message && !serverErr.message.includes('Failed to fetch')) {
-          throw serverErr;
-        }
+      logger.info(
+        `Sessão Firebase iniciada para ${normalizedEmail} (UID: ${credential.user.uid})`,
+        'AuthContext',
+      );
+      return true;
+    } catch (error: any) {
+      const code = error?.code || '';
+
+      if (error?.message === 'Perfil do usuário não encontrado no Firestore.') {
+        throw error;
       }
-
+      if (error?.message === 'Usuário sem empresa vinculada no Firestore.') {
+        throw error;
+      }
+      if (error?.message === 'Esta conta foi desativada pelo administrador.') {
+        throw error;
+      }
+      if (code === 'auth/user-disabled') {
+        throw new Error('Esta conta foi desativada no Firebase Authentication.');
+      }
       if (
-        errorCode === 'auth/wrong-password' || 
-        errorCode === 'auth/invalid-credential' || 
-        errorCode === 'auth/user-not-found'
+        code === 'auth/wrong-password' ||
+        code === 'auth/invalid-credential' ||
+        code === 'auth/user-not-found'
       ) {
-        throw new Error('E-mail ou senha incorretos no Firebase Auth. Se você esqueceu sua senha, clique em "Esqueceu a senha?" para receber o link de redefinição.');
-      } else if (errorCode === 'auth/user-disabled') {
-        throw new Error('Esta conta foi desativada no Firebase Auth.');
-      } else if (errorCode === 'auth/too-many-requests') {
-        throw new Error('Muitas tentativas malsucedidas de login. Aguarde alguns instantes ou redefina sua senha.');
-      } else if (errorCode === 'auth/network-request-failed') {
-        throw new Error('Falha de conexão. Verifique sua conexão de internet.');
-      } else if (errorCode === 'auth/invalid-email') {
-        throw new Error('O e-mail informado é inválido.');
-      } else {
-        throw new Error(`Falha de autenticação (${errorCode || 'erro'}). Verifique seu e-mail e senha.`);
+        throw new Error('E-mail ou senha incorretos.');
       }
+      if (code === 'auth/too-many-requests') {
+        throw new Error('Muitas tentativas de login. Aguarde e tente novamente.');
+      }
+      if (code === 'auth/network-request-failed') {
+        throw new Error('Falha de conexão. Verifique sua internet.');
+      }
+      if (code === 'auth/invalid-email') {
+        throw new Error('O e-mail informado é inválido.');
+      }
+
+      throw new Error(error?.message || 'Não foi possível realizar o login.');
     }
-
-    if (!firebaseAuthUid && auth.currentUser) {
-      firebaseAuthUid = auth.currentUser.uid;
-    }
-
-    if (!firebaseAuthUid) {
-      throw new Error('Não foi possível obter a identificação de autenticação.');
-    }
-
-    // 2. Fetch User Profile from Firestore (`usuarios/{uid}`)
-    let profileDoc: any = await fetchUsuarioFirestore(firebaseAuthUid);
-
-    // Check if user account is disabled in Firestore
-    if (profileDoc && (profileDoc.status === 'Inativo' || profileDoc.status === 'Bloqueado' || profileDoc.ativo === false)) {
-      await signOut(auth).catch(() => {});
-      clearAuthData();
-      throw new Error('Esta conta foi desativada pelo administrador.');
-    }
-
-    // 3. Resolve role & tenant context
-    const isMasterEmail = 
-      normalizedEmail === MASTER_USER.email.toLowerCase() || 
-      normalizedEmail === 'gustavo.germinari@gmail.com' ||
-      normalizedEmail === 'master@maisrh.com.br' ||
-      profileDoc?.tipoUsuario === 'MASTER' ||
-      profileDoc?.role === 'MASTER';
-
-    let userProfile: UserProfile;
-
-    if (isMasterEmail) {
-      userProfile = {
-        ...MASTER_USER,
-        id: firebaseAuthUid,
-        email: normalizedEmail,
-        tipoUsuario: 'MASTER',
-        role: 'Super Administrador',
-        empresaId: 'master-org',
-        companyId: 'master-org',
-        companyName: 'MAIS RH SaaS'
-      };
-    } else {
-      const tenants = getTenants();
-      const matchedTenant = tenants.find(t => 
-        t.id === profileDoc?.empresaId ||
-        t.ownerEmail?.toLowerCase() === normalizedEmail || 
-        t.adminCredentials?.adminEmail?.toLowerCase() === normalizedEmail
-      ) || tenants[0];
-
-      userProfile = {
-        id: firebaseAuthUid,
-        name: profileDoc?.nome || normalizedEmail.split('@')[0] || 'Usuário Corporativo',
-        email: normalizedEmail,
-        role: profileDoc?.role || 'Administrador',
-        department: 'Gente & Gestão',
-        avatar: '',
-        tipoUsuario: 'EMPRESA',
-        empresaId: matchedTenant?.id || profileDoc?.empresaId || 'emp-001',
-        companyId: matchedTenant?.id || profileDoc?.empresaId || 'emp-001',
-        companyName: matchedTenant?.companyName || 'Empresa Cliente'
-      };
-    }
-
-    const token = generateMockToken(userProfile.id);
-    saveAuthData(userProfile, token);
-    logger.info(`Sessão iniciada com sucesso para: ${userProfile.email}`, 'AuthContext');
-    return true;
   };
 
-  const logout = async () => {
-    if (user) {
-      logger.info(`Logout encerrado para ${user.email}`, 'AuthContext');
-    }
-    await signOut(auth).catch(() => {});
+  const logout = async (): Promise<void> => {
+    await signOut(auth).catch(() => undefined);
     clearAuthData();
   };
 
-  const switchDemoProfile = (role: RoleProfile) => {
-    throw new Error('Modo de teste desativado em produção. Efetue login com e-mail e senha no Firebase Auth.');
+  const switchDemoProfile = (_role: RoleProfile): void => {
+    throw new Error('Modo de demonstração desativado. Use credenciais reais do Firebase Auth.');
   };
 
   const requestPasswordReset = async (email: string): Promise<boolean> => {
     const normalizedEmail = email.toLowerCase().trim();
-    if (!normalizedEmail) {
-      throw new Error('Informe o e-mail de acesso.');
-    }
-    try {
-      await sendPasswordResetEmail(auth, normalizedEmail);
-      logger.info(`Link de redefinição de senha enviado com sucesso no Firebase Auth para: ${normalizedEmail}`, 'AuthContext');
-      return true;
-    } catch (err: any) {
-      logger.warn(`Erro ao enviar e-mail de redefinição no Firebase Auth: ${err?.message}`, 'AuthContext');
-      throw new Error('Não foi possível enviar o e-mail de redefinição. Verifique se o e-mail está correto.');
-    }
+    if (!normalizedEmail) throw new Error('Informe o e-mail de acesso.');
+
+    await sendPasswordResetEmail(auth, normalizedEmail);
+    return true;
   };
 
   const isModuleActive = (moduleKey: string): boolean => {
     if (!user) return false;
-    if (user.role === 'Super Administrador' || user.tipoUsuario === 'MASTER') {
-      return true;
-    }
+    if (isMasterProfile(user)) return true;
 
-    if (!activeModules) return false;
-
-    // Direct key match
     if (activeModules[moduleKey] === true) return true;
 
-    // Module key normalized aliases
-    if ((moduleKey === 'vagas' || moduleKey === 'recrutamento') &&
-        (activeModules['vagas'] === true || activeModules['recrutamento'] === true)) {
-      return true;
-    }
+    const aliases: Record<string, string[]> = {
+      vagas: ['vagas', 'recrutamento'],
+      recrutamento: ['vagas', 'recrutamento'],
+      bancoTalentos: ['bancoTalentos', 'banco-talentos', 'candidatos'],
+      'banco-talentos': ['bancoTalentos', 'banco-talentos', 'candidatos'],
+      candidatos: ['bancoTalentos', 'banco-talentos', 'candidatos'],
+      entrevistas: ['entrevistas'],
+      headhunter: ['headhunter'],
+      equipeInterna: ['equipeInterna', 'colaboradores', 'dp'],
+      colaboradores: ['equipeInterna', 'colaboradores', 'dp'],
+      dp: ['equipeInterna', 'colaboradores', 'dp'],
+      pontoDigital: ['pontoDigital', 'ponto-digital', 'ponto', 'jornada'],
+      'ponto-digital': ['pontoDigital', 'ponto-digital', 'ponto', 'jornada'],
+      ponto: ['pontoDigital', 'ponto-digital', 'ponto', 'jornada'],
+      jornada: ['pontoDigital', 'ponto-digital', 'ponto', 'jornada'],
+      beneficios: ['beneficios', 'feriasBeneficios'],
+      ferias: ['ferias', 'feriasBeneficios'],
+      feriasBeneficios: ['ferias', 'feriasBeneficios'],
+      rescisao: ['rescisao'],
+      documentos: ['documentos', 'documentosAssinatura'],
+      documentosAssinatura: ['documentos', 'documentosAssinatura'],
+      afastamentos: ['afastamentos'],
+      sst: ['sst'],
+      agenda: ['agenda'],
+      relatorios: ['relatorios', 'relatoriosAvancados'],
+      relatoriosAvancados: ['relatorios', 'relatoriosAvancados'],
+      siteVagas: ['siteVagas', 'siteVagasPersonalizado', 'site-vagas'],
+      siteVagasPersonalizado: ['siteVagas', 'siteVagasPersonalizado', 'site-vagas'],
+      'site-vagas': ['siteVagas', 'siteVagasPersonalizado', 'site-vagas'],
+      consultorRH: ['consultorRH', 'iaConsultora', 'mais-rh-ia'],
+      iaConsultora: ['consultorRH', 'iaConsultora', 'mais-rh-ia'],
+      'mais-rh-ia': ['consultorRH', 'iaConsultora', 'mais-rh-ia'],
+      folha: ['folha', 'folhaPagamento', 'folha-pagamento'],
+      folhaPagamento: ['folha', 'folhaPagamento', 'folha-pagamento'],
+      'folha-pagamento': ['folha', 'folhaPagamento', 'folha-pagamento'],
+    };
 
-    if ((moduleKey === 'bancoTalentos' || moduleKey === 'banco-talentos' || moduleKey === 'candidatos') &&
-        (activeModules['bancoTalentos'] === true || activeModules['recrutamento'] === true)) {
-      return true;
-    }
-
-    if (moduleKey === 'entrevistas' &&
-        (activeModules['entrevistas'] === true || activeModules['recrutamento'] === true)) {
-      return true;
-    }
-
-    if (moduleKey === 'headhunter' && activeModules['headhunter'] === true) {
-      return true;
-    }
-
-    if ((moduleKey === 'equipeInterna' || moduleKey === 'colaboradores' || moduleKey === 'dp') &&
-        (activeModules['equipeInterna'] === true || activeModules['colaboradores'] === true || activeModules['dp'] === true)) {
-      return true;
-    }
-
-    if ((moduleKey === 'pontoDigital' || moduleKey === 'ponto-digital' || moduleKey === 'jornada' || moduleKey === 'ponto') &&
-        (activeModules['pontoDigital'] === true || activeModules['ponto'] === true)) {
-      return true;
-    }
-
-    if ((moduleKey === 'beneficios' || moduleKey === 'feriasBeneficios') &&
-        (activeModules['beneficios'] === true || activeModules['feriasBeneficios'] === true)) {
-      return true;
-    }
-
-    if ((moduleKey === 'ferias' || moduleKey === 'feriasBeneficios') &&
-        (activeModules['ferias'] === true || activeModules['feriasBeneficios'] === true)) {
-      return true;
-    }
-
-    if (moduleKey === 'rescisao' &&
-        (activeModules['rescisao'] === true || activeModules['equipeInterna'] === true || activeModules['dp'] === true)) {
-      return true;
-    }
-
-    if ((moduleKey === 'documentos' || moduleKey === 'documentosAssinatura') &&
-        (activeModules['documentos'] === true || activeModules['documentosAssinatura'] === true)) {
-      return true;
-    }
-
-    if (moduleKey === 'afastamentos' &&
-        (activeModules['afastamentos'] === true || activeModules['equipeInterna'] === true || activeModules['dp'] === true)) {
-      return true;
-    }
-
-    if (moduleKey === 'sst' &&
-        (activeModules['sst'] === true || activeModules['equipeInterna'] === true || activeModules['dp'] === true)) {
-      return true;
-    }
-
-    if (moduleKey === 'agenda' && activeModules['agenda'] === true) {
-      return true;
-    }
-
-    if ((moduleKey === 'relatorios' || moduleKey === 'relatoriosAvancados') &&
-        (activeModules['relatorios'] === true || activeModules['relatoriosAvancados'] === true)) {
-      return true;
-    }
-
-    if ((moduleKey === 'siteVagas' || moduleKey === 'siteVagasPersonalizado' || moduleKey === 'site-vagas') &&
-        (activeModules['siteVagas'] === true || activeModules['siteVagasPersonalizado'] === true)) {
-      return true;
-    }
-
-    if ((moduleKey === 'consultorRH' || moduleKey === 'iaConsultora' || moduleKey === 'mais-rh-ia') &&
-        (activeModules['consultorRH'] === true || activeModules['iaConsultora'] === true)) {
-      return true;
-    }
-
-    if ((moduleKey === 'folha' || moduleKey === 'folhaPagamento' || moduleKey === 'folha-pagamento') &&
-        (activeModules['folha'] === true || activeModules['folhaPagamento'] === true)) {
-      return true;
-    }
-
-    return false;
+    return (aliases[moduleKey] || [moduleKey]).some((key) => activeModules[key] === true);
   };
 
   const hasScreenAccess = (screenKey: ScreenRouteKey): boolean => {
     if (!user) return false;
 
-    // Master / Admin screens
-    if (screenKey === 'acesso-master' || screenKey?.startsWith('master-') || screenKey === 'auditoria') {
-      return user.role === 'Super Administrador' || user.tipoUsuario === 'MASTER';
+    if (
+      screenKey === 'acesso-master' ||
+      screenKey?.startsWith('master-') ||
+      screenKey === 'auditoria'
+    ) {
+      return isMasterProfile(user);
     }
 
-    // Base dashboard & settings screens are always accessible
     if (screenKey === 'dashboard' || screenKey === 'configuracoes' || screenKey === 'empresa') {
       return true;
     }
 
     const screenModuleMap: Record<string, string> = {
-      'vagas': 'vagas',
-      'candidatos': 'bancoTalentos',
+      vagas: 'vagas',
+      candidatos: 'bancoTalentos',
       'banco-talentos': 'bancoTalentos',
       'processos-seletivos': 'vagas',
-      'entrevistas': 'entrevistas',
-      'contratacoes': 'vagas',
-      'headhunter': 'headhunter',
+      entrevistas: 'entrevistas',
+      contratacoes: 'vagas',
+      headhunter: 'headhunter',
       'headhunter-clientes': 'headhunter',
       'headhunter-comercial': 'headhunter',
       'headhunter-crm': 'headhunter',
@@ -540,41 +408,36 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       'headhunter-despesas': 'headhunter',
       'headhunter-garantias': 'headhunter',
       'headhunter-relatorios': 'headhunter',
-      'colaboradores': 'equipeInterna',
+      colaboradores: 'equipeInterna',
       'equipe-interna': 'equipeInterna',
       'ponto-digital': 'pontoDigital',
-      'jornada': 'pontoDigital',
-      'beneficios': 'beneficios',
-      'ferias': 'feriasBeneficios',
-      'rescisao': 'rescisao',
-      'documentos': 'documentosAssinatura',
-      'afastamentos': 'afastamentos',
-      'sst': 'sst',
-      'agenda': 'agenda',
-      'relatorios': 'relatoriosAvancados',
+      jornada: 'pontoDigital',
+      beneficios: 'beneficios',
+      ferias: 'feriasBeneficios',
+      rescisao: 'rescisao',
+      documentos: 'documentosAssinatura',
+      afastamentos: 'afastamentos',
+      sst: 'sst',
+      agenda: 'agenda',
+      relatorios: 'relatoriosAvancados',
       'site-vagas': 'siteVagasPersonalizado',
       'folha-pagamento': 'folhaPagamento',
       'mais-rh-ia': 'iaConsultora',
-      'consultor-rh': 'iaConsultora'
+      'consultor-rh': 'iaConsultora',
     };
 
-    const targetModule = screenModuleMap[screenKey];
-    if (!targetModule) return true;
-
-    return isModuleActive(targetModule);
+    const requiredModule = screenModuleMap[screenKey];
+    return requiredModule ? isModuleActive(requiredModule) : true;
   };
 
-  const hasActionAccess = (actionKey: SystemActionKey): boolean => {
-    if (!user) return false;
-    return true;
-  };
+  const hasActionAccess = (_actionKey: SystemActionKey): boolean => Boolean(user);
 
   return (
     <AuthContext.Provider
       value={{
         user,
         sessionToken,
-        isAuthenticated: !!user && !!sessionToken,
+        isAuthenticated: Boolean(user && auth.currentUser),
         isLoading,
         activeModules,
         login,
@@ -584,7 +447,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         hasScreenAccess,
         hasActionAccess,
         isModuleActive,
-        refreshCompanyModules
+        refreshCompanyModules,
       }}
     >
       {children}
