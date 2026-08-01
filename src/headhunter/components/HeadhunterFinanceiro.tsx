@@ -45,14 +45,6 @@ import {
   GarantiaStatus,
   ExpenseCategory
 } from '../types';
-import { 
-  MOCK_HEADHUNTER_CLIENTS, 
-  MOCK_HEADHUNTER_JOBS, 
-  MOCK_HEADHUNTER_HIRINGS, 
-  MOCK_HEADHUNTER_CANDIDATES,
-  MOCK_HEADHUNTER_CONTRACTS,
-  MOCK_HEADHUNTER_PROPOSALS
-} from '../mockData';
 import { HeadhunterFinanceService } from '../services/headhunterFinanceService';
 
 interface HeadhunterFinanceiroProps {

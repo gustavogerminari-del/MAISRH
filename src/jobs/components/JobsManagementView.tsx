@@ -12,7 +12,6 @@ import {
 } from 'lucide-react';
 import { Job, JobFilterParams, JobStatus } from '../types/job';
 import { normalizeJobStatus, normalizeJobData } from '../utils/jobUtils';
-import { INITIAL_JOBS_DATA } from '../data/mockJobsData';
 import { JobCard } from './JobCard';
 import { JobDetailModal } from './JobDetailModal';
 import { JobFormModal } from './JobFormModal';
@@ -243,7 +242,7 @@ export const JobsManagementView: React.FC<JobsManagementViewProps> = ({
   };
 
   const handleRestoreJob = (jobId: string) => {
-    handleStatusChange(jobId, 'Fechada');
+    handleStatusChange(jobId, 'Aberta');
   };
 
   const handleOpenCreateModal = () => {

@@ -11,7 +11,6 @@ import {
 import { db, auth } from '../lib/firebase';
 import { sanitizeFirestoreData } from '../lib/firestoreUtils';
 import { PlatformModule } from '../master-admin/types/master';
-import { MOCK_PLATFORM_MODULES } from '../master-admin/data/mockMasterData';
 import { AuditService } from './AuditService';
 
 const COLLECTION_NAME = 'modules';
@@ -113,7 +112,7 @@ export class ModuleService {
     } catch (err) {
       console.warn('Erro em ModuleService.getById:', err);
     }
-    return MOCK_PLATFORM_MODULES.find(m => m.id === id) || null;
+    return null;
   }
 
   static async get(id: string): Promise<PlatformModule | null> {
@@ -131,7 +130,7 @@ export class ModuleService {
     } catch (err) {
       console.warn('Erro em ModuleService.list:', err);
     }
-    return MOCK_PLATFORM_MODULES;
+    return [];
   }
 
   static async search(term: string): Promise<PlatformModule[]> {

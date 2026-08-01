@@ -12,8 +12,6 @@ import { db, auth } from '../lib/firebase';
 import { sanitizeFirestoreData } from '../lib/firestoreUtils';
 import { ClientSubscription } from '../subscriptions/types';
 import { SaaSPlan } from '../master-admin/types/master';
-import { MOCK_SUBSCRIPTIONS } from '../subscriptions/mockData';
-import { MOCK_SAAS_PLANS } from '../master-admin/data/mockMasterData';
 import { AuditService } from './AuditService';
 
 const COLLECTION_NAME = 'subscriptions';
@@ -116,7 +114,7 @@ export class SubscriptionService {
     } catch (err) {
       console.warn('Erro em SubscriptionService.getById:', err);
     }
-    return MOCK_SUBSCRIPTIONS.find(s => s.id === id) || null;
+    return null;
   }
 
   static async get(id: string): Promise<ClientSubscription | null> {
@@ -137,7 +135,7 @@ export class SubscriptionService {
     } catch (err) {
       console.warn('Erro em SubscriptionService.list:', err);
     }
-    return MOCK_SUBSCRIPTIONS;
+    return [];
   }
 
   static async search(term: string, companyId?: string): Promise<ClientSubscription[]> {
@@ -167,7 +165,7 @@ export class SubscriptionService {
   static async getByCompanyId(companyId: string): Promise<ClientSubscription | null> {
     const list = await this.list(companyId);
     if (list && list.length > 0) return list[0];
-    return MOCK_SUBSCRIPTIONS[0] || null;
+    return null;
   }
 
   static async updatePlan(id: string, planTier: 'Enterprise' | 'Professional' | 'Starter'): Promise<ClientSubscription | null> {
@@ -188,6 +186,6 @@ export class SubscriptionService {
     } catch (err) {
       console.warn('Erro em SubscriptionService.listPlans:', err);
     }
-    return MOCK_SAAS_PLANS as any;
+    return [];
   }
 }

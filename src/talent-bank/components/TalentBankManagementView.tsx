@@ -11,12 +11,11 @@ import {
   Sparkles,
 } from 'lucide-react';
 import { Candidate, CandidateFilterParams } from '../types/candidate';
-import { INITIAL_CANDIDATES_DATA } from '../data/mockCandidatesData';
 import { CandidateCard } from './CandidateCard';
 import { CandidateDetailModal } from './CandidateDetailModal';
 import { CandidateFormModal } from './CandidateFormModal';
 import { CandidateFiltersBar } from './CandidateFiltersBar';
-import { Job, INITIAL_JOBS_DATA } from '../../jobs';
+import { Job } from '../../jobs';
 import { useAuth } from '../../auth';
 import { Button, Card } from '../../shared';
 import { logger } from '../../core';
@@ -46,10 +45,10 @@ export const TalentBankManagementView: React.FC<TalentBankManagementViewProps> =
   const isMaster = user?.role === 'Super Administrador' || user?.role === 'MASTER' || user?.tipoUsuario === 'MASTER' || user?.isMaster === true;
 
   const [candidates, setCandidates] = useState<Candidate[]>(
-    initialCandidatesList || INITIAL_CANDIDATES_DATA
+    initialCandidatesList || []
   );
 
-  const rawJobs = jobsList !== undefined ? jobsList : (import.meta.env.DEV ? INITIAL_JOBS_DATA : []);
+  const rawJobs = jobsList !== undefined ? jobsList : [];
   const jobs = useMemo(() => {
     if (isMaster || !userCompanyId) return rawJobs;
     return rawJobs.filter((j: any) => {

@@ -18,16 +18,15 @@ import {
   Sparkles
 } from 'lucide-react';
 import { LeaveRequest, EmployeeLeaveBalance, BenefitItem } from './types';
-import { MOCK_LEAVE_REQUESTS, MOCK_LEAVE_BALANCES, MOCK_BENEFITS } from './mockData';
 import { BenefitService } from '../services/BenefitService';
 import { ContextualAiModal } from '../ai/components/ContextualAiModal';
 import { vacationAiService, benefitsAiService } from '../ai/services/aiService';
 
 export const BenefitsLeavesView: React.FC = () => {
   const [activeTab, setActiveTab] = useState<'solicitacoes' | 'saldos' | 'beneficios'>('solicitacoes');
-  const [leaveRequests, setLeaveRequests] = useState<LeaveRequest[]>(MOCK_LEAVE_REQUESTS);
-  const [balances, setBalances] = useState<EmployeeLeaveBalance[]>(MOCK_LEAVE_BALANCES);
-  const [benefits, setBenefits] = useState<BenefitItem[]>(MOCK_BENEFITS);
+  const [leaveRequests, setLeaveRequests] = useState<LeaveRequest[]>([]);
+  const [balances, setBalances] = useState<EmployeeLeaveBalance[]>([]);
+  const [benefits, setBenefits] = useState<BenefitItem[]>([]);
   const [loading, setLoading] = useState(true);
 
   // AI Modal states
@@ -54,8 +53,8 @@ export const BenefitsLeavesView: React.FC = () => {
       BenefitService.list()
     ]).then(([leaves, bens]) => {
       if (isMounted) {
-        if (leaves && leaves.length > 0) setLeaveRequests(leaves);
-        if (bens && bens.length > 0) setBenefits(bens);
+        setLeaveRequests(leaves || []);
+        setBenefits(bens || []);
         setLoading(false);
       }
     }).catch(err => {

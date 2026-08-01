@@ -11,14 +11,13 @@ import {
   Sliders
 } from 'lucide-react';
 import { ClientSubscription, BillingInvoice, PlanTier, ModuleAccessConfig } from './types';
-import { MOCK_INVOICES, MOCK_SUBSCRIPTIONS } from './mockData';
 import { saveTenant, updateTenantModule } from '../master-admin/masterTenantsStore';
 import { SubscriptionService } from '../services/SubscriptionService';
 import { ModuleService } from '../services/ModuleService';
 
 export const SubscriptionsView: React.FC = () => {
-  const [subscriptions, setSubscriptions] = useState<ClientSubscription[]>(MOCK_SUBSCRIPTIONS);
-  const [invoices] = useState<BillingInvoice[]>(MOCK_INVOICES);
+  const [subscriptions, setSubscriptions] = useState<ClientSubscription[]>([]);
+  const [invoices] = useState<BillingInvoice[]>([]);
   const [loading, setLoading] = useState(true);
   const [showNewSubModal, setShowNewSubModal] = useState(false);
   const [newCompanyName, setNewCompanyName] = useState('');
@@ -30,7 +29,7 @@ export const SubscriptionsView: React.FC = () => {
     let isMounted = true;
     SubscriptionService.list().then(subs => {
       if (isMounted) {
-        if (subs && subs.length > 0) setSubscriptions(subs);
+        setSubscriptions(subs || []);
         setLoading(false);
       }
     }).catch(err => {

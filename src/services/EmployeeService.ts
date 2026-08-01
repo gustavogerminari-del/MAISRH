@@ -11,7 +11,6 @@ import {
 import { db, auth } from '../lib/firebase';
 import { sanitizeFirestoreData } from '../lib/firestoreUtils';
 import { InternalTeamMember } from '../internal-team/types/team';
-import { INITIAL_INTERNAL_TEAM } from '../internal-team/data/mockTeamData';
 import { AuditService } from './AuditService';
 
 const COLLECTION_NAME = 'employees';

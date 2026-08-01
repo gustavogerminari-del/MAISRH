@@ -13,7 +13,6 @@ import {
 } from 'lucide-react';
 
 import { PublicJob, CandidateApplicationPayload, CompanyLeadPayload, PortalSectionTab } from './types';
-import { MOCK_PUBLIC_JOBS } from './mockData';
 import { Job, Candidate } from '../types/rh';
 
 import { PublicHeader } from './PublicHeader';

@@ -14,13 +14,12 @@ import {
   ShieldAlert,
 } from 'lucide-react';
 import { Interview, InterviewFilterParams, InterviewStatus } from '../types/interview';
-import { INITIAL_INTERVIEWS_DATA } from '../data/mockInterviewsData';
 import { InterviewCard } from './InterviewCard';
 import { InterviewScheduleModal } from './InterviewScheduleModal';
 import { InterviewFeedbackModal } from './InterviewFeedbackModal';
 import { InterviewFiltersBar } from './InterviewFiltersBar';
-import { Candidate, INITIAL_CANDIDATES_DATA } from '../../talent-bank';
-import { Job, INITIAL_JOBS_DATA } from '../../jobs';
+import { Candidate } from '../../talent-bank';
+import { Job } from '../../jobs';
 import { useAuth } from '../../auth';
 import { Button, Card } from '../../shared';
 import { logger } from '../../core';

@@ -21,14 +21,13 @@ import {
   ShieldAlert
 } from 'lucide-react';
 import { ConsultantClient, ConsultantJob, ConsultantCandidateScreening, JobExpense } from './types';
-import { MOCK_CONSULTANT_CLIENTS, MOCK_CONSULTANT_JOBS, MOCK_CONSULTANT_SCREENINGS } from './mockData';
 import { formatFirestoreDate } from '../lib/firestoreUtils';
 
 export const RHConsultantView: React.FC = () => {
   const [activeTab, setActiveTab] = useState<'dashboard' | 'vagas' | 'clientes' | 'financeiro'>('dashboard');
-  const [clients, setClients] = useState<ConsultantClient[]>(MOCK_CONSULTANT_CLIENTS);
-  const [jobs, setJobs] = useState<ConsultantJob[]>(MOCK_CONSULTANT_JOBS);
-  const [screenings, setScreenings] = useState<ConsultantCandidateScreening[]>(MOCK_CONSULTANT_SCREENINGS);
+  const [clients, setClients] = useState<ConsultantClient[]>([]);
+  const [jobs, setJobs] = useState<ConsultantJob[]>([]);
+  const [screenings, setScreenings] = useState<ConsultantCandidateScreening[]>([]);
   const [selectedClientFilter, setSelectedClientFilter] = useState('Todos');
 
   // New Job Modal State

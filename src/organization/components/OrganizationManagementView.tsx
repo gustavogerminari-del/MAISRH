@@ -11,10 +11,6 @@ import {
   ShieldCheck,
 } from 'lucide-react';
 import { Department, CompanyProfile } from '../types/department';
-import {
-  INITIAL_COMPANY_PROFILE,
-  INITIAL_DEPARTMENTS_DATA,
-} from '../data/mockOrganizationData';
 import { CompanyProfileHeader } from './CompanyProfileHeader';
 import { DepartmentCard } from './DepartmentCard';
 import { DepartmentFormModal } from './DepartmentFormModal';
@@ -44,11 +40,24 @@ export const OrganizationManagementView: React.FC<OrganizationManagementViewProp
     hasActionAccess('edit_settings');
 
   const [company, setCompany] = useState<CompanyProfile>(
-    initialCompany || INITIAL_COMPANY_PROFILE
+    initialCompany || {
+      id: user?.empresaId || 'emp-default',
+      name: 'Sua Empresa',
+      legalName: 'Razão Social',
+      cnpj: '00.000.000/0001-00',
+      industry: 'Tecnologia',
+      headquarters: 'Brasil',
+      website: '',
+      employeeCountTotal: 0,
+      activeDepartmentsCount: 0,
+      totalMonthlyBudget: 0,
+      currency: 'BRL',
+      updatedAt: new Date().toISOString()
+    }
   );
 
   const [departments, setDepartments] = useState<Department[]>(
-    initialDepartments || INITIAL_DEPARTMENTS_DATA
+    initialDepartments || []
   );
 
   const [searchTerm, setSearchTerm] = useState('');

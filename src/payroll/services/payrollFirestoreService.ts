@@ -25,11 +25,6 @@ import {
   ESocialEvent
 } from '../types/payroll';
 import { 
-  INITIAL_PAYROLL_PERIODS, 
-  INITIAL_PAYSTUBS, 
-  INITIAL_ESOCIAL_EVENTS 
-} from '../data/mockPayrollData';
-import { 
   calculateINSS, 
   calculateIRRF, 
   calculateFGTS, 
@@ -130,19 +125,10 @@ export async function getPayrollPeriodsFirestore(companyId: string): Promise<Pay
       return list;
     }
   } catch (err) {
-    console.warn('[Payroll] Erro ao carregar competências do Firestore, utilizando fallback inicial:', err);
+    console.warn('[Payroll] Erro ao carregar competências do Firestore:', err);
   }
 
-  // Se não existir no Firestore, salva os iniciais com companyId
-  const initial = INITIAL_PAYROLL_PERIODS.map(p => ({ ...p, companyId }));
-  for (const p of initial) {
-    try {
-      await setDoc(doc(db, COLLECTION_PERIODS, p.id), p);
-    } catch (e) {
-      console.error('[Payroll] Erro ao reidratar competência inicial:', e);
-    }
-  }
-  return initial;
+  return [];
 }
 
 /**
@@ -241,22 +227,10 @@ export async function getPaystubsFirestore(companyId: string, periodId?: string)
       })) as Paystub[];
     }
   } catch (err) {
-    console.warn('[Payroll] Erro ao carregar holerites do Firestore, buscando fallback local:', err);
+    console.warn('[Payroll] Erro ao carregar holerites do Firestore:', err);
   }
 
-  // Fallback inicial
-  const filtered = INITIAL_PAYSTUBS
-    .map(s => ({ ...s, companyId }))
-    .filter(s => !periodId || s.periodId === periodId);
-
-  for (const stub of filtered) {
-    try {
-      await setDoc(doc(db, COLLECTION_PAYSTUBS, stub.id), stub);
-    } catch (e) {
-      // ignore
-    }
-  }
-  return filtered;
+  return [];
 }
 
 /**
@@ -738,5 +712,5 @@ export async function getESocialEventsFirestore(companyId: string): Promise<ESoc
   } catch (err) {
     console.warn('[Payroll] Erro ao carregar eventos eSocial:', err);
   }
-  return INITIAL_ESOCIAL_EVENTS;
+  return [];
 }

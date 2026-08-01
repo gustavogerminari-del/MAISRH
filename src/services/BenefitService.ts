@@ -11,7 +11,6 @@ import {
 import { db, auth } from '../lib/firebase';
 import { sanitizeFirestoreData } from '../lib/firestoreUtils';
 import { BenefitItem, LeaveRequest, EmployeeLeaveBalance } from '../benefits-leaves/types';
-import { MOCK_BENEFITS, MOCK_LEAVE_REQUESTS, MOCK_LEAVE_BALANCES } from '../benefits-leaves/mockData';
 import { AuditService } from './AuditService';
 
 const COLLECTION_NAME = 'benefits';
@@ -98,7 +97,7 @@ export class BenefitService {
     } catch (err) {
       console.warn('Erro em BenefitService.getById:', err);
     }
-    return MOCK_BENEFITS.find(b => b.id === id) || null;
+    return null;
   }
 
   static async get(id: string): Promise<BenefitItem | null> {
@@ -119,7 +118,7 @@ export class BenefitService {
     } catch (err) {
       console.warn('Erro em BenefitService.list:', err);
     }
-    return MOCK_BENEFITS;
+    return [];
   }
 
   static async search(term: string, companyId?: string): Promise<BenefitItem[]> {
@@ -202,6 +201,6 @@ export class BenefitService {
     } catch (err) {
       console.warn('Erro em BenefitService.listLeaveRequests:', err);
     }
-    return MOCK_LEAVE_REQUESTS;
+    return [];
   }
 }

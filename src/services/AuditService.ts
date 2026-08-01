@@ -122,7 +122,7 @@ export class AuditService {
     } catch (err) {
       console.warn('Erro em AuditService.getById:', err);
     }
-    return MOCK_AUDIT_LOGS.find(l => l.id === id) || null;
+    return null;
   }
 
   static async list(companyId?: string): Promise<AuditLogEntry[]> {
@@ -139,7 +139,7 @@ export class AuditService {
     } catch (err) {
       console.warn('Erro em AuditService.list:', err);
     }
-    return MOCK_AUDIT_LOGS;
+    return [];
   }
 
   static async search(term: string, companyId?: string): Promise<AuditLogEntry[]> {

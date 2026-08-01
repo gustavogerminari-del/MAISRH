@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Briefcase,
   Users,
@@ -20,15 +20,10 @@ import { PendingAlertsCard } from './PendingAlertsCard';
 import { DepartmentBreakdownCard } from './DepartmentBreakdownCard';
 import { ResponsibleBreakdownCard } from './ResponsibleBreakdownCard';
 import { FunnelOverviewCard } from './FunnelOverviewCard';
-import {
-  INITIAL_DASHBOARD_METRICS,
-  INITIAL_DEPARTMENTS_SUMMARY,
-  INITIAL_RESPONSIBLE_SUMMARY,
-  INITIAL_PROCESS_ALERTS,
-  INITIAL_FUNNEL_STEPS,
-} from '../data/mockDashboardData';
 import { ProcessAlert } from '../types/dashboard';
 import { Button, Card } from '../../shared';
+import { JobService } from '../../services/JobService';
+import { CandidateService } from '../../services/CandidateService';
 
 export interface MainDashboardViewProps {
   onNavigateToJobs?: () => void;
@@ -52,12 +47,106 @@ export const MainDashboardView: React.FC<MainDashboardViewProps> = ({
   const showContratacoes = isMaster || isModuleActive('vagas');
   const showIA = isMaster || isModuleActive('iaConsultora') || isModuleActive('relatoriosAvancados');
 
-  const [metrics] = useState(INITIAL_DASHBOARD_METRICS);
-  const [departments] = useState(INITIAL_DEPARTMENTS_SUMMARY);
-  const [responsibles] = useState(INITIAL_RESPONSIBLE_SUMMARY);
-  const [alerts, setAlerts] = useState<ProcessAlert[]>(INITIAL_PROCESS_ALERTS);
-  const [funnelSteps] = useState(INITIAL_FUNNEL_STEPS);
+  const [metrics, setMetrics] = useState({
+    activeJobsCount: 0,
+    activeJobsSlaAlertsCount: 0,
+    candidatesInProcessCount: 0,
+    interviewsScheduledCount: 0,
+    hiresThisMonthCount: 0,
+    monthlyHiresTarget: 10,
+    avgTimeToHireDays: 0,
+    slaTargetDays: 30,
+  });
+  const [departments, setDepartments] = useState<any[]>([]);
+  const [responsibles, setResponsibles] = useState<any[]>([]);
+  const [alerts, setAlerts] = useState<ProcessAlert[]>([]);
+  const [funnelSteps, setFunnelSteps] = useState([
+    { stageName: 'Triagem', candidatesCount: 0, percentage: 0 },
+    { stageName: 'Entrevista RH', candidatesCount: 0, percentage: 0 },
+    { stageName: 'Avaliação Técnica', candidatesCount: 0, percentage: 0 },
+    { stageName: 'Entrevista Gestor', candidatesCount: 0, percentage: 0 },
+    { stageName: 'Proposta / Admissão', candidatesCount: 0, percentage: 0 }
+  ]);
   const [isRefreshing, setIsRefreshing] = useState(false);
+
+  const loadDashboardData = async () => {
+    try {
+      setIsRefreshing(true);
+      const [jobs, candidates] = await Promise.all([
+        JobService.list(),
+        CandidateService.list()
+      ]);
+
+      const activeJobs = jobs.filter(j => j.status === 'ativa' || j.status === 'Aberta');
+      const totalCandidates = candidates.length;
+      
+      // Funnel breakdown
+      const triagem = candidates.filter(c => {
+        const st = (c as any).stage || (c as any).etapa || (c as any).status;
+        return !st || st === 'Triagem' || st === 'Nova Inscrição';
+      }).length;
+      const entRh = candidates.filter(c => {
+        const st = (c as any).stage || (c as any).etapa;
+        return st === 'Entrevista RH' || st === 'Entrevista';
+      }).length;
+      const tec = candidates.filter(c => {
+        const st = (c as any).stage || (c as any).etapa;
+        return st === 'Teste Técnico' || st === 'Avaliação Técnica';
+      }).length;
+      const gestor = candidates.filter(c => {
+        const st = (c as any).stage || (c as any).etapa;
+        return st === 'Entrevista Gestor';
+      }).length;
+      const proposta = candidates.filter(c => {
+        const st = (c as any).stage || (c as any).etapa;
+        return st === 'Proposta' || st === 'Admissão' || st === 'Aprovado';
+      }).length;
+
+      const calcPct = (cnt: number) => totalCandidates > 0 ? Math.round((cnt / totalCandidates) * 100) : 0;
+
+      setFunnelSteps([
+        { stageName: 'Triagem', candidatesCount: triagem, percentage: calcPct(triagem) },
+        { stageName: 'Entrevista RH', candidatesCount: entRh, percentage: calcPct(entRh) },
+        { stageName: 'Avaliação Técnica', candidatesCount: tec, percentage: calcPct(tec) },
+        { stageName: 'Entrevista Gestor', candidatesCount: gestor, percentage: calcPct(gestor) },
+        { stageName: 'Proposta / Admissão', candidatesCount: proposta, percentage: calcPct(proposta) }
+      ]);
+
+      setMetrics({
+        activeJobsCount: activeJobs.length,
+        activeJobsSlaAlertsCount: jobs.filter(j => (j as any).urgency === 'Alta' || (j as any).urgency === 'Crítica').length,
+        candidatesInProcessCount: totalCandidates,
+        interviewsScheduledCount: entRh + gestor,
+        hiresThisMonthCount: proposta,
+        monthlyHiresTarget: activeJobs.length * 2 || 10,
+        avgTimeToHireDays: 18,
+        slaTargetDays: 30,
+      });
+
+      // Group by department
+      const deptMap = new Map<string, number>();
+      activeJobs.forEach(j => {
+        const d = j.department || 'Geral';
+        deptMap.set(d, (deptMap.get(d) || 0) + 1);
+      });
+      const deptList = Array.from(deptMap.entries()).map(([departmentName, activeJobsCount]) => ({
+        departmentName,
+        activeJobsCount,
+        candidatesInProcessCount: Math.round(totalCandidates / (deptMap.size || 1)),
+        avgSlaDays: 15
+      }));
+      setDepartments(deptList);
+
+    } catch (err) {
+      console.warn('Aviso ao carregar dados reais do dashboard:', err);
+    } finally {
+      setIsRefreshing(false);
+    }
+  };
+
+  useEffect(() => {
+    loadDashboardData();
+  }, []);
 
   const canManageUsers = hasActionAccess('manage_users');
   const canEditBudget = hasActionAccess('edit_budget');
@@ -67,8 +156,7 @@ export const MainDashboardView: React.FC<MainDashboardViewProps> = ({
   };
 
   const handleRefresh = () => {
-    setIsRefreshing(true);
-    setTimeout(() => setIsRefreshing(false), 600);
+    loadDashboardData();
   };
 
   return (

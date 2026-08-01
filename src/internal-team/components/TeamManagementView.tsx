@@ -26,7 +26,6 @@ import {
 import { useAuth } from '../../auth';
 import { Department } from '../../organization';
 import { InternalTeamMember, TeamMemberFilterParams } from '../types/team';
-import { INITIAL_INTERNAL_TEAM } from '../data/mockTeamData';
 import { InternalTeamService } from '../services/teamService';
 import { TEAM_ROLE_TYPES, TEAM_STATUSES } from '../constants/teamOptions';
 import { TeamMemberCard } from './TeamMemberCard';
@@ -47,7 +46,7 @@ export const TeamManagementView: React.FC<TeamManagementViewProps> = ({
   const { user } = useAuth();
 
   // State principal de membros da equipe
-  const [members, setMembers] = useState<InternalTeamMember[]>(INITIAL_INTERNAL_TEAM);
+  const [members, setMembers] = useState<InternalTeamMember[]>([]);
 
   // Tab ativa: 'membros' | 'tabela' | 'desempenho'
   const [activeTab, setActiveTab] = useState<'membros' | 'tabela' | 'desempenho'>('membros');

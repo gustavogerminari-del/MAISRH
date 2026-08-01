@@ -73,7 +73,7 @@ export const JobDetailModal: React.FC<JobDetailModalProps> = ({
               <Button
                 variant="outline"
                 size="sm"
-                onClick={() => onStatusChange(job.id, 'Fechada')}
+                onClick={() => onStatusChange(job.id, 'Aberta')}
                 leftIcon={<RotateCcw className="w-3.5 h-3.5" />}
                 className="bg-white border-rose-300 text-rose-800 hover:bg-rose-100 shrink-0"
               >

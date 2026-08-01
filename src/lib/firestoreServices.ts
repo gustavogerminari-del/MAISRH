@@ -11,7 +11,6 @@ import {
 import { db, auth } from './firebase';
 import { sanitizeFirestoreData } from './firestoreUtils';
 import { ClientTenant, PlatformModule, TenantModulePermissions } from '../master-admin/types/master';
-import { MOCK_TENANTS, MOCK_PLATFORM_MODULES } from '../master-admin/data/mockMasterData';
 
 export enum OperationType {
   CREATE = 'create',

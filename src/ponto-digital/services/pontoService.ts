@@ -39,101 +39,14 @@ function handleFirestoreError(error: unknown, op: string, path: string) {
   }
 }
 
-// Initial mock fallback data if collections are empty
-export const DEFAULT_ESCALAS: EscalaTrabalhoDoc[] = [
-  {
-    id: 'esc-01',
-    empresaId: 'emp-001',
-    nome: 'Comercial Administrativo (8h às 17h)',
-    tipo: 'Administrativo',
-    horarioEntrada: '08:00',
-    horarioSaida: '17:00',
-    intervalo: '01:00',
-    diasTrabalho: ['Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta'],
-    toleranciaMinutos: 10
-  },
-  {
-    id: 'esc-02',
-    empresaId: 'emp-001',
-    nome: 'Plantão Hospitalar / Operacional (12x36)',
-    tipo: '12x36',
-    horarioEntrada: '07:00',
-    horarioSaida: '19:00',
-    intervalo: '01:00',
-    diasTrabalho: ['Escala Alternada'],
-    toleranciaMinutos: 15
-  },
-  {
-    id: 'esc-03',
-    empresaId: 'emp-001',
-    nome: 'Varejo & Serviços (6x1)',
-    tipo: '6x1',
-    horarioEntrada: '09:00',
-    horarioSaida: '18:00',
-    intervalo: '01:00',
-    diasTrabalho: ['Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta', 'Sábado'],
-    toleranciaMinutos: 10
-  }
-];
-
-export const DEFAULT_FUNCIONARIOS: FuncionarioPontoInfo[] = [
-  {
-    id: 'func-01',
-    empresaId: 'emp-001',
-    nome: 'Carlos Eduardo Silva',
-    cpf: '123.456.789-00',
-    cargo: 'Analista de RH Sênior',
-    setor: 'Gente & Gestão',
-    email: 'carlos.gestor@maisrh.com.br',
-    telefone: '(11) 98765-4321',
-    escalaId: 'esc-01',
-    escalaNome: 'Comercial Administrativo (8h às 17h)',
-    gestorId: 'usr-admin-01',
-    gestorNome: 'Luciana Mello',
-    status: 'Ativo',
-    statusLivePonto: 'Trabalhando'
-  },
-  {
-    id: 'func-02',
-    empresaId: 'emp-001',
-    nome: 'Mariana Costa',
-    cpf: '234.567.890-11',
-    cargo: 'Tech Recruiter Lead',
-    setor: 'Atração de Talentos',
-    email: 'mariana.recrutadora@maisrh.com.br',
-    telefone: '(11) 97654-3210',
-    escalaId: 'esc-01',
-    escalaNome: 'Comercial Administrativo (8h às 17h)',
-    gestorId: 'usr-admin-01',
-    gestorNome: 'Luciana Mello',
-    status: 'Ativo',
-    statusLivePonto: 'Intervalo'
-  },
-  {
-    id: 'func-03',
-    empresaId: 'emp-001',
-    nome: 'Roberto Andrade',
-    cpf: '345.678.901-22',
-    cargo: 'Assistente de DP',
-    setor: 'Departamento Pessoal',
-    email: 'roberto.analista@maisrh.com.br',
-    telefone: '(11) 96543-2109',
-    escalaId: 'esc-03',
-    escalaNome: 'Varejo & Serviços (6x1)',
-    gestorId: 'func-01',
-    gestorNome: 'Carlos Eduardo Silva',
-    status: 'Ativo',
-    statusLivePonto: 'Ausente'
-  }
-];
-
+// Default configuration template
 export const DEFAULT_CONFIG: ConfiguracoesPonto = {
-  empresaId: 'emp-001',
-  geofencingAtivo: true,
+  empresaId: '',
+  geofencingAtivo: false,
   latitudeCentro: -23.55052,
   longitudeCentro: -46.633308,
   raioPermitidoMetros: 500,
-  exigirFoto: true,
+  exigirFoto: false,
   toleranciaAtrasoMinutos: 10,
   inicioAdicionalNoturno: '22:00',
   fimAdicionalNoturno: '05:00',
@@ -215,7 +128,7 @@ export async function fetchEscalasPonto(empresaId: string): Promise<EscalaTrabal
   }
 
   const saved = localStorage.getItem(STORAGE_KEYS.ESCALAS);
-  return saved ? JSON.parse(saved) : DEFAULT_ESCALAS;
+  return saved ? JSON.parse(saved) : [];
 }
 
 export async function salvarEscalaPonto(escala: EscalaTrabalhoDoc): Promise<void> {
@@ -227,7 +140,7 @@ export async function salvarEscalaPonto(escala: EscalaTrabalhoDoc): Promise<void
   }
 
   const saved = localStorage.getItem(STORAGE_KEYS.ESCALAS);
-  const list: EscalaTrabalhoDoc[] = saved ? JSON.parse(saved) : DEFAULT_ESCALAS;
+  const list: EscalaTrabalhoDoc[] = saved ? JSON.parse(saved) : [];
   const idx = list.findIndex(e => e.id === escala.id);
   if (idx >= 0) {
     list[idx] = escala;
@@ -293,38 +206,7 @@ export async function fetchBancoHoras(empresaId: string): Promise<BancoHorasDoc[
   }
 
   const saved = localStorage.getItem(STORAGE_KEYS.BANCO);
-  return saved ? JSON.parse(saved) : [
-    {
-      id: 'bh-01',
-      funcionarioId: 'func-01',
-      funcionarioNome: 'Carlos Eduardo Silva',
-      empresaId: 'emp-001',
-      creditoMinutos: 480, // +8h
-      debitoMinutos: 60,   // -1h
-      saldoMinutos: 420,   // +7h
-      ultimaAtualizacao: new Date().toISOString().split('T')[0]
-    },
-    {
-      id: 'bh-02',
-      funcionarioId: 'func-02',
-      funcionarioNome: 'Mariana Costa',
-      empresaId: 'emp-001',
-      creditoMinutos: 240, // +4h
-      debitoMinutos: 180,  // -3h
-      saldoMinutos: 60,    // +1h
-      ultimaAtualizacao: new Date().toISOString().split('T')[0]
-    },
-    {
-      id: 'bh-03',
-      funcionarioId: 'func-03',
-      funcionarioNome: 'Roberto Andrade',
-      empresaId: 'emp-001',
-      creditoMinutos: 120, // +2h
-      debitoMinutos: 300,  // -5h
-      saldoMinutos: -180,  // -3h
-      ultimaAtualizacao: new Date().toISOString().split('T')[0]
-    }
-  ];
+  return saved ? JSON.parse(saved) : [];
 }
 
 export async function salvarBancoHoras(banco: BancoHorasDoc): Promise<void> {
@@ -363,7 +245,7 @@ export async function fetchFuncionariosPonto(empresaId: string): Promise<Funcion
   }
 
   const saved = localStorage.getItem(STORAGE_KEYS.FUNCIONARIOS);
-  return saved ? JSON.parse(saved) : DEFAULT_FUNCIONARIOS;
+  return saved ? JSON.parse(saved) : [];
 }
 
 export async function salvarFuncionarioPonto(func: FuncionarioPontoInfo): Promise<void> {
@@ -375,7 +257,7 @@ export async function salvarFuncionarioPonto(func: FuncionarioPontoInfo): Promis
   }
 
   const saved = localStorage.getItem(STORAGE_KEYS.FUNCIONARIOS);
-  const list: FuncionarioPontoInfo[] = saved ? JSON.parse(saved) : DEFAULT_FUNCIONARIOS;
+  const list: FuncionarioPontoInfo[] = saved ? JSON.parse(saved) : [];
   const idx = list.findIndex(f => f.id === func.id);
   if (idx >= 0) {
     list[idx] = func;
@@ -400,7 +282,7 @@ export async function fetchConfiguracoesPonto(empresaId: string): Promise<Config
   }
 
   const saved = localStorage.getItem(STORAGE_KEYS.CONFIG);
-  return saved ? JSON.parse(saved) : DEFAULT_CONFIG;
+  return saved ? JSON.parse(saved) : { ...DEFAULT_CONFIG, empresaId };
 }
 
 export async function salvarConfiguracoesPonto(config: ConfiguracoesPonto): Promise<void> {

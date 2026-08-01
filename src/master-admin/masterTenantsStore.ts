@@ -1,5 +1,4 @@
 import { ClientTenant, TenantModulePermissions } from './types/master';
-import { MOCK_TENANTS } from './data/mockMasterData';
 import { 
   fetchEmpresasFirestore, 
   saveEmpresaFirestore, 

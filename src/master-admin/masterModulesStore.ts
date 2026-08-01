@@ -1,5 +1,4 @@
 import { PlatformModule, PlatformModuleAuditLog } from './types/master';
-import { MOCK_PLATFORM_MODULES } from './data/mockMasterData';
 import { fetchModulosFirestore, saveModuloFirestore } from '../lib/firestoreServices';
 
 const STORAGE_KEY = 'mais_rh_platform_modules';

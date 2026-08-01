@@ -1,5 +1,4 @@
 import { ClientSubscription } from './types';
-import { MOCK_SUBSCRIPTIONS } from './mockData';
 
 const STORAGE_KEY = 'mais_rh_subscriptions';
 

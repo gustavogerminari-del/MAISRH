@@ -11,7 +11,6 @@ import {
 import { db, auth } from '../lib/firebase';
 import { sanitizeFirestoreData } from '../lib/firestoreUtils';
 import { ClientTenant } from '../master-admin/types/master';
-import { MOCK_TENANTS } from '../master-admin/data/mockMasterData';
 import { AuditService } from './AuditService';
 
 const COLLECTION_NAME = 'companies';
@@ -137,7 +136,7 @@ export class CompanyService {
     } catch (err) {
       console.warn('Erro em CompanyService.getById:', err);
     }
-    return MOCK_TENANTS.find(t => t.id === id) || null;
+    return null;
   }
 
   static async get(id: string): Promise<ClientTenant | null> {
@@ -155,7 +154,7 @@ export class CompanyService {
     } catch (err) {
       console.warn('Erro em CompanyService.list:', err);
     }
-    return MOCK_TENANTS;
+    return [];
   }
 
   static async search(term: string): Promise<ClientTenant[]> {

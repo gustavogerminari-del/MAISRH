@@ -16,11 +16,10 @@ import {
   Info
 } from 'lucide-react';
 import { AuditLogEntry, AuditSeverity } from './types';
-import { MOCK_AUDIT_LOGS } from './mockData';
 import { AuditService } from '../services/AuditService';
 
 export const AuditLogsView: React.FC = () => {
-  const [logs, setLogs] = useState<AuditLogEntry[]>(MOCK_AUDIT_LOGS);
+  const [logs, setLogs] = useState<AuditLogEntry[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedSeverity, setSelectedSeverity] = useState<string>('Todas');
@@ -30,8 +29,8 @@ export const AuditLogsView: React.FC = () => {
   useEffect(() => {
     let isMounted = true;
     AuditService.list().then(data => {
-      if (isMounted && data && data.length > 0) {
-        setLogs(data);
+      if (isMounted) {
+        setLogs(data || []);
       }
       setLoading(false);
     }).catch(err => {
