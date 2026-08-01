@@ -13,6 +13,7 @@ import { sanitizeFirestoreData } from '../lib/firestoreUtils';
 import { Job } from '../types/rh';
 import { INITIAL_JOBS } from '../data/initialData';
 import { AuditService } from './AuditService';
+import { normalizeJobData, normalizeJobStatus } from '../jobs/utils/jobUtils';
 
 const COLLECTION_NAME = 'jobs';
 
@@ -117,7 +118,7 @@ export class JobService {
     try {
       const snap = await getDoc(doc(db, COLLECTION_NAME, id));
       if (snap.exists()) {
-        return { ...snap.data(), id: snap.id } as Job;
+        return normalizeJobData({ ...snap.data(), id: snap.id });
       }
     } catch (err) {
       console.warn('Erro em JobService.getById:', err);
@@ -136,17 +137,17 @@ export class JobService {
 
         const q1 = query(collection(db, COLLECTION_NAME), where('companyId', '==', companyId));
         const snap1 = await getDocs(q1);
-        snap1.forEach(d => listMap.set(d.id, { ...d.data(), id: d.id } as Job));
+        snap1.forEach(d => listMap.set(d.id, normalizeJobData({ ...d.data(), id: d.id })));
 
         const q2 = query(collection(db, COLLECTION_NAME), where('empresaId', '==', companyId));
         const snap2 = await getDocs(q2);
-        snap2.forEach(d => listMap.set(d.id, { ...d.data(), id: d.id } as Job));
+        snap2.forEach(d => listMap.set(d.id, normalizeJobData({ ...d.data(), id: d.id })));
 
         return Array.from(listMap.values());
       } else {
         const snap = await getDocs(collection(db, COLLECTION_NAME));
         const list: Job[] = [];
-        snap.forEach(d => list.push({ ...d.data(), id: d.id } as Job));
+        snap.forEach(d => list.push(normalizeJobData({ ...d.data(), id: d.id })));
         return list;
       }
     } catch (err) {

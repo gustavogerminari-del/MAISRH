@@ -8,6 +8,7 @@ import {
   ChevronRight,
   Edit3,
   Archive,
+  RotateCcw,
   UserCheck,
   Briefcase,
 } from 'lucide-react';
@@ -22,6 +23,7 @@ export interface JobCardProps {
   onManageCandidates?: (job: Job) => void;
   onEditJob?: (job: Job) => void;
   onArchiveJob?: (jobId: string) => void;
+  onRestoreJob?: (jobId: string) => void;
   canEdit?: boolean;
   canArchive?: boolean;
 }
@@ -32,9 +34,12 @@ export const JobCard: React.FC<JobCardProps> = ({
   onManageCandidates,
   onEditJob,
   onArchiveJob,
+  onRestoreJob,
   canEdit = true,
   canArchive = true,
 }) => {
+  const isArchived = job.status === 'Arquivada' || (job as any).archived === true || (job as any).isArchived === true;
+
   return (
     <Card className="p-5 flex flex-col justify-between space-y-4 hover:border-indigo-300 transition-all group">
       <div className="space-y-3">
@@ -111,15 +116,28 @@ export const JobCard: React.FC<JobCardProps> = ({
               </button>
             )}
 
-            {canArchive && onArchiveJob && job.status !== 'Arquivada' && (
-              <button
-                type="button"
-                onClick={() => onArchiveJob(job.id)}
-                className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors cursor-pointer"
-                title="Arquivar Vaga"
-              >
-                <Archive className="w-3.5 h-3.5" />
-              </button>
+            {isArchived ? (
+              canArchive && onRestoreJob && (
+                <button
+                  type="button"
+                  onClick={() => onRestoreJob(job.id)}
+                  className="p-1.5 text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 rounded-lg transition-colors cursor-pointer"
+                  title="Restaurar Vaga"
+                >
+                  <RotateCcw className="w-3.5 h-3.5" />
+                </button>
+              )
+            ) : (
+              canArchive && onArchiveJob && (
+                <button
+                  type="button"
+                  onClick={() => onArchiveJob(job.id)}
+                  className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors cursor-pointer"
+                  title="Arquivar Vaga"
+                >
+                  <Archive className="w-3.5 h-3.5" />
+                </button>
+              )
             )}
 
             <Button
@@ -144,3 +162,4 @@ export const JobCard: React.FC<JobCardProps> = ({
     </Card>
   );
 };
+

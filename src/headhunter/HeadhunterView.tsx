@@ -24,16 +24,6 @@ import {
 } from '../recruitment-core';
 
 import { 
-  MOCK_HEADHUNTER_CLIENTS, 
-  MOCK_HEADHUNTER_LEADS, 
-  MOCK_HEADHUNTER_COMMISSIONS, 
-  MOCK_HEADHUNTER_FINANCIAL, 
-  MOCK_HEADHUNTER_EXPENSES, 
-  MOCK_HEADHUNTER_CONTRACTS,
-  MOCK_HEADHUNTER_PROPOSALS
-} from './mockData';
-
-import { 
   HeadhunterClient, 
   HeadhunterLead, 
   HeadhunterCommission, 
@@ -45,6 +35,8 @@ import {
   ProposalStatus,
   ContractStatus
 } from './types';
+import { HeadhunterDataService, syncHeadhunterDataWithFirestore } from './services/headhunterDataService';
+import { HeadhunterFinanceService, syncHeadhunterFinanceWithFirestore } from './services/headhunterFinanceService';
 
 export type HeadhunterSubTab = 
   | 'dashboard'
@@ -93,70 +85,36 @@ export const HeadhunterView: React.FC<HeadhunterViewProps> = ({ initialSubTab = 
   const [hirings, setHirings] = useState<UnifiedHiring[]>(() => recruitmentService.getHirings('headhunter'));
   const [agendaEvents, setAgendaEvents] = useState<UnifiedAgendaEvent[]>(() => recruitmentService.getAgendaEvents('headhunter'));
 
-  // Headhunter state
-  const [clients, setClients] = useState<HeadhunterClient[]>(() => {
-    const saved = localStorage.getItem(`${STORAGE_KEY}_clients`);
-    return saved ? JSON.parse(saved) : MOCK_HEADHUNTER_CLIENTS;
-  });
+  // Headhunter state from Firestore service
+  const [clients, setClients] = useState<HeadhunterClient[]>(() => HeadhunterDataService.getClients());
+  const [leads, setLeads] = useState<HeadhunterLead[]>(() => HeadhunterDataService.getLeads());
+  const [proposals, setProposals] = useState<HeadhunterProposal[]>(() => HeadhunterDataService.getProposals());
+  const [contracts, setContracts] = useState<HeadhunterContract[]>(() => HeadhunterDataService.getContracts());
+  const [commissions, setCommissions] = useState<HeadhunterCommission[]>(() => HeadhunterFinanceService.getComissoes());
+  const [financial, setFinancial] = useState<HeadhunterFinanceItem[]>([]);
+  const [expenses, setExpenses] = useState<HeadhunterExpense[]>(() => HeadhunterFinanceService.getDespesas());
 
-  const [leads, setLeads] = useState<HeadhunterLead[]>(() => {
-    const saved = localStorage.getItem(`${STORAGE_KEY}_leads`);
-    return saved ? JSON.parse(saved) : MOCK_HEADHUNTER_LEADS;
-  });
-
-  const [proposals, setProposals] = useState<HeadhunterProposal[]>(() => {
-    const saved = localStorage.getItem(`${STORAGE_KEY}_proposals`);
-    return saved ? JSON.parse(saved) : MOCK_HEADHUNTER_PROPOSALS;
-  });
-
-  const [contracts, setContracts] = useState<HeadhunterContract[]>(() => {
-    const saved = localStorage.getItem(`${STORAGE_KEY}_contracts`);
-    return saved ? JSON.parse(saved) : MOCK_HEADHUNTER_CONTRACTS;
-  });
-
-  const [commissions, setCommissions] = useState<HeadhunterCommission[]>(() => {
-    const saved = localStorage.getItem(`${STORAGE_KEY}_commissions`);
-    return saved ? JSON.parse(saved) : MOCK_HEADHUNTER_COMMISSIONS;
-  });
-
-  const [financial, setFinancial] = useState<HeadhunterFinanceItem[]>(() => {
-    const saved = localStorage.getItem(`${STORAGE_KEY}_financial`);
-    return saved ? JSON.parse(saved) : MOCK_HEADHUNTER_FINANCIAL;
-  });
-
-  const [expenses, setExpenses] = useState<HeadhunterExpense[]>(() => {
-    const saved = localStorage.getItem(`${STORAGE_KEY}_expenses`);
-    return saved ? JSON.parse(saved) : MOCK_HEADHUNTER_EXPENSES;
-  });
-
-  // Sync state to LocalStorage
+  // Background refresh when Firestore loads
   useEffect(() => {
-    localStorage.setItem(`${STORAGE_KEY}_clients`, JSON.stringify(clients));
-  }, [clients]);
-
-  useEffect(() => {
-    localStorage.setItem(`${STORAGE_KEY}_leads`, JSON.stringify(leads));
-  }, [leads]);
-
-  useEffect(() => {
-    localStorage.setItem(`${STORAGE_KEY}_proposals`, JSON.stringify(proposals));
-  }, [proposals]);
-
-  useEffect(() => {
-    localStorage.setItem(`${STORAGE_KEY}_contracts`, JSON.stringify(contracts));
-  }, [contracts]);
-
-  useEffect(() => {
-    localStorage.setItem(`${STORAGE_KEY}_commissions`, JSON.stringify(commissions));
-  }, [commissions]);
-
-  useEffect(() => {
-    localStorage.setItem(`${STORAGE_KEY}_financial`, JSON.stringify(financial));
-  }, [financial]);
-
-  useEffect(() => {
-    localStorage.setItem(`${STORAGE_KEY}_expenses`, JSON.stringify(expenses));
-  }, [expenses]);
+    async function loadData() {
+      await Promise.all([
+        syncHeadhunterDataWithFirestore(),
+        syncHeadhunterFinanceWithFirestore()
+      ]);
+      setClients(HeadhunterDataService.getClients());
+      setLeads(HeadhunterDataService.getLeads());
+      setProposals(HeadhunterDataService.getProposals());
+      setContracts(HeadhunterDataService.getContracts());
+      setCommissions(HeadhunterFinanceService.getComissoes());
+      setExpenses(HeadhunterFinanceService.getDespesas());
+      setJobs(recruitmentService.getJobs('headhunter'));
+      setCandidates(recruitmentService.getCandidates('headhunter'));
+      setInterviews(recruitmentService.getInterviews('headhunter'));
+      setHirings(recruitmentService.getHirings('headhunter'));
+      setAgendaEvents(recruitmentService.getAgendaEvents('headhunter'));
+    }
+    loadData();
+  }, []);
 
   // AI Modal State
   const [aiModalOpen, setAiModalOpen] = useState(false);
@@ -169,21 +127,46 @@ export const HeadhunterView: React.FC<HeadhunterViewProps> = ({ initialSubTab = 
     setAiModalOpen(true);
   };
 
-  // State Handlers
-  const handleAddClient = (cli: HeadhunterClient) => setClients([cli, ...clients]);
-  const handleAddLead = (ld: HeadhunterLead) => setLeads([ld, ...leads]);
+  // State Handlers with Firestore persistence
+  const handleAddClient = (cli: HeadhunterClient) => {
+    setClients([cli, ...clients]);
+    HeadhunterDataService.saveClient(cli);
+  };
+
+  const handleAddLead = (ld: HeadhunterLead) => {
+    setLeads([ld, ...leads]);
+    HeadhunterDataService.saveLead(ld);
+  };
+
   const handleUpdateLeadStage = (id: string, stage: LeadStage) => {
-    setLeads(leads.map(l => l.id === id ? { ...l, etapa: stage } : l));
+    const updated = leads.map(l => l.id === id ? { ...l, etapa: stage } : l);
+    setLeads(updated);
+    const target = updated.find(l => l.id === id);
+    if (target) HeadhunterDataService.saveLead(target);
   };
 
-  const handleAddProposal = (prop: HeadhunterProposal) => setProposals([prop, ...proposals]);
+  const handleAddProposal = (prop: HeadhunterProposal) => {
+    setProposals([prop, ...proposals]);
+    HeadhunterDataService.saveProposal(prop);
+  };
+
   const handleUpdateProposalStatus = (id: string, status: ProposalStatus) => {
-    setProposals(proposals.map(p => p.id === id ? { ...p, status } : p));
+    const updated = proposals.map(p => p.id === id ? { ...p, status } : p);
+    setProposals(updated);
+    const target = updated.find(p => p.id === id);
+    if (target) HeadhunterDataService.saveProposal(target);
   };
 
-  const handleAddContract = (ctr: HeadhunterContract) => setContracts([ctr, ...contracts]);
+  const handleAddContract = (ctr: HeadhunterContract) => {
+    setContracts([ctr, ...contracts]);
+    HeadhunterDataService.saveContract(ctr);
+  };
+
   const handleUpdateContractStatus = (id: string, status: ContractStatus) => {
-    setContracts(contracts.map(c => c.id === id ? { ...c, status } : c));
+    const updated = contracts.map(c => c.id === id ? { ...c, status } : c);
+    setContracts(updated);
+    const target = updated.find(c => c.id === id);
+    if (target) HeadhunterDataService.saveContract(target);
   };
 
   const handleCreateJobFromContract = (ctr: HeadhunterContract) => {

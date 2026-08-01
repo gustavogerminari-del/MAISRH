@@ -11,6 +11,7 @@ import {
   Lock,
 } from 'lucide-react';
 import { Job, JobFilterParams, JobStatus } from '../types/job';
+import { normalizeJobStatus, normalizeJobData } from '../utils/jobUtils';
 import { INITIAL_JOBS_DATA } from '../data/mockJobsData';
 import { JobCard } from './JobCard';
 import { JobDetailModal } from './JobDetailModal';
@@ -45,13 +46,14 @@ export const JobsManagementView: React.FC<JobsManagementViewProps> = ({
   const rawJobs = initialJobsList !== undefined ? initialJobsList : [];
 
   const companyJobs = useMemo(() => {
-    if (isMaster || !userCompanyId) {
-      return rawJobs;
-    }
-    return rawJobs.filter((j: any) => {
-      const cId = j.companyId || j.empresaId || j.tenantId;
-      return !cId || cId === userCompanyId;
-    });
+    const list = isMaster || !userCompanyId
+      ? rawJobs
+      : rawJobs.filter((j: any) => {
+          const cId = j.companyId || j.empresaId || j.tenantId;
+          return !cId || cId === userCompanyId;
+        });
+
+    return list.map(j => normalizeJobData(j));
   }, [rawJobs, isMaster, userCompanyId]);
 
   const [jobs, setJobs] = useState<Job[]>(companyJobs);
@@ -67,7 +69,7 @@ export const JobsManagementView: React.FC<JobsManagementViewProps> = ({
   const [editingJob, setEditingJob] = useState<Job | null>(null);
 
   const handleManageCandidates = (job: Job) => {
-    setSelectedJobForCandidates(job);
+    setSelectedJobForCandidates(normalizeJobData(job));
     if (onOpenCandidatesForJob) {
       onOpenCandidatesForJob(job.id);
     }
@@ -86,8 +88,9 @@ export const JobsManagementView: React.FC<JobsManagementViewProps> = ({
   // Calculate per-department open job count
   const departmentCounts = useMemo(() => {
     const map: Record<string, number> = {};
-    jobs.forEach((j) => {
-      if (j.status === 'Aberta') {
+    jobs.forEach((raw) => {
+      const j = normalizeJobData(raw);
+      if (j.status === 'Aberta' && !j.archived) {
         map[j.department] = (map[j.department] || 0) + j.openings;
       }
     });
@@ -108,30 +111,34 @@ export const JobsManagementView: React.FC<JobsManagementViewProps> = ({
     });
   };
 
-  // Filtered Jobs
+  // Filtered Jobs with strict normalize status logic
   const filteredJobs = useMemo(() => {
-    return jobs.filter((job) => {
+    return jobs.map(j => normalizeJobData(j)).filter((job) => {
       const term = filters.searchTerm.toLowerCase().trim();
       const matchesSearch =
         !term ||
         job.title.toLowerCase().includes(term) ||
         job.department.toLowerCase().includes(term) ||
-        job.recruiterName.toLowerCase().includes(term) ||
-        job.requirements.some((r) => r.toLowerCase().includes(term));
+        (job.recruiterName && job.recruiterName.toLowerCase().includes(term)) ||
+        (job.requirements && job.requirements.some((r) => r.toLowerCase().includes(term)));
 
       const matchesDept =
         filters.department === 'Todos' || job.department === filters.department;
 
-      const matchesStatus =
-        filters.status === 'Todas' || job.status === filters.status;
-
       const matchesType = filters.type === 'Todos' || job.type === filters.type;
 
-      const matchesArchive = filters.includeArchived || job.status !== 'Arquivada';
+      let matchesStatus = false;
+      const normFilterStatus = normalizeJobStatus(filters.status);
 
-      return (
-        matchesSearch && matchesDept && matchesStatus && matchesType && matchesArchive
-      );
+      if (filters.status === 'Todas') {
+        matchesStatus = filters.includeArchived ? true : job.status !== 'Arquivada' && !job.archived;
+      } else if (filters.status === 'Arquivada' || normFilterStatus === 'Arquivada') {
+        matchesStatus = job.status === 'Arquivada' || job.archived === true || (job as any).isArchived === true;
+      } else {
+        matchesStatus = job.status === normFilterStatus;
+      }
+
+      return matchesSearch && matchesDept && matchesType && matchesStatus;
     });
   }, [jobs, filters]);
 
@@ -143,7 +150,7 @@ export const JobsManagementView: React.FC<JobsManagementViewProps> = ({
     const resolvedCompanyId = userCompanyId || (user as any)?.companyId || (user as any)?.empresaId || 'emp-001';
     
     if (existingId) {
-      updatedList = jobs.map((j) => (j.id === existingId ? { ...j, ...jobData } : j));
+      updatedList = jobs.map((j) => (j.id === existingId ? normalizeJobData({ ...j, ...jobData }) : j));
       setJobs(updatedList);
       logger.info(`Vaga atualizada: ${existingId}`, 'JobsManagement');
       try {
@@ -152,7 +159,7 @@ export const JobsManagementView: React.FC<JobsManagementViewProps> = ({
         console.error('Erro ao atualizar vaga no Firestore:', err);
       }
     } else {
-      const newJob: Job = {
+      const newJob: Job = normalizeJobData({
         ...jobData,
         id: `vaga-${Date.now()}`,
         companyId: resolvedCompanyId,
@@ -160,7 +167,7 @@ export const JobsManagementView: React.FC<JobsManagementViewProps> = ({
         applicantsCount: 0,
         createdAt: new Date().toISOString().split('T')[0],
         publicada: true,
-      };
+      });
       updatedList = [newJob, ...jobs];
       setJobs(updatedList);
       logger.info(`Nova vaga criada: ${newJob.title}`, 'JobsManagement');
@@ -176,17 +183,56 @@ export const JobsManagementView: React.FC<JobsManagementViewProps> = ({
   };
 
   const handleStatusChange = async (jobId: string, newStatus: JobStatus) => {
-    const updatedList = jobs.map((j) => (j.id === jobId ? { ...j, status: newStatus } : j));
+    const isArchiving = newStatus === 'Arquivada';
+    const isRestoring = newStatus === 'Fechada' || newStatus === 'Aberta';
+
+    const updatedList = jobs.map((j) => {
+      if (j.id === jobId) {
+        return normalizeJobData({
+          ...j,
+          status: newStatus,
+          archived: isArchiving ? true : isRestoring ? false : j.archived,
+          isArchived: isArchiving ? true : isRestoring ? false : (j as any).isArchived,
+          archivedAt: isArchiving ? new Date().toISOString() : isRestoring ? null : (j as any).archivedAt,
+          updatedAt: new Date().toISOString()
+        });
+      }
+      return j;
+    });
+
     setJobs(updatedList);
     if (selectedJob?.id === jobId) {
-      setSelectedJob((prev) => (prev ? { ...prev, status: newStatus } : null));
+      setSelectedJob(updatedList.find(j => j.id === jobId) || null);
     }
     if (onUpdateJobs) {
       onUpdateJobs(updatedList);
     }
+
     logger.info(`Status da vaga ${jobId} alterado para ${newStatus}`, 'JobsManagement');
+
     try {
-      await JobService.update(jobId, { status: newStatus });
+      if (isArchiving) {
+        await JobService.update(jobId, {
+          status: 'arquivada',
+          archived: true,
+          isArchived: true,
+          archivedAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString()
+        });
+      } else if (isRestoring) {
+        await JobService.update(jobId, {
+          status: newStatus.toLowerCase(),
+          archived: false,
+          isArchived: false,
+          archivedAt: null,
+          updatedAt: new Date().toISOString()
+        });
+      } else {
+        await JobService.update(jobId, {
+          status: newStatus,
+          updatedAt: new Date().toISOString()
+        });
+      }
     } catch (err) {
       console.error('Erro ao atualizar status no Firestore:', err);
     }
@@ -196,18 +242,22 @@ export const JobsManagementView: React.FC<JobsManagementViewProps> = ({
     handleStatusChange(jobId, 'Arquivada');
   };
 
+  const handleRestoreJob = (jobId: string) => {
+    handleStatusChange(jobId, 'Fechada');
+  };
+
   const handleOpenCreateModal = () => {
     setEditingJob(null);
     setIsFormOpen(true);
   };
 
   const handleOpenEditModal = (job: Job) => {
-    setEditingJob(job);
+    setEditingJob(normalizeJobData(job));
     setIsFormOpen(true);
   };
 
   const handleViewDetails = (job: Job) => {
-    setSelectedJob(job);
+    setSelectedJob(normalizeJobData(job));
     setIsDetailOpen(true);
   };
 
@@ -220,6 +270,11 @@ export const JobsManagementView: React.FC<JobsManagementViewProps> = ({
     );
   }
 
+  const openJobsCount = jobs.filter((j) => {
+    const norm = normalizeJobData(j);
+    return norm.status === 'Aberta' && !norm.archived;
+  }).length;
+
   return (
     <div className="space-y-6">
       {/* Header Banner */}
@@ -230,7 +285,7 @@ export const JobsManagementView: React.FC<JobsManagementViewProps> = ({
               Gestão de Vagas Corporativas
             </h2>
             <span className="bg-indigo-100 text-indigo-800 text-[10px] font-extrabold px-2.5 py-0.5 rounded-full border border-indigo-200">
-              {jobs.filter((j) => j.status === 'Aberta').length} abertas
+              {openJobsCount} abertas
             </span>
           </div>
           <p className="text-xs text-slate-500 font-medium">
@@ -304,6 +359,7 @@ export const JobsManagementView: React.FC<JobsManagementViewProps> = ({
               onManageCandidates={handleManageCandidates}
               onEditJob={handleOpenEditModal}
               onArchiveJob={handleArchiveJob}
+              onRestoreJob={handleRestoreJob}
               canEdit={canEdit}
               canArchive={canClose}
             />
@@ -332,3 +388,4 @@ export const JobsManagementView: React.FC<JobsManagementViewProps> = ({
     </div>
   );
 };
+

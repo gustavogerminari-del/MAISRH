@@ -156,40 +156,46 @@ export const HeadhunterClientes: React.FC<HeadhunterClientesProps> = ({
           </div>
 
           <div className="space-y-3 max-h-[600px] overflow-y-auto pr-1">
-            {filteredClients.map(cli => (
-              <div
-                key={cli.id}
-                onClick={() => setSelectedClient(cli)}
-                className={`p-4 rounded-2xl border transition-all cursor-pointer ${
-                  selectedClient?.id === cli.id
-                    ? 'bg-indigo-50/50 border-indigo-600 shadow-xs'
-                    : 'bg-white border-slate-200 hover:border-slate-300'
-                }`}
-              >
-                <div className="flex items-start justify-between gap-2">
-                  <div>
-                    <h4 className="text-sm font-black text-slate-900">{cli.nomeFantasia}</h4>
-                    <p className="text-[11px] text-slate-500 font-medium">{cli.razaoSocial}</p>
-                  </div>
-                  <span className={`px-2 py-0.5 text-[10px] font-extrabold rounded-full ${
-                    cli.status === 'Ativo' ? 'bg-emerald-100 text-emerald-800' : 'bg-slate-200 text-slate-700'
-                  }`}>
-                    {cli.status}
-                  </span>
-                </div>
-
-                <div className="mt-3 grid grid-cols-2 gap-2 pt-2 border-t border-slate-100 text-[11px]">
-                  <div>
-                    <span className="text-slate-400 font-medium">Segmento:</span>
-                    <p className="font-bold text-slate-700">{cli.segmento}</p>
-                  </div>
-                  <div>
-                    <span className="text-slate-400 font-medium">Comissão Vaga:</span>
-                    <p className="font-bold text-indigo-600">{cli.comissaoNegociadaPercent}%</p>
-                  </div>
-                </div>
+            {filteredClients.length === 0 ? (
+              <div className="p-8 text-center text-slate-500 font-medium bg-white rounded-2xl border border-slate-200">
+                Nenhum cliente cadastrado.
               </div>
-            ))}
+            ) : (
+              filteredClients.map(cli => (
+                <div
+                  key={cli.id}
+                  onClick={() => setSelectedClient(cli)}
+                  className={`p-4 rounded-2xl border transition-all cursor-pointer ${
+                    selectedClient?.id === cli.id
+                      ? 'bg-indigo-50/50 border-indigo-600 shadow-xs'
+                      : 'bg-white border-slate-200 hover:border-slate-300'
+                  }`}
+                >
+                  <div className="flex items-start justify-between gap-2">
+                    <div>
+                      <h4 className="text-sm font-black text-slate-900">{cli.nomeFantasia}</h4>
+                      <p className="text-[11px] text-slate-500 font-medium">{cli.razaoSocial}</p>
+                    </div>
+                    <span className={`px-2 py-0.5 text-[10px] font-extrabold rounded-full ${
+                      cli.status === 'Ativo' ? 'bg-emerald-100 text-emerald-800' : 'bg-slate-200 text-slate-700'
+                    }`}>
+                      {cli.status}
+                    </span>
+                  </div>
+
+                  <div className="mt-3 grid grid-cols-2 gap-2 pt-2 border-t border-slate-100 text-[11px]">
+                    <div>
+                      <span className="text-slate-400 font-medium">Segmento:</span>
+                      <p className="font-bold text-slate-700">{cli.segmento}</p>
+                    </div>
+                    <div>
+                      <span className="text-slate-400 font-medium">Comissão Vaga:</span>
+                      <p className="font-bold text-indigo-600">{cli.comissaoNegociadaPercent}%</p>
+                    </div>
+                  </div>
+                </div>
+              ))
+            )}
           </div>
         </div>
 

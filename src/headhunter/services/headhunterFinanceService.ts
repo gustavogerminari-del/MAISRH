@@ -28,237 +28,32 @@ const COLLECTIONS = {
   AUDIT: 'historicos_financeiros'
 };
 
-// Mock Initial seed data for fallback
-const INITIAL_RECEITAS: HeadhunterReceita[] = [
-  {
-    id: 'rec-101',
-    empresaId: 'emp-001',
-    criadoPor: 'Carlos Headhunter',
-    criadoEm: '2026-02-22',
-    status: 'Ativo',
-    clienteId: 'cli-101',
-    clienteNome: 'Grupo Nexus Tech',
-    vagaId: 'job-303',
-    vagaCodigo: 'VAGA-00303',
-    vagaTitulo: 'Chief Technology Officer (CTO)',
-    candidatoId: 'cand-406',
-    candidatoNome: 'Alexandre Prado',
-    contratacaoId: 'hir-601',
-    propostaId: 'prop-101',
-    contratoId: 'ctr-201',
-    origemModulo: 'headhunter',
-    origemTipo: 'contratacao',
-    origemId: 'hir-601',
-    tipoReceita: 'Principal',
-    valorContratado: 90000,
-    valorRecebido: 90000,
-    saldo: 0,
-    dataEmissao: '2026-02-22',
-    dataVencimento: '2026-03-15',
-    dataRecebimento: '2026-03-12',
-    formaPagamento: 'PIX',
-    numeroNotaFiscal: 'NF-2026-042',
-    situacao: 'Recebida',
-    observacoes: 'Honorários de Executive Search quitados antecipadamente.',
-    parcelas: [
-      { numero: 1, valor: 90000, vencimento: '2026-03-15', status: 'Pago', dataPagamento: '2026-03-12', formaPagamento: 'PIX' }
-    ]
-  },
-  {
-    id: 'rec-102',
-    empresaId: 'emp-001',
-    criadoPor: 'Carlos Headhunter',
-    criadoEm: '2026-03-01',
-    status: 'Ativo',
-    clienteId: 'cli-101',
-    clienteNome: 'Grupo Nexus Tech',
-    vagaId: 'job-301',
-    vagaCodigo: 'VAGA-00301',
-    vagaTitulo: 'Head of Growth & Performance Marketing',
-    candidatoId: 'cand-401',
-    candidatoNome: 'Eduardo Albuquerque',
-    contratacaoId: 'hir-602',
-    propostaId: 'prop-101',
-    contratoId: 'ctr-201',
-    origemModulo: 'headhunter',
-    origemTipo: 'contratacao',
-    origemId: 'hir-602',
-    tipoReceita: 'Principal',
-    valorContratado: 56000,
-    valorRecebido: 28000,
-    saldo: 28000,
-    dataEmissao: '2026-03-01',
-    dataVencimento: '2026-04-15',
-    formaPagamento: 'Boleto',
-    situacao: 'Parcialmente Recebida',
-    observacoes: 'Faturamento parcelado em 2x de R$ 28.000.',
-    parcelas: [
-      { numero: 1, valor: 28000, vencimento: '2026-03-15', status: 'Pago', dataPagamento: '2026-03-15', formaPagamento: 'Boleto' },
-      { numero: 2, valor: 28000, vencimento: '2026-04-15', status: 'Pendente' }
-    ]
-  }
-];
-
-const INITIAL_DESPESAS: HeadhunterExpense[] = [
-  {
-    id: 'exp-101',
-    empresaId: 'emp-001',
-    criadoPor: 'Carlos Headhunter',
-    criadoEm: '2026-02-12',
-    status: 'Ativo',
-    tipoDespesa: 'vaga',
-    clienteId: 'cli-101',
-    clienteNome: 'Grupo Nexus Tech',
-    vagaId: 'job-301',
-    vagaTitulo: 'Head of Growth & Performance Marketing',
-    consultorNome: 'Carlos Headhunter',
-    responsavel: 'Carlos Headhunter',
-    centroCusto: 'Viagens & Deslocamento',
-    categoria: 'Deslocamento / Uber',
-    descricao: 'Deslocamento para reunião presencial na sede do cliente na Av. Paulista.',
-    data: '2026-02-12',
-    valor: 145.80,
-    situacao: 'Pago'
-  },
-  {
-    id: 'exp-102',
-    empresaId: 'emp-001',
-    criadoPor: 'Mariana Souza',
-    criadoEm: '2026-02-18',
-    status: 'Ativo',
-    tipoDespesa: 'vaga',
-    clienteId: 'cli-102',
-    clienteNome: 'Vanguard Pharma',
-    vagaId: 'job-302',
-    vagaTitulo: 'Diretor Industrial e Regulatório',
-    consultorNome: 'Mariana Souza',
-    responsavel: 'Mariana Souza',
-    centroCusto: 'Alimentação & Relacionamento',
-    categoria: 'Alimentação',
-    descricao: 'Almoço de alinhamento estratégico com o Diretor Geral Roberto Alencar.',
-    data: '2026-02-18',
-    valor: 320.00,
-    situacao: 'Pago'
-  },
-  {
-    id: 'exp-103',
-    empresaId: 'emp-001',
-    criadoPor: 'Carlos Headhunter',
-    criadoEm: '2026-03-01',
-    status: 'Ativo',
-    tipoDespesa: 'geral',
-    consultorNome: 'Carlos Headhunter',
-    responsavel: 'Financeiro Central',
-    centroCusto: 'Operacional & Softwares',
-    categoria: 'Plataforma / LinkedIn',
-    descricao: 'Licença mensal do LinkedIn Recruiter Corporate',
-    data: '2026-03-01',
-    valor: 4200.00,
-    situacao: 'Pendente',
-    observacao: 'Despesa geral da consultoria (não vinculada a vaga individual).'
-  }
-];
-
-const INITIAL_COMISSOES: HeadhunterCommission[] = [
-  {
-    id: 'com-101',
-    empresaId: 'emp-001',
-    criadoPor: 'Carlos Headhunter',
-    criadoEm: '2026-02-22',
-    status: 'Ativo',
-    beneficiarioNome: 'Carlos Headhunter',
-    clienteId: 'cli-101',
-    clienteNome: 'Grupo Nexus Tech',
-    vagaId: 'job-303',
-    vagaTitulo: 'Chief Technology Officer (CTO)',
-    consultorNome: 'Carlos Headhunter',
-    tipoComissao: 'Percentual',
-    valorRecebidoVaga: 90000,
-    percentual: 20,
-    valorComissao: 18000,
-    valorPago: 18000,
-    dataPrevista: '2026-03-20',
-    dataLiberacao: '2026-03-12',
-    dataPagamento: '2026-03-15',
-    situacao: 'Paga',
-    regraLiberacao: 'cliente_pagou',
-    formaPagamento: 'PIX',
-    observacoes: 'Comissão quitada após recebimento integral do cliente.'
-  },
-  {
-    id: 'com-102',
-    empresaId: 'emp-001',
-    criadoPor: 'Mariana Souza',
-    criadoEm: '2026-03-01',
-    status: 'Ativo',
-    beneficiarioNome: 'Mariana Souza',
-    clienteId: 'cli-102',
-    clienteNome: 'Vanguard Pharma',
-    vagaId: 'job-302',
-    vagaTitulo: 'Diretor Industrial e Regulatório',
-    consultorNome: 'Mariana Souza',
-    tipoComissao: 'Percentual',
-    valorRecebidoVaga: 83600,
-    percentual: 15,
-    valorComissao: 12540,
-    valorPago: 0,
-    dataPrevista: '2026-04-15',
-    situacao: 'Prevista',
-    regraLiberacao: 'cliente_pagou',
-    observacoes: 'Comissão estimada ao finalizar contratação.'
-  }
-];
-
-const INITIAL_GARANTIAS: HeadhunterGarantia[] = [
-  {
-    id: 'gar-101',
-    empresaId: 'emp-001',
-    criadoPor: 'Carlos Headhunter',
-    criadoEm: '2026-02-22',
-    status: 'Ativo',
-    clienteId: 'cli-101',
-    clienteNome: 'Grupo Nexus Tech',
-    vagaId: 'job-303',
-    vagaTitulo: 'Chief Technology Officer (CTO)',
-    candidatoId: 'cand-406',
-    candidatoNome: 'Lucas Silveira',
-    contratacaoId: 'hir-101',
-    dataInicial: '2026-03-01',
-    dataFinal: '2026-05-30',
-    prazoDias: 90,
-    situacao: 'Ativa',
-    observacoes: 'Garantia contratual de 90 dias corrida com reposição gratuita.'
-  }
-];
+// Clean initial empty arrays for real Firestore data
+const INITIAL_RECEITAS: HeadhunterReceita[] = [];
+const INITIAL_DESPESAS: HeadhunterExpense[] = [];
+const INITIAL_COMISSOES: HeadhunterCommission[] = [];
+const INITIAL_GARANTIAS: HeadhunterGarantia[] = [];
 
 // In-memory caches for synchronous immediate access
-let receitasCache: HeadhunterReceita[] = [...INITIAL_RECEITAS];
-let despesasCache: HeadhunterExpense[] = [...INITIAL_DESPESAS];
-let comissoesCache: HeadhunterCommission[] = [...INITIAL_COMISSOES];
-let garantiasCache: HeadhunterGarantia[] = [...INITIAL_GARANTIAS];
+let receitasCache: HeadhunterReceita[] = [];
+let despesasCache: HeadhunterExpense[] = [];
+let comissoesCache: HeadhunterCommission[] = [];
+let garantiasCache: HeadhunterGarantia[] = [];
 
 // Sync function with Firestore
 export async function syncHeadhunterFinanceWithFirestore(): Promise<void> {
   try {
     const recSnap = await getDocs(collection(db, COLLECTIONS.RECEITAS));
-    if (!recSnap.empty) {
-      receitasCache = recSnap.docs.map(d => ({ id: d.id, ...d.data() } as HeadhunterReceita));
-    }
+    receitasCache = recSnap.docs.map(d => ({ id: d.id, ...d.data() } as HeadhunterReceita));
 
     const despSnap = await getDocs(collection(db, COLLECTIONS.DESPESAS));
-    if (!despSnap.empty) {
-      despesasCache = despSnap.docs.map(d => ({ id: d.id, ...d.data() } as HeadhunterExpense));
-    }
+    despesasCache = despSnap.docs.map(d => ({ id: d.id, ...d.data() } as HeadhunterExpense));
 
     const comSnap = await getDocs(collection(db, COLLECTIONS.COMISSOES));
-    if (!comSnap.empty) {
-      comissoesCache = comSnap.docs.map(d => ({ id: d.id, ...d.data() } as HeadhunterCommission));
-    }
+    comissoesCache = comSnap.docs.map(d => ({ id: d.id, ...d.data() } as HeadhunterCommission));
 
     const garSnap = await getDocs(collection(db, COLLECTIONS.GARANTIAS));
-    if (!garSnap.empty) {
-      garantiasCache = garSnap.docs.map(d => ({ id: d.id, ...d.data() } as HeadhunterGarantia));
-    }
+    garantiasCache = garSnap.docs.map(d => ({ id: d.id, ...d.data() } as HeadhunterGarantia));
   } catch (err) {
     console.warn('Headhunter Finance Firestore Sync Note:', err);
   }

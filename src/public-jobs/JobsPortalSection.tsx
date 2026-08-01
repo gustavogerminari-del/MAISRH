@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   Briefcase, 
   MapPin, 
@@ -18,7 +18,10 @@ import {
   Phone,
   Mail,
   Linkedin,
-  HeartHandshake
+  HeartHandshake,
+  Share2,
+  Check,
+  ShieldCheck
 } from 'lucide-react';
 import { PublicJob, CandidateApplicationPayload } from './types';
 import { Job, Candidate } from '../types/rh';
@@ -48,6 +51,7 @@ export const JobsPortalSection: React.FC<JobsPortalSectionProps> = ({
   const [selectedJob, setSelectedJob] = useState<PublicJob | null>(null);
   const [isApplying, setIsApplying] = useState(false);
   const [submittedSuccess, setSubmittedSuccess] = useState(false);
+  const [copiedLink, setCopiedLink] = useState(false);
 
   // Form State for direct job application
   const [fullName, setFullName] = useState('');
@@ -57,8 +61,44 @@ export const JobsPortalSection: React.FC<JobsPortalSectionProps> = ({
   const [salaryExpectation, setSalaryExpectation] = useState('');
   const [linkedinUrl, setLinkedinUrl] = useState('');
   const [isPne, setIsPne] = useState(false);
+  const [lgpdConsent, setLgpdConsent] = useState(false);
   const [coverNote, setCoverNote] = useState('');
   const [resumeFile, setResumeFile] = useState<File | null>(null);
+
+  // Auto-detect job from URL hash or query param on load
+  useEffect(() => {
+    if (jobsList.length === 0) return;
+    const hash = window.location.hash;
+    const urlParams = new URLSearchParams(window.location.search);
+    const paramJobId = urlParams.get('vaga') || urlParams.get('jobId') || (hash.startsWith('#vaga-') ? hash.replace('#vaga-', '') : null);
+
+    if (paramJobId) {
+      const found = jobsList.find(j => j.id === paramJobId || j.code?.toLowerCase() === paramJobId.toLowerCase());
+      if (found) {
+        setSelectedJob(found);
+      }
+    }
+  }, [jobsList]);
+
+  // Update hash when job selection changes
+  const handleSelectJob = (job: PublicJob | null) => {
+    setSelectedJob(job);
+    setIsApplying(false);
+    if (job) {
+      window.history.replaceState(null, '', `#vaga-${job.id}`);
+    } else {
+      window.history.replaceState(null, '', window.location.pathname + window.location.search);
+    }
+  };
+
+  const handleShareJob = (job: PublicJob) => {
+    const shareUrl = `${window.location.origin}${window.location.pathname}#vaga-${job.id}`;
+    if (navigator.clipboard) {
+      navigator.clipboard.writeText(shareUrl);
+      setCopiedLink(true);
+      setTimeout(() => setCopiedLink(false), 2500);
+    }
+  };
 
   // Dynamic filter lists
   const departments = ['Todos', ...Array.from(new Set(jobsList.map(j => j.department)))];
@@ -255,10 +295,7 @@ export const JobsPortalSection: React.FC<JobsPortalSectionProps> = ({
                 return (
                   <div
                     key={job.id}
-                    onClick={() => {
-                      setSelectedJob(job);
-                      setIsApplying(false);
-                    }}
+                    onClick={() => handleSelectJob(job)}
                     className={`bg-white rounded-2xl p-6 border transition-all cursor-pointer ${
                       isSelected 
                         ? 'border-[#2563EB] ring-2 ring-blue-100 shadow-xs' 
@@ -315,7 +352,7 @@ export const JobsPortalSection: React.FC<JobsPortalSectionProps> = ({
                       <button
                         onClick={(e) => {
                           e.stopPropagation();
-                          setSelectedJob(job);
+                          handleSelectJob(job);
                           setIsApplying(true);
                         }}
                         className="bg-[#2563EB] hover:bg-[#1d4ed8] text-white font-bold px-3.5 py-1.5 rounded-xl text-xs flex items-center gap-1 shadow-2xs transition-all cursor-pointer"
@@ -345,16 +382,35 @@ export const JobsPortalSection: React.FC<JobsPortalSectionProps> = ({
                       <h3 className="text-xl font-bold text-[#1E293B] mt-2">{selectedJob.title}</h3>
                       <p className="text-xs font-medium text-[#64748B] mt-0.5">{selectedJob.companyName}</p>
                     </div>
-                    <button
-                      onClick={() => {
-                        setSelectedJob(null);
-                        setIsApplying(false);
-                      }}
-                      className="text-[#64748B] hover:text-[#1E293B] p-1 cursor-pointer"
-                      title="Fechar detalhes"
-                    >
-                      <X className="w-5 h-5" />
-                    </button>
+                    <div className="flex items-center gap-1">
+                      <button
+                        onClick={() => handleShareJob(selectedJob)}
+                        className="text-[#2563EB] hover:bg-blue-50 p-1.5 rounded-lg border border-blue-200 cursor-pointer text-xs font-bold flex items-center gap-1"
+                        title="Compartilhar link desta vaga"
+                      >
+                        {copiedLink ? (
+                          <>
+                            <Check className="w-4 h-4 text-emerald-600" />
+                            <span className="text-[10px] text-emerald-600">Copiado!</span>
+                          </>
+                        ) : (
+                          <>
+                            <Share2 className="w-4 h-4" />
+                            <span className="text-[10px]">Compartilhar</span>
+                          </>
+                        )}
+                      </button>
+                      <button
+                        onClick={() => {
+                          handleSelectJob(null);
+                          setIsApplying(false);
+                        }}
+                        className="text-[#64748B] hover:text-[#1E293B] p-1.5 cursor-pointer rounded-lg hover:bg-slate-100"
+                        title="Fechar detalhes"
+                      >
+                        <X className="w-5 h-5" />
+                      </button>
+                    </div>
                   </div>
 
                   <div className="grid grid-cols-2 gap-2 mt-4 text-xs">
@@ -402,13 +458,15 @@ export const JobsPortalSection: React.FC<JobsPortalSectionProps> = ({
                       </div>
                     </div>
 
-                    <button
-                      onClick={() => setIsApplying(true)}
-                      className="w-full py-3.5 bg-[#2563EB] hover:bg-[#1d4ed8] text-white font-bold rounded-xl shadow-2xs transition-all flex items-center justify-center gap-2 text-xs cursor-pointer"
-                    >
-                      <Send className="w-4 h-4" />
-                      Candidatar-se para esta Vaga
-                    </button>
+                    <div className="pt-2 flex items-center gap-2">
+                      <button
+                        onClick={() => setIsApplying(true)}
+                        className="flex-1 py-3.5 bg-[#2563EB] hover:bg-[#1d4ed8] text-white font-bold rounded-xl shadow-2xs transition-all flex items-center justify-center gap-2 text-xs cursor-pointer"
+                      >
+                        <Send className="w-4 h-4" />
+                        Candidatar-se para esta Vaga
+                      </button>
+                    </div>
                   </>
                 ) : (
                   /* Form Application */
@@ -508,14 +566,32 @@ export const JobsPortalSection: React.FC<JobsPortalSectionProps> = ({
                               id="job-portal-file"
                             />
                             <label htmlFor="job-portal-file" className="cursor-pointer text-xs font-bold text-[#2563EB] block">
-                              {resumeFile ? resumeFile.name : 'Clique para selecionar o arquivo PDF'}
+                              {resumeFile ? resumeFile.name : 'Clique para selecionar o arquivo PDF/DOCX'}
                             </label>
                           </div>
                         </div>
 
+                        <div className="pt-1">
+                          <label className="flex items-start gap-2 cursor-pointer">
+                            <input
+                              type="checkbox"
+                              required
+                              checked={lgpdConsent}
+                              onChange={(e) => setLgpdConsent(e.target.checked)}
+                              className="mt-0.5 rounded text-[#2563EB] focus:ring-[#2563EB]"
+                            />
+                            <span className="text-[11px] text-[#64748B] leading-tight font-medium">
+                              Concordo com o tratamento dos meus dados pessoais para esta candidatura conforme a <strong className="text-[#1E293B]">LGPD</strong> e a Política de Privacidade.
+                            </span>
+                          </label>
+                        </div>
+
                         <button
                           type="submit"
-                          className="w-full py-3 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl shadow-2xs transition-all text-xs flex items-center justify-center gap-2 cursor-pointer"
+                          disabled={!lgpdConsent}
+                          className={`w-full py-3 text-white font-bold rounded-xl shadow-2xs transition-all text-xs flex items-center justify-center gap-2 cursor-pointer ${
+                            lgpdConsent ? 'bg-emerald-600 hover:bg-emerald-700' : 'bg-slate-300 cursor-not-allowed'
+                          }`}
                         >
                           <Send className="w-4 h-4" />
                           Confirmar Inscrição

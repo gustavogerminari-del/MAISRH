@@ -1,4 +1,4 @@
-export type JobStatus = 'Aberta' | 'Pausada' | 'Fechada' | 'Rascunho';
+export type JobStatus = 'Aberta' | 'Pausada' | 'Fechada' | 'Arquivada' | 'Rascunho';
 export type JobType = 'CLT' | 'PJ' | 'Estágio' | 'Temporário';
 export type JobLocationType = 'Presencial' | 'Remoto' | 'Híbrido';
 
@@ -65,6 +65,9 @@ export interface Job {
   recruiterId?: string;
   managerName?: string;
   isArchived?: boolean;
+  archived?: boolean;
+  archivedAt?: string | null;
+  updatedAt?: string;
 }
 
 export interface Interview {

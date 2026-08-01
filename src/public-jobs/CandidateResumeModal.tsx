@@ -43,6 +43,7 @@ export const CandidateResumeModal: React.FC<CandidateResumeModalProps> = ({
   const [selectedJobId, setSelectedJobId] = useState('');
   const [coverNote, setCoverNote] = useState('');
   const [resumeFile, setResumeFile] = useState<File | null>(null);
+  const [lgpdConsent, setLgpdConsent] = useState(false);
 
   // AI Parsing Simulation State
   const [isAiProcessing, setIsAiProcessing] = useState(false);
@@ -386,6 +387,21 @@ export const CandidateResumeModal: React.FC<CandidateResumeModalProps> = ({
                     className="w-full text-xs font-semibold p-2.5 rounded-xl border border-slate-200 bg-slate-50/50 focus:bg-white focus:ring-2 focus:ring-indigo-500"
                   />
                 </div>
+
+                <div className="pt-2">
+                  <label className="flex items-start gap-2 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      required
+                      checked={lgpdConsent}
+                      onChange={(e) => setLgpdConsent(e.target.checked)}
+                      className="mt-0.5 rounded text-indigo-600 focus:ring-indigo-500"
+                    />
+                    <span className="text-xs text-slate-600 leading-tight font-medium">
+                      Estou ciente e concordo com a coleta e o processamento dos meus dados pessoais conforme a <strong className="text-slate-900">LGPD (Lei nº 13.709/2018)</strong> e a Política de Privacidade.
+                    </span>
+                  </label>
+                </div>
               </div>
 
               {/* Submit Button */}
@@ -399,7 +415,12 @@ export const CandidateResumeModal: React.FC<CandidateResumeModalProps> = ({
                 </button>
                 <button
                   type="submit"
-                  className="px-6 py-3 bg-gradient-to-r from-amber-500 via-amber-600 to-indigo-700 hover:from-amber-600 hover:to-indigo-800 text-white font-extrabold text-xs rounded-xl shadow-md shadow-indigo-500/20 transition-all flex items-center gap-2 cursor-pointer"
+                  disabled={!lgpdConsent}
+                  className={`px-6 py-3 font-extrabold text-xs rounded-xl shadow-md transition-all flex items-center gap-2 cursor-pointer ${
+                    lgpdConsent 
+                      ? 'bg-gradient-to-r from-amber-500 via-amber-600 to-indigo-700 hover:from-amber-600 hover:to-indigo-800 text-white shadow-indigo-500/20' 
+                      : 'bg-slate-200 text-slate-400 cursor-not-allowed shadow-none'
+                  }`}
                 >
                   <span>Enviar para o Banco de Talentos IA</span>
                   <ArrowRight className="w-4 h-4" />

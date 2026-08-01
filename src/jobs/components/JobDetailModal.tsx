@@ -13,6 +13,8 @@ import {
   ShieldCheck,
   Edit3,
   Archive,
+  RotateCcw,
+  AlertTriangle,
 } from 'lucide-react';
 import { Job, JobStatus } from '../types/job';
 import { JobStatusBadge } from './JobStatusBadge';
@@ -40,6 +42,9 @@ export const JobDetailModal: React.FC<JobDetailModalProps> = ({
 }) => {
   if (!isOpen || !job) return null;
 
+  const isArchived = job.status === 'Arquivada' || (job as any).archived === true || (job as any).isArchived === true;
+  const archivedAtStr = (job as any).archivedAt ? formatDateBR((job as any).archivedAt) : null;
+
   return (
     <div className="fixed inset-0 bg-black/50 backdrop-blur-xs z-50 flex items-center justify-center p-4 overflow-y-auto">
       <div className="bg-white rounded-3xl max-w-2xl w-full p-6 sm:p-8 space-y-6 shadow-2xl relative my-8 max-h-[90vh] overflow-y-auto">
@@ -51,6 +56,32 @@ export const JobDetailModal: React.FC<JobDetailModalProps> = ({
         >
           <X className="w-5 h-5" />
         </button>
+
+        {/* Archived Banner */}
+        {isArchived && (
+          <div className="bg-rose-50 border border-rose-200 rounded-2xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
+            <div className="flex items-center gap-2.5 text-rose-900 font-medium">
+              <AlertTriangle className="w-5 h-5 text-rose-600 shrink-0" />
+              <div>
+                <p className="font-extrabold text-rose-950">Vaga Arquivada (Modo de Consulta)</p>
+                <p className="text-[11px] text-rose-700">
+                  {archivedAtStr ? `Arquivada em ${archivedAtStr}. ` : ''}Os candidatos e dados permanecem vinculados e acessíveis.
+                </p>
+              </div>
+            </div>
+            {onStatusChange && canEdit && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => onStatusChange(job.id, 'Fechada')}
+                leftIcon={<RotateCcw className="w-3.5 h-3.5" />}
+                className="bg-white border-rose-300 text-rose-800 hover:bg-rose-100 shrink-0"
+              >
+                Restaurar Vaga
+              </Button>
+            )}
+          </div>
+        )}
 
         {/* Header */}
         <div className="space-y-3">

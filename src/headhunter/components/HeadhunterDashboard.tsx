@@ -53,38 +53,61 @@ export const HeadhunterDashboard: React.FC<HeadhunterDashboardProps> = ({
   onNavigateTab,
   onOpenAiModal
 }) => {
-  // Metric Calculations
+  // Metric Calculations - Pure real data from Firebase
   const clientesAtivos = clients.filter(c => c.status === 'Ativo').length;
-  const leadsEmNegociacao = leads.filter(l => l.etapa === 'Proposta' || l.etapa === 'Negociação' || l.etapa === 'Contato').length || 5;
+  const leadsEmNegociacao = leads.filter(l => l.etapa === 'Proposta' || l.etapa === 'Negociação' || l.etapa === 'Contato').length;
 
   const vagasAbertas = jobs.filter(j => j.status === 'Aberta' || j.status === 'Busca ativa' || j.status === 'Em Andamento').length;
   const vagasFechadas = jobs.filter(j => j.status === 'Fechada').length;
 
-  const candidatosEmProcesso = candidates.filter(c => c.etapaPipeline !== 'Contratado' && c.etapaPipeline !== 'Reprovado').length || 12;
+  const candidatosEmProcesso = candidates.filter(c => c.etapaPipeline !== 'Contratado' && c.etapaPipeline !== 'Reprovado').length;
 
   const hojeStr = new Date().toISOString().split('T')[0];
   const entrevistasDoDia = interviews.filter(i => i.dataHora.startsWith(hojeStr) || i.status === 'Agendada');
 
-  const receitaPrevista = jobs.filter(j => j.status !== 'Cancelada' && j.status !== 'Arquivada').reduce((acc, j) => acc + (j.comissaoCalculada || j.valorVaga || 18000), 0);
-  const receitaRecebida = financial.filter(f => f.tipo === 'Receita' && f.statusFinanceiro === 'Pago').reduce((acc, f) => acc + f.valor, 0) || 58000;
+  const receitaPrevista = jobs.filter(j => j.status !== 'Cancelada' && j.status !== 'Arquivada').reduce((acc, j) => acc + (j.comissaoCalculada || j.valorVaga || 0), 0);
+  const receitaRecebida = financial.filter(f => f.tipo === 'Receita' && f.statusFinanceiro === 'Pago').reduce((acc, f) => acc + f.valor, 0);
 
-  const comissaoPrevista = commissions.filter(c => c.situacao === 'Prevista' || c.situacao === 'Liberada').reduce((acc, c) => acc + c.valorComissao, 0) || 28000;
-  const despesasTotais = expenses.reduce((acc, e) => acc + e.valor, 0) || 4200;
+  const comissaoPrevista = commissions.filter(c => c.situacao === 'Prevista' || c.situacao === 'Liberada').reduce((acc, c) => acc + c.valorComissao, 0);
+  const despesasTotais = expenses.reduce((acc, e) => acc + e.valor, 0);
   const lucroLiquido = receitaRecebida - despesasTotais;
 
-  const slaMedio = jobs.length ? Math.round(jobs.reduce((acc, j) => acc + (j.slaDias || 30), 0) / jobs.length) : 30;
+  const slaMedio = jobs.length ? Math.round(jobs.reduce((acc, j) => acc + (j.slaDias || 0), 0) / jobs.length) : 0;
 
   // Additional sections
-  const vagasProximasSLA = jobs.filter(j => (j.slaDias || 30) <= 45 && j.status !== 'Fechada');
+  const vagasProximasSLA = jobs.filter(j => (j.slaDias || 0) <= 45 && j.status !== 'Fechada');
   const contasAReceber = financial.filter(f => f.tipo === 'Receita' && f.statusFinanceiro === 'Pendente');
   const comissoesPendentes = commissions.filter(c => c.situacao === 'Prevista');
 
-  // Ranking dos Headhunters
-  const rankingHeadhunters = [
-    { nome: 'Carlos Headhunter', vagasFechadas: 8, faturamento: 180000, comissao: 36000, taxaSucesso: '92%' },
-    { nome: 'Mariana Souza', vagasFechadas: 5, faturamento: 120000, comissao: 24000, taxaSucesso: '88%' },
-    { nome: 'Ana Clara Recrutadora', vagasFechadas: 3, faturamento: 65000, comissao: 13000, taxaSucesso: '82%' }
-  ];
+  // Dynamic Ranking calculation from real data
+  const rankingHeadhunters = (() => {
+    const map = new Map<string, { nome: string; vagasFechadas: number; faturamento: number; comissao: number; totalVagas: number }>();
+    
+    jobs.forEach(j => {
+      const nome = j.consultorResponsavel || j.criadoPor || 'Consultor';
+      const existing = map.get(nome) || { nome, vagasFechadas: 0, faturamento: 0, comissao: 0, totalVagas: 0 };
+      existing.totalVagas += 1;
+      if (j.status === 'Fechada') {
+        existing.vagasFechadas += 1;
+        existing.faturamento += (j.valorVaga || j.comissaoCalculada || 0);
+      }
+      map.set(nome, existing);
+    });
+
+    commissions.forEach(c => {
+      const nome = c.consultorNome || c.beneficiarioNome || 'Consultor';
+      const existing = map.get(nome) || { nome, vagasFechadas: 0, faturamento: 0, comissao: 0, totalVagas: 0 };
+      existing.comissao += (c.valorComissao || 0);
+      map.set(nome, existing);
+    });
+
+    return Array.from(map.values())
+      .map(item => ({
+        ...item,
+        taxaSucesso: item.totalVagas > 0 ? `${Math.round((item.vagasFechadas / item.totalVagas) * 100)}%` : '0%'
+      }))
+      .sort((a, b) => b.faturamento - a.faturamento);
+  })();
 
   return (
     <div className="space-y-6">
@@ -293,28 +316,36 @@ export const HeadhunterDashboard: React.FC<HeadhunterDashboardProps> = ({
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 text-xs">
-                {rankingHeadhunters.map((hh, idx) => (
-                  <tr key={idx} className="hover:bg-slate-50/80 transition-colors">
-                    <td className="p-3 font-bold text-slate-900 flex items-center gap-2">
-                      <span className="w-6 h-6 rounded-full bg-indigo-100 text-indigo-700 font-black text-[11px] flex items-center justify-center">
-                        #{idx + 1}
-                      </span>
-                      <span>{hh.nome}</span>
-                    </td>
-                    <td className="p-3 text-center font-bold text-slate-700">{hh.vagasFechadas} vagas</td>
-                    <td className="p-3 text-right font-black text-slate-900">
-                      R$ {hh.faturamento.toLocaleString('pt-BR')}
-                    </td>
-                    <td className="p-3 text-right font-bold text-emerald-600">
-                      R$ {hh.comissao.toLocaleString('pt-BR')}
-                    </td>
-                    <td className="p-3 text-center">
-                      <span className="px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 font-extrabold text-[10px]">
-                        {hh.taxaSucesso}
-                      </span>
+                {rankingHeadhunters.length === 0 ? (
+                  <tr>
+                    <td colSpan={5} className="p-6 text-center text-slate-400 font-medium">
+                      Nenhum consultor registrado ou com faturamento gerado.
                     </td>
                   </tr>
-                ))}
+                ) : (
+                  rankingHeadhunters.map((hh, idx) => (
+                    <tr key={idx} className="hover:bg-slate-50/80 transition-colors">
+                      <td className="p-3 font-bold text-slate-900 flex items-center gap-2">
+                        <span className="w-6 h-6 rounded-full bg-indigo-100 text-indigo-700 font-black text-[11px] flex items-center justify-center">
+                          #{idx + 1}
+                        </span>
+                        <span>{hh.nome}</span>
+                      </td>
+                      <td className="p-3 text-center font-bold text-slate-700">{hh.vagasFechadas} vagas</td>
+                      <td className="p-3 text-right font-black text-slate-900">
+                        R$ {hh.faturamento.toLocaleString('pt-BR')}
+                      </td>
+                      <td className="p-3 text-right font-bold text-emerald-600">
+                        R$ {hh.comissao.toLocaleString('pt-BR')}
+                      </td>
+                      <td className="p-3 text-center">
+                        <span className="px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 font-extrabold text-[10px]">
+                          {hh.taxaSucesso}
+                        </span>
+                      </td>
+                    </tr>
+                  ))
+                )}
               </tbody>
             </table>
           </div>

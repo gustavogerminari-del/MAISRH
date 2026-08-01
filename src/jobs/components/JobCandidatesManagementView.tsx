@@ -203,13 +203,17 @@ export const JobCandidatesManagementView: React.FC<JobCandidatesManagementViewPr
 
           <div className="flex items-center gap-2">
             <span className={`text-xs font-black px-3 py-1 rounded-full border ${
-              job.status === 'Aberta' ? 'bg-emerald-100 text-emerald-800 border-emerald-200' : 'bg-slate-100 text-slate-700'
+              job.status === 'Aberta'
+                ? 'bg-emerald-100 text-emerald-800 border-emerald-200'
+                : (job.status === 'Arquivada' || (job as any).archived || (job as any).isArchived)
+                ? 'bg-rose-100 text-rose-800 border-rose-200'
+                : 'bg-slate-100 text-slate-700 border-slate-200'
             }`}>
-              {job.status}
+              {(job.status === 'Arquivada' || (job as any).archived || (job as any).isArchived) ? 'Arquivada (Consulta)' : job.status}
             </span>
             <button
               onClick={loadCandidates}
-              className="p-2 text-slate-400 hover:text-indigo-600 hover:bg-slate-100 rounded-xl transition-colors"
+              className="p-2 text-slate-400 hover:text-indigo-600 hover:bg-slate-100 rounded-xl transition-colors cursor-pointer"
               title="Atualizar dados do Firestore"
             >
               <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin text-indigo-600' : ''}`} />

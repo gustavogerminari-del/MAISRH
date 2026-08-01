@@ -49,6 +49,9 @@ export interface Job {
   managerName?: string;
   budget?: JobBudgetInfo;
   isArchived?: boolean;
+  archived?: boolean;
+  archivedAt?: string | null;
+  updatedAt?: string;
 }
 
 export interface JobFilterParams {
