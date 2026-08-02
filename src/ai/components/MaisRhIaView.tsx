@@ -17,13 +17,15 @@ import { AiScreeningByJobView } from './AiScreeningByJobView';
 import { AiAssistantChatView } from './AiAssistantChatView';
 import { AiReportsView } from './AiReportsView';
 import { CandidateRankingView } from './CandidateRankingView';
+import { AiSettingsAndUsageView } from './AiSettingsAndUsageView';
+import { Sliders } from 'lucide-react';
 
 import { JobGeneratorModal } from './JobGeneratorModal';
 import { InterviewAssistantModal } from './InterviewAssistantModal';
 
 export const MaisRhIaView: React.FC = () => {
   const [activeTab, setActiveTab] = useState<
-    'dashboard' | 'analise_candidatos' | 'triagem_vaga' | 'assistente_ia' | 'relatorios' | 'ranking'
+    'dashboard' | 'analise_candidatos' | 'triagem_vaga' | 'assistente_ia' | 'relatorios' | 'ranking' | 'configuracoes'
   >('dashboard');
 
   // Modals state
@@ -164,6 +166,19 @@ export const MaisRhIaView: React.FC = () => {
           <span>Ranking IA</span>
         </button>
 
+        {/* Tab 7: Configurações & Consumo IA */}
+        <button
+          onClick={() => setActiveTab('configuracoes')}
+          className={`px-4 py-2.5 rounded-xl text-xs font-black transition-all whitespace-nowrap flex items-center gap-2 cursor-pointer ${
+            activeTab === 'configuracoes'
+              ? 'bg-blue-600 text-white shadow-md'
+              : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+          }`}
+        >
+          <Sliders className="w-4 h-4 text-blue-300" />
+          <span>7. Configurações & Consumo</span>
+        </button>
+
       </div>
 
       {/* Tab Render Switch */}
@@ -186,6 +201,8 @@ export const MaisRhIaView: React.FC = () => {
       {activeTab === 'relatorios' && <AiReportsView />}
 
       {activeTab === 'ranking' && <CandidateRankingView />}
+
+      {activeTab === 'configuracoes' && <AiSettingsAndUsageView />}
 
       {/* Modals */}
       <JobGeneratorModal

@@ -18,7 +18,10 @@ import {
 import { 
   salvarRegistroPonto, 
   calcularDistanciaMetros, 
-  fetchConfiguracoesPonto 
+  fetchConfiguracoesPonto,
+  gerarComprovantePonto,
+  registrarLogAuditoriaPonto,
+  validarSequenciaMarcacao
 } from '../services/pontoService';
 
 interface RegistroPontoModalProps {
@@ -38,6 +41,12 @@ export const RegistroPontoModal: React.FC<RegistroPontoModalProps> = ({
   const [loading, setLoading] = useState(false);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [comprovanteGerado, setComprovanteGerado] = useState<{
+    hash: string;
+    tipo: string;
+    horario: string;
+    data: string;
+  } | null>(null);
 
   // GPS state
   const [coords, setCoords] = useState<{ latitude: number; longitude: number } | null>(null);
@@ -177,11 +186,38 @@ export const RegistroPontoModal: React.FC<RegistroPontoModalProps> = ({
 
     try {
       await salvarRegistroPonto(regDoc);
+
+      // Gerar Comprovante Digital Oficial de Marcação
+      const hashComp = await gerarComprovantePonto({
+        funcionarioNome,
+        matricula: user?.id || 'MAT-2026',
+        empresaNome: user?.companyName || 'RL Connect / MAIS RH',
+        data: todayStr,
+        horario: timeStr,
+        tipoMarcacao: tipo.toLowerCase() as any,
+        origem: 'Portal Web Ponto Digital',
+        localizacaoStr: coords ? `${coords.latitude.toFixed(4)}, ${coords.longitude.toFixed(4)}` : undefined
+      });
+
+      // Registrar Log de Auditoria
+      await registrarLogAuditoriaPonto({
+        companyId: empresaId,
+        empresaId,
+        usuarioId: user?.id || 'usr-001',
+        usuarioNome: funcionarioNome,
+        acao: `REGISTRO_PONTO_${tipo}`,
+        detalhes: `Ponto batido às ${timeStr} (${tipo}) com hash ${hashComp}`
+      });
+
+      setComprovanteGerado({
+        hash: hashComp,
+        tipo: tipo.replace('_', ' '),
+        horario: timeStr,
+        data: todayStr
+      });
+
       setSuccessMsg(`Registro de ${tipo.replace('_', ' ')} realizado com sucesso às ${timeStr}!`);
       if (onPontoRegistrado) onPontoRegistrado();
-      setTimeout(() => {
-        onClose();
-      }, 1800);
     } catch (err) {
       setErrorMsg('Falha ao salvar registro no servidor.');
     } finally {
@@ -282,40 +318,71 @@ export const RegistroPontoModal: React.FC<RegistroPontoModalProps> = ({
           </div>
         )}
 
-        {/* 4 Primary Action Punch Buttons */}
-        <div className="grid grid-cols-2 gap-3">
-          <button
-            onClick={() => handleRegister('ENTRADA')}
-            disabled={loading}
-            className="bg-emerald-600 hover:bg-emerald-700 text-white font-black py-3 rounded-xl text-sm transition-all shadow-sm flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
-          >
-            <span>ENTRADA</span>
-          </button>
+        {/* Digital Receipt Display */}
+        {comprovanteGerado ? (
+          <div className="bg-emerald-50 border border-emerald-200 rounded-2xl p-4 text-center space-y-3">
+            <div className="flex items-center justify-center gap-2 text-emerald-800 font-black text-sm">
+              <CheckCircle2 className="w-5 h-5 text-emerald-600" />
+              <span>Comprovante de Marcação Emitido</span>
+            </div>
+            <div className="bg-white p-3 rounded-xl border border-emerald-100 font-mono text-left text-[11px] text-slate-700 space-y-1">
+              <p><strong>Hash Autenticidade:</strong> {comprovanteGerado.hash}</p>
+              <p><strong>Tipo:</strong> {comprovanteGerado.tipo}</p>
+              <p><strong>Horário:</strong> {comprovanteGerado.horario} hs • {comprovanteGerado.data}</p>
+              <p><strong>Colaborador:</strong> {funcionarioNome}</p>
+              <p><strong>Empresa:</strong> {user?.companyName || 'MAIS RH'}</p>
+            </div>
+            <div className="flex items-center justify-center gap-2 pt-1">
+              <button
+                onClick={() => window.print()}
+                className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-4 py-2 rounded-xl text-xs transition-all cursor-pointer"
+              >
+                Imprimir / Salvar PDF
+              </button>
+              <button
+                onClick={onClose}
+                className="bg-slate-200 hover:bg-slate-300 text-slate-800 font-bold px-4 py-2 rounded-xl text-xs transition-all cursor-pointer"
+              >
+                Concluir
+              </button>
+            </div>
+          </div>
+        ) : (
+          /* 4 Primary Action Punch Buttons */
+          <div className="grid grid-cols-2 gap-3">
+            <button
+              onClick={() => handleRegister('ENTRADA')}
+              disabled={loading}
+              className="bg-emerald-600 hover:bg-emerald-700 text-white font-black py-3 rounded-xl text-sm transition-all shadow-sm flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
+            >
+              <span>ENTRADA</span>
+            </button>
 
-          <button
-            onClick={() => handleRegister('INICIO_INTERVALO')}
-            disabled={loading}
-            className="bg-amber-600 hover:bg-amber-700 text-white font-black py-3 rounded-xl text-sm transition-all shadow-sm flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
-          >
-            <span>INÍCIO PAUSA</span>
-          </button>
+            <button
+              onClick={() => handleRegister('INICIO_INTERVALO')}
+              disabled={loading}
+              className="bg-amber-600 hover:bg-amber-700 text-white font-black py-3 rounded-xl text-sm transition-all shadow-sm flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
+            >
+              <span>INÍCIO PAUSA</span>
+            </button>
 
-          <button
-            onClick={() => handleRegister('RETORNO_INTERVALO')}
-            disabled={loading}
-            className="bg-teal-600 hover:bg-teal-700 text-white font-black py-3 rounded-xl text-sm transition-all shadow-sm flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
-          >
-            <span>RETORNO PAUSA</span>
-          </button>
+            <button
+              onClick={() => handleRegister('RETORNO_INTERVALO')}
+              disabled={loading}
+              className="bg-teal-600 hover:bg-teal-700 text-white font-black py-3 rounded-xl text-sm transition-all shadow-sm flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
+            >
+              <span>RETORNO PAUSA</span>
+            </button>
 
-          <button
-            onClick={() => handleRegister('SAIDA')}
-            disabled={loading}
-            className="bg-rose-600 hover:bg-rose-700 text-white font-black py-3 rounded-xl text-sm transition-all shadow-sm flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
-          >
-            <span>SAÍDA</span>
-          </button>
-        </div>
+            <button
+              onClick={() => handleRegister('SAIDA')}
+              disabled={loading}
+              className="bg-rose-600 hover:bg-rose-700 text-white font-black py-3 rounded-xl text-sm transition-all shadow-sm flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
+            >
+              <span>SAÍDA</span>
+            </button>
+          </div>
+        )}
       </div>
     </div>
   );

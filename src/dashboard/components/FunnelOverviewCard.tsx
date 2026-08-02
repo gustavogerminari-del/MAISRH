@@ -8,7 +8,7 @@ export interface FunnelOverviewCardProps {
 }
 
 export const FunnelOverviewCard: React.FC<FunnelOverviewCardProps> = ({ steps }) => {
-  const maxCount = Math.max(...steps.map((s) => s.candidateCount), 1);
+  const maxCount = Math.max(...steps.map((s) => s.candidateCount ?? (s as any).candidatesCount ?? 0), 1);
 
   return (
     <Card className="p-5 space-y-4">
@@ -26,21 +26,23 @@ export const FunnelOverviewCard: React.FC<FunnelOverviewCardProps> = ({ steps })
 
       <div className="space-y-3">
         {steps.map((step, index) => {
-          const percentage = Math.round((step.candidateCount / maxCount) * 100);
+          const count = step.candidateCount ?? (step as any).candidatesCount ?? 0;
+          const percentage = Math.round((count / maxCount) * 100);
+          const itemKey = step.stageId || step.stageName || `step-${index}`;
 
           return (
-            <div key={step.stageId} className="space-y-1">
+            <div key={itemKey} className="space-y-1">
               <div className="flex justify-between text-xs font-bold text-slate-700">
                 <span className="flex items-center gap-1.5">
                   <span className="text-slate-400 font-semibold">{index + 1}.</span>
                   {step.stageName}
                 </span>
-                <span className="text-slate-900">{step.candidateCount} candidatos</span>
+                <span className="text-slate-900">{count} candidatos</span>
               </div>
 
               <div className="w-full h-3 bg-slate-100 rounded-full overflow-hidden p-0.5 border border-slate-200/60">
                 <div
-                  className={`h-full rounded-full transition-all duration-500 ${step.colorClass}`}
+                  className={`h-full rounded-full transition-all duration-500 ${step.colorClass || 'bg-blue-600'}`}
                   style={{ width: `${Math.max(percentage, 6)}%` }}
                 />
               </div>

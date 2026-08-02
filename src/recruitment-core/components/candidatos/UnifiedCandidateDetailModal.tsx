@@ -13,9 +13,11 @@ import {
   Sparkles,
   Building2,
   Calendar,
-  Clock
+  Clock,
+  UserPlus
 } from 'lucide-react';
 import { UnifiedCandidate, OrigemProcesso } from '../../types/recruitment';
+import { enviarCandidatoParaAdmissaoDP } from '../../../departamento-pessoal/services/dpFirestoreService';
 
 interface UnifiedCandidateDetailModalProps {
   candidate: UnifiedCandidate;
@@ -132,6 +134,33 @@ export const UnifiedCandidateDetailModal: React.FC<UnifiedCandidateDetailModalPr
           ) : <div />}
 
           <div className="flex items-center gap-2">
+            <button
+              onClick={async () => {
+                try {
+                  await enviarCandidatoParaAdmissaoDP({
+                    id: candidate.id,
+                    candidateId: candidate.id,
+                    jobId: candidate.jobId,
+                    companyId: candidate.companyId,
+                    name: candidate.nome || (candidate as any).name,
+                    email: candidate.email,
+                    phone: candidate.telefone || (candidate as any).phone,
+                    role: candidate.cargoAtual || (candidate as any).role,
+                    salaryExpectation: candidate.pretensaoSalarial || (candidate as any).salaryExpectation,
+                    city: candidate.cidade,
+                    state: candidate.estado
+                  });
+                  alert(`🎉 Candidato(a) ${candidate.nome || 'selecionado(a)'} enviado(a) para a Fila de Admissão DP!`);
+                  onClose();
+                } catch (err) {
+                  console.error('Erro ao enviar para admissão:', err);
+                }
+              }}
+              className="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-xs rounded-xl shadow-2xs transition-all flex items-center gap-1.5 cursor-pointer"
+            >
+              <UserPlus className="w-4 h-4" />
+              <span>Enviar para Admissão DP</span>
+            </button>
             <button onClick={onClose} className="px-4 py-2 bg-slate-100 text-slate-700 font-extrabold text-xs rounded-xl cursor-pointer">
               Fechar
             </button>

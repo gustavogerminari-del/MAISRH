@@ -11,6 +11,7 @@ export interface DadoPessoalColaborador {
   rg: string;
   dataNascimento: string;
   estadoCivil: EstadoCivil;
+  nacionalidade?: string;
   genero?: string;
   endereco: {
     logradouro: string;
@@ -36,9 +37,11 @@ export interface DadoProfissionalColaborador {
   gestorResponsavel: string;
   status: 'Ativo' | 'Férias' | 'Afastado' | 'Rescindido' | 'Aviso Prévio';
   emailCorporativo: string;
+  unidade?: string;
 }
 
 export interface DadoTrabalhistaColaborador {
+  matricula?: string;
   pisPasep: string;
   ctpsNumero: string;
   ctpsSerie: string;
@@ -70,6 +73,9 @@ export interface HistoricoOcorrenciaColaborador {
 export interface ColaboradorCompleto {
   id: string;
   companyId: string;
+  empresaId?: string;
+  candidatoId?: string;
+  jobId?: string;
   nomeCompleto: string;
   fotoUrl?: string;
   pessoais: DadoPessoalColaborador;
@@ -81,6 +87,37 @@ export interface ColaboradorCompleto {
   historico?: HistoricoOcorrenciaColaborador[];
   createdAt: string;
   updatedAt: string;
+}
+
+export interface UnidadeOrganizacional {
+  id: string;
+  companyId: string;
+  nome: string;
+  tipo: 'Empresa' | 'Unidade' | 'Departamento' | 'Setor';
+  parentId?: string; // ID da empresa/unidade pai
+  gestorId?: string;
+  gestorNome?: string;
+  descricao?: string;
+  localizacao?: string;
+  createdAt: string;
+  updatedAt?: string;
+}
+
+export interface CargoSalarioItem {
+  id: string;
+  companyId: string;
+  cargo: string;
+  cbo: string;
+  nivel: 'Júnior' | 'Pleno' | 'Sênior' | 'Especialista' | 'Coordenador' | 'Gerente' | 'Diretor';
+  departamento: string;
+  descricao: string;
+  requisitos: string[];
+  competencias: string[];
+  salarioPiso: number;
+  salarioTeto: number;
+  salarioMedio: number;
+  createdAt: string;
+  updatedAt?: string;
 }
 
 export interface ItemBeneficio {

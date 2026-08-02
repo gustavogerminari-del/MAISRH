@@ -35,6 +35,7 @@ import {
 } from '../../services/JobCandidateService';
 import { Button } from '../../shared';
 import { ScheduleInterviewModal } from './ScheduleInterviewModal';
+import { enviarCandidatoParaAdmissaoDP } from '../../departamento-pessoal/services/dpFirestoreService';
 
 interface CandidateDrawerPanelProps {
   candidate: JobCandidateApplication | null;
@@ -73,6 +74,29 @@ export const CandidateDrawerPanel: React.FC<CandidateDrawerPanelProps> = ({
 
   const handleStatusChange = async (newStatus: ApplicationStatus) => {
     await JobCandidateService.updateStatus(candidate.id, newStatus);
+    if (newStatus === 'Contratado') {
+      try {
+        await enviarCandidatoParaAdmissaoDP({
+          id: candidate.id,
+          candidateId: candidate.candidateId || candidate.id,
+          jobId: candidate.jobId,
+          companyId: candidate.companyId,
+          name: candidate.name,
+          email: candidate.email,
+          phone: candidate.phone,
+          cpf: candidate.cpf,
+          role: jobTitle || candidate.role,
+          vagaTitulo: jobTitle || candidate.role,
+          department: candidate.department,
+          salaryExpectation: candidate.salaryExpectation,
+          city: candidate.city,
+          state: candidate.state
+        });
+        alert(`🎉 Candidato(a) ${candidate.name} contratado(a) com sucesso! Enviado para a Fila de Admissão do DP.`);
+      } catch (err) {
+        console.error('Erro ao enviar para admissão DP:', err);
+      }
+    }
     await onRefresh();
   };
 

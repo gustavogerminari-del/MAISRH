@@ -20,7 +20,8 @@ import {
   Briefcase,
   BarChart3,
   HelpCircle,
-  ArrowRight
+  ArrowRight,
+  Paperclip
 } from 'lucide-react';
 import { useAuth } from '../auth';
 
@@ -50,6 +51,8 @@ export const FloatingAiAssistant: React.FC<FloatingAiAssistantProps> = ({
 
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
+  const [attachment, setAttachment] = useState<{ fileName: string; content: string } | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Initial greeting
   const [messages, setMessages] = useState<Message[]>([
@@ -156,20 +159,40 @@ Como posso auxiliar seu time hoje?`,
     }
   };
 
+  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const content = event.target?.result as string;
+      setAttachment({
+        fileName: file.name,
+        content: content || ''
+      });
+    };
+    reader.readAsText(file);
+  };
+
   const handleSend = async (customPrompt?: string) => {
-    const textToSend = customPrompt || input;
+    let textToSend = customPrompt || input;
+    if (attachment) {
+      textToSend += `\n\n[ANEXO ENVIADO: ${attachment.fileName}]\n${attachment.content.slice(0, 3000)}`;
+    }
+
     if (!textToSend.trim() || loading) return;
 
     const userMsg: Message = {
       id: `usr-${Date.now()}`,
       sender: 'user',
-      text: textToSend,
+      text: customPrompt || input + (attachment ? ` (Anexo: ${attachment.fileName})` : ''),
       timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
       contextPage: getPageTitle(activeTab),
     };
 
     setMessages((prev) => [...prev, userMsg]);
     if (!customPrompt) setInput('');
+    setAttachment(null);
     setLoading(true);
 
     try {
@@ -521,26 +544,57 @@ Como posso auxiliar seu time hoje?`,
           </div>
 
           {/* Campo de Envio no Rodapé */}
-          <div className="p-3.5 bg-white border-t border-slate-200 shrink-0">
+          <div className="p-3.5 bg-white border-t border-slate-200 shrink-0 space-y-2">
+            
+            {attachment && (
+              <div className="flex items-center justify-between px-3 py-1.5 bg-blue-50 border border-blue-200 rounded-xl text-xs text-blue-900 font-bold">
+                <span className="truncate flex items-center gap-1.5">
+                  <Paperclip className="w-3.5 h-3.5 text-blue-600" />
+                  Anexo: {attachment.fileName}
+                </span>
+                <button
+                  onClick={() => setAttachment(null)}
+                  className="text-slate-400 hover:text-rose-600 cursor-pointer"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            )}
+
             <div className="flex items-center gap-2">
+              <input
+                type="file"
+                ref={fileInputRef}
+                onChange={handleFileUpload}
+                accept=".txt,.pdf,.doc,.docx,.csv"
+                className="hidden"
+              />
+              <button
+                onClick={() => fileInputRef.current?.click()}
+                className="p-2.5 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-xl transition-all cursor-pointer shrink-0"
+                title="Anexar documento ou texto (currículo, edital, vaga)"
+              >
+                <Paperclip className="w-4 h-4" />
+              </button>
+
               <input
                 type="text"
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
                 onKeyDown={(e) => e.key === 'Enter' && handleSend()}
-                placeholder="Digite sua pergunta para o assistente de RH..."
+                placeholder="Digite sua pergunta ou instrução para a IA..."
                 className="flex-1 px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs sm:text-sm text-slate-800 placeholder:text-slate-400 focus:ring-2 focus:ring-blue-500 focus:bg-white focus:outline-hidden transition-all"
               />
               <button
                 onClick={() => handleSend()}
-                disabled={!input.trim() || loading}
+                disabled={(!input.trim() && !attachment) || loading}
                 className="p-2.5 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white rounded-xl shadow-md transition-all disabled:opacity-40 cursor-pointer shrink-0"
                 title="Enviar mensagem"
               >
                 <Send className="w-4 h-4" />
               </button>
             </div>
-            <div className="flex items-center justify-between text-[10px] text-slate-400 font-medium mt-1.5 px-1">
+            <div className="flex items-center justify-between text-[10px] text-slate-400 font-medium mt-1 px-1">
               <span>MAIS RH IA v2.5 • Modelo Corporativo Gemini</span>
               <span className="text-emerald-600 font-bold">● Online</span>
             </div>

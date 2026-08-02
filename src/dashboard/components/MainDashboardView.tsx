@@ -61,11 +61,11 @@ export const MainDashboardView: React.FC<MainDashboardViewProps> = ({
   const [responsibles, setResponsibles] = useState<any[]>([]);
   const [alerts, setAlerts] = useState<ProcessAlert[]>([]);
   const [funnelSteps, setFunnelSteps] = useState([
-    { stageName: 'Triagem', candidatesCount: 0, percentage: 0 },
-    { stageName: 'Entrevista RH', candidatesCount: 0, percentage: 0 },
-    { stageName: 'Avaliação Técnica', candidatesCount: 0, percentage: 0 },
-    { stageName: 'Entrevista Gestor', candidatesCount: 0, percentage: 0 },
-    { stageName: 'Proposta / Admissão', candidatesCount: 0, percentage: 0 }
+    { stageId: 'triagem', stageName: 'Triagem', candidateCount: 0, candidatesCount: 0, percentage: 0, colorClass: 'bg-blue-500' },
+    { stageId: 'entrev-rh', stageName: 'Entrevista RH', candidateCount: 0, candidatesCount: 0, percentage: 0, colorClass: 'bg-indigo-500' },
+    { stageId: 'aval-tec', stageName: 'Avaliação Técnica', candidateCount: 0, candidatesCount: 0, percentage: 0, colorClass: 'bg-purple-500' },
+    { stageId: 'entrev-gestor', stageName: 'Entrevista Gestor', candidateCount: 0, candidatesCount: 0, percentage: 0, colorClass: 'bg-amber-500' },
+    { stageId: 'proposta', stageName: 'Proposta / Admissão', candidateCount: 0, candidatesCount: 0, percentage: 0, colorClass: 'bg-emerald-500' }
   ]);
   const [isRefreshing, setIsRefreshing] = useState(false);
 
@@ -105,11 +105,11 @@ export const MainDashboardView: React.FC<MainDashboardViewProps> = ({
       const calcPct = (cnt: number) => totalCandidates > 0 ? Math.round((cnt / totalCandidates) * 100) : 0;
 
       setFunnelSteps([
-        { stageName: 'Triagem', candidatesCount: triagem, percentage: calcPct(triagem) },
-        { stageName: 'Entrevista RH', candidatesCount: entRh, percentage: calcPct(entRh) },
-        { stageName: 'Avaliação Técnica', candidatesCount: tec, percentage: calcPct(tec) },
-        { stageName: 'Entrevista Gestor', candidatesCount: gestor, percentage: calcPct(gestor) },
-        { stageName: 'Proposta / Admissão', candidatesCount: proposta, percentage: calcPct(proposta) }
+        { stageId: 'triagem', stageName: 'Triagem', candidateCount: triagem, candidatesCount: triagem, percentage: calcPct(triagem), colorClass: 'bg-blue-500' },
+        { stageId: 'entrev-rh', stageName: 'Entrevista RH', candidateCount: entRh, candidatesCount: entRh, percentage: calcPct(entRh), colorClass: 'bg-indigo-500' },
+        { stageId: 'aval-tec', stageName: 'Avaliação Técnica', candidateCount: tec, candidatesCount: tec, percentage: calcPct(tec), colorClass: 'bg-purple-500' },
+        { stageId: 'entrev-gestor', stageName: 'Entrevista Gestor', candidateCount: gestor, candidatesCount: gestor, percentage: calcPct(gestor), colorClass: 'bg-amber-500' },
+        { stageId: 'proposta', stageName: 'Proposta / Admissão', candidateCount: proposta, candidatesCount: proposta, percentage: calcPct(proposta), colorClass: 'bg-emerald-500' }
       ]);
 
       setMetrics({

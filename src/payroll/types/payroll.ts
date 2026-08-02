@@ -5,7 +5,18 @@
  * Depende apenas de NÚCLEO, COMPARTILHADO, AUTENTICAÇÃO, CADASTROS COMPLETOS, CONTROLE DE PONTO e BENEFÍCIOS.
  */
 
-export type PayrollPeriodStatus = 'Aberto' | 'Em Processamento' | 'Fechado' | 'Cancelado';
+export type PayrollPeriodStatus = 
+  | 'aberta' 
+  | 'em_calculo' 
+  | 'em_revisao' 
+  | 'aprovada' 
+  | 'fechada' 
+  | 'reaberta' 
+  | 'cancelada'
+  | 'Aberto' 
+  | 'Em Processamento' 
+  | 'Fechado' 
+  | 'Cancelado';
 
 export type PayrollType = 
   | 'Mensal' 
@@ -16,10 +27,11 @@ export type PayrollType =
   | 'Férias' 
   | 'Adiantamento Salarial';
 
-export type RubricType = 'Provento' | 'Desconto' | 'Informativa';
+export type RubricType = 'Provento' | 'Desconto' | 'Informativa' | 'provento' | 'desconto' | 'base' | 'informativo';
 
 export interface RubricDefinition {
   id?: string;
+  eventId?: string;
   companyId?: string;
   code: string;           // Código eSocial / Interno (Ex: "1001", "5001")
   name: string;           // Nome da Rúbrica (Ex: "Salário Base", "INSS")
@@ -32,6 +44,11 @@ export interface RubricDefinition {
   isSystemDefault: boolean;
   formulaType?: 'Fixo' | 'Percentual' | 'Tabela' | 'Calculado';
   formulaExpression?: string;
+  natureza?: string;
+  prioridade?: number;
+  ativo?: boolean;
+  createdAt?: string;
+  updatedAt?: string;
 }
 
 export interface PaystubItem {
@@ -41,11 +58,14 @@ export interface PaystubItem {
   type: RubricType;
   reference: string;      // Ex: "220 hrs", "10 hrs 50%", "7,5%", "2 dependentes"
   amount: number;         // Valor em R$
+  origin?: 'cadastro' | 'ponto' | 'beneficio' | 'manual' | 'ferias' | 'rescisao' | 'importacao';
   isManual?: boolean;     // Se foi adicionado/editado manualmente
   calculationMemory?: {
     baseValue?: number;
     rateUsed?: number;
     notes?: string;
+    formulaApplied?: string;
+    rounding?: string;
   };
 }
 
@@ -60,6 +80,7 @@ export interface EmployerCharges {
 export interface Paystub {
   id: string;
   companyId?: string;
+  empresaId?: string;
   periodId: string;
   periodName: string;      // Ex: "Folha Mensal - Julho / 2026"
   employeeId: string;
@@ -108,18 +129,27 @@ export interface Paystub {
 
 export interface PayrollPeriod {
   id: string;
+  payrollPeriodId?: string;
   companyId?: string;
+  empresaId?: string;
   referenceMonth: string;  // Ex: "2026-07"
   year: number;
   month: number;
   type: PayrollType;
   status: PayrollPeriodStatus;
   
+  dataInicial?: string;
+  dataFinal?: string;
+  dataDePagamento?: string;
+  
   closedAt?: string;
   closedBy?: string;
   reopenedAt?: string;
   reopenedBy?: string;
   reopenReason?: string;
+  
+  aprovadoPor?: string;
+  aprovadoEm?: string;
   
   totalEmployees: number;
   totalGross: number;      // Total Proventos
@@ -130,7 +160,108 @@ export interface PayrollPeriod {
   
   paystubsCount: number;
   paystubsSignedCount: number;
+  versionNumber?: number;
+  hashVersion?: string;
+  createdAt?: string;
   updatedAt: string;
+}
+
+export interface PayrollCompanySettings {
+  payrollSettingsId: string;
+  companyId: string;
+  empresaId: string;
+  razaoSocial: string;
+  cnpj: string;
+  regimeTributario: 'Simples Nacional' | 'Lucro Presumido' | 'Lucro Real' | 'MEI';
+  naturezaJuridica?: string;
+  cnae?: string;
+  fpas?: string;
+  terceiros?: string;
+  ratPercent: number;
+  fapPercent: number;
+  sindicatoDefault?: string;
+  convenacaoColetiva?: string;
+  dataPagamentoDia: number;
+  formaPagamentoPadrao: 'PIX' | 'TED' | 'Depósito' | 'Cheque';
+  contaBancaria: {
+    banco: string;
+    agencia: string;
+    conta: string;
+  };
+  responsavelNome: string;
+  responsavelEmail: string;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface SalaryHistoryDoc {
+  salaryHistoryId: string;
+  employeeId: string;
+  companyId: string;
+  salarioAnterior: number;
+  salarioNovo: number;
+  motivo: string;
+  vigencia: string;
+  responsavel: string;
+  createdAt: string;
+}
+
+export interface VariablePayDoc {
+  variablePayId: string;
+  employeeId: string;
+  companyId: string;
+  competencia: string;
+  tipo: 'comissao' | 'bonus' | 'premio' | 'produtividade' | 'metas' | 'reembolso' | 'ajuda_custo';
+  valor: number;
+  origem: string;
+  aprovacao: 'pendente' | 'aprovado' | 'rejeitado';
+  responsavel: string;
+  createdAt: string;
+}
+
+export interface AlimonyDoc {
+  alimonyId: string;
+  employeeId: string;
+  companyId: string;
+  beneficiario: string;
+  cpfBeneficiario: string;
+  tipoCalculo: 'percentual_liquido' | 'percentual_bruto' | 'valor_fixo';
+  valorOuPercentual: number;
+  baseCalculoStr?: string;
+  contaPagamento: string;
+  vigenciaInicio: string;
+  status: 'Ativo' | 'Inativo';
+}
+
+export interface LoanDoc {
+  loanId: string;
+  employeeId: string;
+  companyId: string;
+  instituicao: string;
+  contratoNumero: string;
+  valorTotal: number;
+  valorParcela: number;
+  totalParcelas: number;
+  parcelasPagas: number;
+  saldoDevedor: number;
+  status: 'Ativo' | 'Quitado' | 'Suspenso';
+}
+
+export interface PayrollPaymentDoc {
+  paymentId: string;
+  payrollPeriodId: string;
+  employeeId: string;
+  employeeName: string;
+  companyId: string;
+  valor: number;
+  banco: string;
+  agencia: string;
+  conta: string;
+  pixKey?: string;
+  forma: 'PIX' | 'TED' | 'DOC' | 'Cheque';
+  status: 'pendente' | 'processando' | 'pago' | 'rejeitado' | 'cancelado';
+  pagoEm?: string;
+  comprovanteHash?: string;
 }
 
 export interface TaxBracket {

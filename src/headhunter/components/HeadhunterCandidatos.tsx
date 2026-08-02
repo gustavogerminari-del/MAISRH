@@ -785,10 +785,10 @@ export const HeadhunterCandidatos: React.FC<HeadhunterCandidatosProps> = ({
               <button onClick={() => setSelectedCandidate(null)} className="text-slate-400 hover:text-slate-600 font-bold text-sm cursor-pointer">✕</button>
             </div>
 
-            {/* Actions Panel (Integration with Talent Bank & Official Candidate) */}
+            {/* Actions Panel (Integration with Talent Bank, Official Candidate & Client Presentation) */}
             <div className="p-4 bg-slate-50 rounded-2xl border border-slate-200 space-y-3">
               <span className="text-xs font-extrabold text-slate-800 block">Integração & Ações Globais</span>
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-2">
                 <button
                   onClick={() => handleToggleTalentBank(selectedCandidate)}
                   className={`px-3 py-2 rounded-xl text-xs font-bold border transition-colors cursor-pointer flex items-center justify-center gap-1.5 ${
@@ -798,7 +798,7 @@ export const HeadhunterCandidatos: React.FC<HeadhunterCandidatosProps> = ({
                   }`}
                 >
                   <ShieldCheck className="w-4 h-4" />
-                  {selectedCandidate.incluidoBancoTalentos ? 'No Banco de Talentos' : 'Incluir no Banco'}
+                  {selectedCandidate.incluidoBancoTalentos ? 'No Banco' : 'Incluir no Banco'}
                 </button>
 
                 <button
@@ -815,6 +815,28 @@ export const HeadhunterCandidatos: React.FC<HeadhunterCandidatosProps> = ({
                 >
                   <Mail className="w-4 h-4" />
                   Enviar Convite
+                </button>
+
+                <button
+                  onClick={() => {
+                    const updated: HeadhunterCandidate = {
+                      ...selectedCandidate,
+                      etapaHeadhunter: 'Vinculado à vaga',
+                      etapaPipeline: 'Apresentado ao cliente',
+                      conviteEnviado: true,
+                      historico: [
+                        { data: new Date().toISOString().split('T')[0], evento: `Candidato apresentado oficialmente ao cliente ${selectedCandidate.clienteNome || 'Corporativo'}` },
+                        ...selectedCandidate.historico
+                      ]
+                    };
+                    onUpdateCandidate(updated);
+                    setSelectedCandidate(updated);
+                    alert(`Candidato "${selectedCandidate.nome}" apresentado ao cliente com sucesso! O perfil estará disponível no Portal do Cliente.`);
+                  }}
+                  className="px-3 py-2 rounded-xl text-xs font-bold bg-emerald-600 text-white hover:bg-emerald-700 transition-colors cursor-pointer flex items-center justify-center gap-1.5"
+                >
+                  <Share2 className="w-4 h-4" />
+                  Apresentar ao Cliente
                 </button>
               </div>
             </div>

@@ -4,6 +4,7 @@ import { HeadhunterClientes } from './components/HeadhunterClientes';
 import { HeadhunterComercial } from './components/HeadhunterComercial';
 import { HeadhunterFinanceiro } from './components/HeadhunterFinanceiro';
 import { HeadhunterCandidatos } from './components/HeadhunterCandidatos';
+import { HeadhunterPortalCliente } from './components/HeadhunterPortalCliente';
 import { HeadhunterCandidate } from './types';
 
 // Unified Recruitment Core Modules
@@ -54,7 +55,8 @@ export type HeadhunterSubTab =
   | 'comissoes'
   | 'despesas'
   | 'contratos'
-  | 'relatorios';
+  | 'relatorios'
+  | 'portal_cliente';
 
 interface HeadhunterViewProps {
   initialSubTab?: HeadhunterSubTab;
@@ -270,6 +272,17 @@ export const HeadhunterView: React.FC<HeadhunterViewProps> = ({ initialSubTab = 
         >
           Financeiro
         </button>
+
+        <button
+          onClick={() => setActiveTab('portal_cliente')}
+          className={`px-3.5 py-2 rounded-xl text-xs font-extrabold transition-all cursor-pointer whitespace-nowrap flex items-center gap-1.5 ${
+            activeTab === 'portal_cliente'
+              ? 'bg-indigo-900 text-white shadow-xs'
+              : 'text-indigo-700 bg-indigo-50/80 hover:bg-indigo-100'
+          }`}
+        >
+          <span>Portal do Cliente</span>
+        </button>
       </div>
 
       <main className="w-full space-y-6">
@@ -408,6 +421,19 @@ export const HeadhunterView: React.FC<HeadhunterViewProps> = ({ initialSubTab = 
             origemProcesso="headhunter"
             events={agendaEvents}
             onAddEvent={evt => setAgendaEvents([evt, ...agendaEvents])}
+          />
+        )}
+        {activeTab === 'portal_cliente' && (
+          <HeadhunterPortalCliente
+            clients={clients}
+            jobs={jobs as any}
+            candidates={candidates as any}
+            interviews={interviews as any}
+            onUpdateCandidate={updatedCand => {
+              setCandidates(candidates.map(c => c.id === updatedCand.id ? (updatedCand as any) : c));
+              recruitmentService.saveCandidate(updatedCand as any);
+            }}
+            onOpenAiModal={handleOpenAiModal}
           />
         )}
       </main>

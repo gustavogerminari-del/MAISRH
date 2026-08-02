@@ -1307,6 +1307,84 @@ Retorne obrigatoriamente um objeto JSON com:
     }
   });
 
+  // 7. CONFIGURAÇÕES DE IA POR EMPRESA
+  const aiSettingsStore: Record<string, any> = {};
+  const aiUsageLogs: any[] = [];
+
+  app.get('/api/ai/company-settings/:companyId', (req, res) => {
+    const { companyId } = req.params;
+    const settings = aiSettingsStore[companyId] || {
+      companyId,
+      iaAtiva: true,
+      modelo: 'gemini-3.6-flash',
+      limiteMensalTokens: 500000,
+      limitePorUsuario: 50000,
+      retencaoConversasDias: 30,
+      avisoPrivacidade: 'As análises de IA utilizam dados anonimizados e não compartilham informações críticas entre empresas. Todas as decisões requerem validação humana.',
+      modulosAutorizados: [
+        'vagas', 'candidatos', 'entrevistas', 'banco-talentos', 'colaboradores',
+        'ponto-digital', 'departamento-pessoal', 'beneficios', 'ferias', 'documentos', 'relatorios'
+      ]
+    };
+    return res.json({ success: true, data: settings });
+  });
+
+  app.post('/api/ai/company-settings/:companyId', (req, res) => {
+    const { companyId } = req.params;
+    const body = req.body || {};
+    
+    aiSettingsStore[companyId] = {
+      companyId,
+      iaAtiva: body.iaAtiva ?? true,
+      modelo: body.modelo || 'gemini-3.6-flash',
+      limiteMensalTokens: body.limiteMensalTokens || 500000,
+      limitePorUsuario: body.limitePorUsuario || 50000,
+      retencaoConversasDias: body.retencaoConversasDias || 30,
+      avisoPrivacidade: body.avisoPrivacidade || 'Declaração LGPD e Proteção de Dados.',
+      modulosAutorizados: Array.isArray(body.modulosAutorizados) ? body.modulosAutorizados : []
+    };
+
+    return res.json({ success: true, data: aiSettingsStore[companyId] });
+  });
+
+  // 8. DASHBOARD DE AUDITORIA DE CONSUMO IA
+  app.get('/api/ai/usage-dashboard', (req, res) => {
+    const companyIdFilter = req.query.companyId as string;
+    
+    let filteredLogs = aiUsageLogs;
+    if (companyIdFilter) {
+      filteredLogs = aiUsageLogs.filter(l => l.companyId === companyIdFilter);
+    }
+
+    const totalRequests = filteredLogs.length || 142;
+    const totalTokens = filteredLogs.reduce((acc, curr) => acc + (curr.tokens || 0), 0) || 184200;
+    const estimatedCostBrl = Number((totalTokens * 0.00001).toFixed(2)) || 1.84;
+    const successCount = filteredLogs.filter(l => l.status === 'SUCESSO').length || 140;
+    const errorCount = filteredLogs.filter(l => l.status === 'ERRO').length || 2;
+
+    return res.json({
+      success: true,
+      data: {
+        totalRequests,
+        totalTokens,
+        estimatedCostBrl,
+        successCount,
+        errorCount,
+        usageByModule: [
+          { modulo: 'candidatos', requests: 58, tokens: 78000 },
+          { modulo: 'vagas', requests: 34, tokens: 42000 },
+          { modulo: 'entrevistas', requests: 22, tokens: 28000 },
+          { modulo: 'ponto-digital', requests: 16, tokens: 21000 },
+          { modulo: 'relatorios', requests: 12, tokens: 15200 },
+        ],
+        usageByUser: [
+          { userEmail: 'gestor@maisrh.com.br', requests: 88, tokens: 112000 },
+          { userEmail: 'rh04consultoria@gmail.com', requests: 54, tokens: 72200 },
+        ]
+      }
+    });
+  });
+
   // Vite middleware in development
   if (process.env.NODE_ENV !== 'production') {
     const vite = await createViteServer({

@@ -45,12 +45,233 @@ import {
   getAjustesPontoFirestore 
 } from '../../departamento-pessoal/services/dpFirestoreService';
 
+export { getColaboradoresFirestore };
+
 const COLLECTION_PERIODS = 'payroll_competences';
 const COLLECTION_PAYSTUBS = 'payroll_stubs';
 const COLLECTION_RUBRICS = 'payroll_events';
 const COLLECTION_TAX_TABLES = 'tax_tables';
 const COLLECTION_AUDIT = 'payroll_audit_logs';
 const COLLECTION_ESOCIAL = 'esocial_events';
+const COLLECTION_COMPANY_SETTINGS = 'payroll_company_settings';
+const COLLECTION_SALARY_HISTORY = 'payroll_salary_history';
+const COLLECTION_VARIABLE_PAY = 'payroll_variable_pay';
+const COLLECTION_ALIMONY = 'payroll_alimony';
+const COLLECTION_LOANS = 'payroll_loans';
+const COLLECTION_PAYMENTS = 'payroll_payments';
+const COLLECTION_PONTO_REGISTROS = 'registros_ponto';
+
+export async function getPayrollCompanySettingsFirestore(companyId: string) {
+  try {
+    const q = query(
+      collection(db, COLLECTION_COMPANY_SETTINGS),
+      where('companyId', '==', companyId)
+    );
+    const snap = await getDocs(q);
+    if (!snap.empty) {
+      return sanitizeFirestoreData(snap.docs[0].data()) as any;
+    }
+  } catch (err) {
+    console.warn('[Payroll] Erro ao carregar configurações da empresa:', err);
+  }
+  return {
+    payrollSettingsId: `set-${companyId}`,
+    companyId,
+    empresaId: companyId,
+    razaoSocial: 'Empresa do Grupo RL Connect',
+    cnpj: '00.000.000/0001-91',
+    regimeTributario: 'Simples Nacional',
+    naturezaJuridica: '206-2 Sociedade Empresária Limitada',
+    cnae: '6201-5/00',
+    fpas: '515',
+    terceiros: '0064',
+    ratPercent: 2.0,
+    fapPercent: 1.0,
+    sindicatoDefault: 'SINDPD / Sindicato Geral da Categoria',
+    convenacaoColetiva: 'CCT 2026/2027 Vigente',
+    dataPagamentoDia: 5,
+    formaPagamentoPadrao: 'PIX',
+    contaBancaria: {
+      banco: '341 - Itaú Unibanco',
+      agencia: '0123',
+      conta: '98765-4'
+    },
+    responsavelNome: 'Gestor de Recursos Humanos',
+    responsavelEmail: 'rh@rlconnect.com.br'
+  };
+}
+
+export async function savePayrollCompanySettingsFirestore(companyId: string, settings: any): Promise<void> {
+  const docId = settings.payrollSettingsId || `set-${companyId}`;
+  const data = {
+    ...settings,
+    companyId,
+    empresaId: companyId,
+    updatedAt: new Date().toISOString()
+  };
+  await setDoc(doc(db, COLLECTION_COMPANY_SETTINGS, docId), data, { merge: true });
+}
+
+export async function getSalaryHistoryFirestore(companyId: string, employeeId?: string): Promise<any[]> {
+  try {
+    let q;
+    if (employeeId) {
+      q = query(
+        collection(db, COLLECTION_SALARY_HISTORY),
+        where('companyId', '==', companyId),
+        where('employeeId', '==', employeeId)
+      );
+    } else {
+      q = query(
+        collection(db, COLLECTION_SALARY_HISTORY),
+        where('companyId', '==', companyId)
+      );
+    }
+    const snap = await getDocs(q);
+    if (!snap.empty) {
+      const list = snap.docs.map(d => ({ id: d.id, ...(sanitizeFirestoreData(d.data()) as any) }));
+      list.sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || ''));
+      return list;
+    }
+  } catch (err) {
+    console.warn('[Payroll] Erro ao carregar histórico salarial:', err);
+  }
+  return [];
+}
+
+export async function saveSalaryHistoryFirestore(companyId: string, item: any): Promise<void> {
+  const docId = item.salaryHistoryId || `sal-${Date.now()}`;
+  const data = {
+    ...item,
+    salaryHistoryId: docId,
+    companyId,
+    createdAt: new Date().toISOString()
+  };
+  await setDoc(doc(db, COLLECTION_SALARY_HISTORY, docId), data, { merge: true });
+}
+
+export async function getVariablePayFirestore(companyId: string, competencia?: string): Promise<any[]> {
+  try {
+    let q;
+    if (competencia) {
+      q = query(
+        collection(db, COLLECTION_VARIABLE_PAY),
+        where('companyId', '==', companyId),
+        where('competencia', '==', competencia)
+      );
+    } else {
+      q = query(
+        collection(db, COLLECTION_VARIABLE_PAY),
+        where('companyId', '==', companyId)
+      );
+    }
+    const snap = await getDocs(q);
+    if (!snap.empty) {
+      return snap.docs.map(d => ({ id: d.id, ...(sanitizeFirestoreData(d.data()) as any) }));
+    }
+  } catch (err) {
+    console.warn('[Payroll] Erro ao carregar lancamentos variaveis:', err);
+  }
+  return [];
+}
+
+export async function saveVariablePayFirestore(companyId: string, item: any): Promise<void> {
+  const docId = item.variablePayId || `vp-${Date.now()}`;
+  const data = {
+    ...item,
+    variablePayId: docId,
+    companyId,
+    createdAt: new Date().toISOString()
+  };
+  await setDoc(doc(db, COLLECTION_VARIABLE_PAY, docId), data, { merge: true });
+}
+
+export async function getAlimonyFirestore(companyId: string): Promise<any[]> {
+  try {
+    const q = query(
+      collection(db, COLLECTION_ALIMONY),
+      where('companyId', '==', companyId)
+    );
+    const snap = await getDocs(q);
+    if (!snap.empty) {
+      return snap.docs.map(d => ({ id: d.id, ...(sanitizeFirestoreData(d.data()) as any) }));
+    }
+  } catch (err) {
+    console.warn('[Payroll] Erro ao carregar pensoes alimenticias:', err);
+  }
+  return [];
+}
+
+export async function saveAlimonyFirestore(companyId: string, item: any): Promise<void> {
+  const docId = item.alimonyId || `alim-${Date.now()}`;
+  const data = {
+    ...item,
+    alimonyId: docId,
+    companyId
+  };
+  await setDoc(doc(db, COLLECTION_ALIMONY, docId), data, { merge: true });
+}
+
+export async function getLoansFirestore(companyId: string): Promise<any[]> {
+  try {
+    const q = query(
+      collection(db, COLLECTION_LOANS),
+      where('companyId', '==', companyId)
+    );
+    const snap = await getDocs(q);
+    if (!snap.empty) {
+      return snap.docs.map(d => ({ id: d.id, ...(sanitizeFirestoreData(d.data()) as any) }));
+    }
+  } catch (err) {
+    console.warn('[Payroll] Erro ao carregar consignados/emprestimos:', err);
+  }
+  return [];
+}
+
+export async function saveLoanFirestore(companyId: string, item: any): Promise<void> {
+  const docId = item.loanId || `loan-${Date.now()}`;
+  const data = {
+    ...item,
+    loanId: docId,
+    companyId
+  };
+  await setDoc(doc(db, COLLECTION_LOANS, docId), data, { merge: true });
+}
+
+export async function getPayrollPaymentsFirestore(companyId: string, periodId?: string): Promise<any[]> {
+  try {
+    let q;
+    if (periodId) {
+      q = query(
+        collection(db, COLLECTION_PAYMENTS),
+        where('companyId', '==', companyId),
+        where('payrollPeriodId', '==', periodId)
+      );
+    } else {
+      q = query(
+        collection(db, COLLECTION_PAYMENTS),
+        where('companyId', '==', companyId)
+      );
+    }
+    const snap = await getDocs(q);
+    if (!snap.empty) {
+      return snap.docs.map(d => ({ id: d.id, ...(sanitizeFirestoreData(d.data()) as any) }));
+    }
+  } catch (err) {
+    console.warn('[Payroll] Erro ao carregar pagamentos bancarios:', err);
+  }
+  return [];
+}
+
+export async function savePayrollPaymentFirestore(companyId: string, item: any): Promise<void> {
+  const docId = item.paymentId || `pay-${Date.now()}`;
+  const data = {
+    ...item,
+    paymentId: docId,
+    companyId
+  };
+  await setDoc(doc(db, COLLECTION_PAYMENTS, docId), data, { merge: true });
+}
 
 // Default Tax Table Version for 2026
 export const DEFAULT_TAX_TABLE_2026: TaxTableVersion = {
@@ -462,13 +683,32 @@ export async function processBatchPayrollFirestore(
   const colaboradores = await getColaboradoresFirestore(companyId);
   const activeColabs = colaboradores.filter(c => c.profissionais?.status !== 'Rescindido');
 
-  // 2. Busca Benefícios, Férias, Rescisões e Ajustes de Ponto
-  const [beneficios, feriasList, rescisoes, ajustesPonto] = await Promise.all([
+  // 2. Busca Benefícios, Férias, Rescisões, Lançamentos Variáveis, Pensão, Empréstimos e Registros do Ponto Digital
+  const [beneficios, feriasList, rescisoes, variablePayList, alimonyList, loansList] = await Promise.all([
     getBeneficiosFirestore(companyId),
     getFeriasFirestore(companyId),
     getRescisoesFirestore(companyId),
-    getAjustesPontoFirestore(companyId)
+    getVariablePayFirestore(companyId, referenceMonth),
+    getAlimonyFirestore(companyId),
+    getLoansFirestore(companyId)
   ]);
+
+  // Carrega Ponto Digital (registros_ponto) do mês de referência
+  let pontoRegistros: any[] = [];
+  try {
+    const qPonto = query(
+      collection(db, COLLECTION_PONTO_REGISTROS),
+      where('empresaId', '==', companyId)
+    );
+    const snapPonto = await getDocs(qPonto);
+    if (!snapPonto.empty) {
+      pontoRegistros = snapPonto.docs
+        .map(d => ({ id: d.id, ...(sanitizeFirestoreData(d.data()) as any) }))
+        .filter(r => (r.data || '').startsWith(referenceMonth));
+    }
+  } catch (err) {
+    console.warn('[Payroll] Erro ao carregar registros de ponto para a folha:', err);
+  }
 
   const newPaystubs: Paystub[] = [];
 
@@ -481,24 +721,124 @@ export async function processBatchPayrollFirestore(
     const admissaoDate = colab.profissionais?.dataAdmissao || `${year}-01-01`;
     const cpf = colab.pessoais?.cpf || '000.000.000-00';
     const dependentsCount = colab.trabalhistas?.dependentesCount || 0;
-    const pensaoAlimenticiaValue = cAny.trabalhistas?.pensaoAlimenticiaValue || 0;
 
     // Itens da Folha
     const items: PaystubItem[] = [
       {
-        id: `item-${Date.now()}-1`,
+        id: `item-${Date.now()}-base`,
         code: '1001',
         name: 'Salário Base',
         type: 'Provento',
         reference: '30 dias',
         amount: salarioBase,
-        calculationMemory: { baseValue: salarioBase, notes: 'Salário contratual integral' }
+        origin: 'cadastro',
+        calculationMemory: { baseValue: salarioBase, notes: 'Salário contratual mensal' }
       }
     ];
 
     let totalProventos = salarioBase;
 
-    // Verifica Adicional de Insalubridade
+    // --- IMPORTAÇÃO DO PONTO DIGITAL ---
+    const colabPonto = pontoRegistros.filter(p => p.funcionarioId === colab.id || p.cpf === cpf);
+    const totalHE50Min = colabPonto.reduce((acc, p) => acc + (p.horasExtras50Minutos || p.horasExtrasMinutos || 0), 0);
+    const totalHE100Min = colabPonto.reduce((acc, p) => acc + (p.horasExtras100Minutos || 0), 0);
+    const totalHE140Min = colabPonto.reduce((acc, p) => acc + (p.horasExtras140Minutos || 0), 0);
+    const totalNightMin = colabPonto.reduce((acc, p) => acc + (p.adicionalNoturnoMinutos || 0), 0);
+    const totalAbsenceMin = colabPonto.reduce((acc, p) => acc + (p.faltasMinutos || 0) + (p.atrasoMinutos || 0), 0);
+
+    const valorHoraBase = salarioBase / 220;
+
+    // Horas Extras 50%
+    if (totalHE50Min > 0) {
+      const horas50 = totalHE50Min / 60;
+      const val50 = Number((valorHoraBase * 1.5 * horas50).toFixed(2));
+      totalProventos += val50;
+      items.push({
+        id: `item-${Date.now()}-he50`,
+        code: '1002',
+        name: 'Horas Extras 50%',
+        type: 'Provento',
+        reference: `${horas50.toFixed(1)} hrs`,
+        amount: val50,
+        origin: 'ponto',
+        calculationMemory: { baseValue: salarioBase, rateUsed: 1.5, notes: 'Importado do Ponto Digital (50%)' }
+      });
+    }
+
+    // Horas Extras 100%
+    if (totalHE100Min > 0) {
+      const horas100 = totalHE100Min / 60;
+      const val100 = Number((valorHoraBase * 2.0 * horas100).toFixed(2));
+      totalProventos += val100;
+      items.push({
+        id: `item-${Date.now()}-he100`,
+        code: '1003',
+        name: 'Horas Extras 100%',
+        type: 'Provento',
+        reference: `${horas100.toFixed(1)} hrs`,
+        amount: val100,
+        origin: 'ponto',
+        calculationMemory: { baseValue: salarioBase, rateUsed: 2.0, notes: 'Importado do Ponto Digital (100% Domingo/Feriado)' }
+      });
+    }
+
+    // Horas Extras 140% (Convenção Especial)
+    if (totalHE140Min > 0) {
+      const horas140 = totalHE140Min / 60;
+      const val140 = Number((valorHoraBase * 2.4 * horas140).toFixed(2));
+      totalProventos += val140;
+      items.push({
+        id: `item-${Date.now()}-he140`,
+        code: '1009',
+        name: 'Horas Extras 140% (Convenção)',
+        type: 'Provento',
+        reference: `${horas140.toFixed(1)} hrs`,
+        amount: val140,
+        origin: 'ponto',
+        calculationMemory: { baseValue: salarioBase, rateUsed: 2.4, notes: 'Importado do Ponto Digital (140%)' }
+      });
+    }
+
+    // Adicional Noturno
+    if (totalNightMin > 0) {
+      const horasNoturnas = totalNightMin / 60;
+      const valNoturno = Number((valorHoraBase * 0.20 * horasNoturnas).toFixed(2));
+      totalProventos += valNoturno;
+      items.push({
+        id: `item-${Date.now()}-noturno`,
+        code: '1004',
+        name: 'Adicional Noturno (20%)',
+        type: 'Provento',
+        reference: `${horasNoturnas.toFixed(1)} hrs`,
+        amount: valNoturno,
+        origin: 'ponto',
+        calculationMemory: { baseValue: salarioBase, rateUsed: 0.20, notes: 'Importado do Ponto Digital (Noturno 22h-05h)' }
+      });
+    }
+
+    // Reflexo DSR sobre Horas Extras / Noturno
+    const totalVariaceovertime = items
+      .filter(i => i.origin === 'ponto' && i.type === 'Provento')
+      .reduce((a, b) => a + b.amount, 0);
+
+    if (totalVariaceovertime > 0) {
+      const dsrVal = calculateDSR(totalVariaceovertime, 25, 5);
+      if (dsrVal > 0) {
+        totalProventos += dsrVal;
+        items.push({
+          id: `item-${Date.now()}-dsr`,
+          code: '1007',
+          name: 'DSR sobre Horas Extras e Adicionais',
+          type: 'Provento',
+          reference: '25d / 5d',
+          amount: dsrVal,
+          origin: 'ponto',
+          calculationMemory: { baseValue: totalVariaceovertime, notes: 'Descanso Semanal Remunerado s/ variáveis' }
+        });
+      }
+    }
+
+    // Insalubridade
     if (cAny.trabalhistas?.insalubridadeDegree) {
       const valInsalubridade = calculateInsalubridade(cAny.trabalhistas.insalubridadeDegree as any);
       totalProventos += valInsalubridade;
@@ -509,11 +849,12 @@ export async function processBatchPayrollFirestore(
         type: 'Provento',
         reference: cAny.trabalhistas.insalubridadeDegree,
         amount: valInsalubridade,
+        origin: 'cadastro',
         calculationMemory: { baseValue: DEFAULT_TAX_TABLE_2026.minimumWage, rateUsed: 0.20, notes: 'Grau médio s/ salário mínimo' }
       });
     }
 
-    // Verifica Adicional de Periculosidade (30%)
+    // Periculosidade (30%)
     if (cAny.trabalhistas?.periculosidade) {
       const valPeric = calculatePericulosidade(salarioBase);
       totalProventos += valPeric;
@@ -524,11 +865,48 @@ export async function processBatchPayrollFirestore(
         type: 'Provento',
         reference: '30% Base',
         amount: valPeric,
+        origin: 'cadastro',
         calculationMemory: { baseValue: salarioBase, rateUsed: 0.30, notes: '30% sobre o salário base' }
       });
     }
 
-    // Processa Desconto de Benefícios (VT / VR)
+    // Lançamentos Variáveis (Comissões, Prêmios, Bônus)
+    const colabVars = variablePayList.filter(v => v.employeeId === colab.id && v.aprovacao === 'aprovado');
+    for (const v of colabVars) {
+      totalProventos += v.valor;
+      items.push({
+        id: `item-${Date.now()}-var-${v.variablePayId}`,
+        code: '1008',
+        name: `Comissão / Variável (${v.tipo.toUpperCase()})`,
+        type: 'Provento',
+        reference: v.origem || 'Variável',
+        amount: v.valor,
+        origin: 'importacao',
+        calculationMemory: { baseValue: v.valor, notes: `Aprovado por ${v.responsavel || 'RH'}` }
+      });
+    }
+
+    // --- DESCONTOS ---
+
+    // Faltas / Atrasos do Ponto
+    if (totalAbsenceMin > 0) {
+      const horasFalta = totalAbsenceMin / 60;
+      const descFaltas = Number((valorHoraBase * horasFalta).toFixed(2));
+      if (descFaltas > 0) {
+        items.push({
+          id: `item-${Date.now()}-faltas`,
+          code: '5006',
+          name: 'Faltas e Atrasos Não Justificados',
+          type: 'Desconto',
+          reference: `${horasFalta.toFixed(1)} hrs`,
+          amount: descFaltas,
+          origin: 'ponto',
+          calculationMemory: { baseValue: salarioBase, notes: 'Importado do Ponto Digital' }
+        });
+      }
+    }
+
+    // Benefícios (VT / VR)
     const colabBens = beneficios.filter(b => (b as any).colaboradorId === colab.id || (b as any).status === 'Ativo');
     for (const b of colabBens) {
       const bAny = b as any;
@@ -542,7 +920,8 @@ export async function processBatchPayrollFirestore(
             name: 'Vale Transporte (Coparticipação até 6%)',
             type: 'Desconto',
             reference: '6,0%',
-            amount: vtDesc
+            amount: vtDesc,
+            origin: 'beneficio'
           });
         }
       } else if (bNome.includes('refeição') || bAny.tipo === 'VR') {
@@ -553,21 +932,50 @@ export async function processBatchPayrollFirestore(
           name: 'Vale Refeição (Coparticipação)',
           type: 'Desconto',
           reference: 'Copart.',
-          amount: vrDesc
+          amount: vrDesc,
+          origin: 'beneficio'
         });
       }
     }
 
-    // Pensão Alimentícia
-    if (pensaoAlimenticiaValue > 0) {
+    // Pensão Alimentícia Judicial
+    let pensaoTotal = cAny.trabalhistas?.pensaoAlimenticiaValue || 0;
+    const colabAlimony = alimonyList.filter(a => a.employeeId === colab.id && a.status === 'Ativo');
+    for (const al of colabAlimony) {
+      if (al.tipoCalculo === 'valor_fixo') {
+        pensaoTotal += al.valorOuPercentual;
+      } else if (al.tipoCalculo === 'percentual_liquido' || al.tipoCalculo === 'percentual_bruto') {
+        pensaoTotal += Number((totalProventos * (al.valorOuPercentual / 100)).toFixed(2));
+      }
+    }
+
+    if (pensaoTotal > 0) {
       items.push({
         id: `item-${Date.now()}-pensao`,
         code: '5005',
         name: 'Pensão Alimentícia (Judicial)',
         type: 'Desconto',
         reference: 'Judicial',
-        amount: pensaoAlimenticiaValue
+        amount: pensaoTotal,
+        origin: 'manual'
       });
+    }
+
+    // Consignados / Empréstimos
+    const colabLoans = loansList.filter(l => l.employeeId === colab.id && l.status === 'Ativo');
+    for (const loan of colabLoans) {
+      if (loan.valorParcela > 0) {
+        items.push({
+          id: `item-${Date.now()}-loan-${loan.loanId}`,
+          code: '5009',
+          name: `Empréstimo Consignado (${loan.instituicao})`,
+          type: 'Desconto',
+          reference: `Parc. ${loan.parcelasPagas + 1}/${loan.totalParcelas}`,
+          amount: loan.valorParcela,
+          origin: 'manual',
+          calculationMemory: { baseValue: loan.saldoDevedor, notes: `Contrato ${loan.contratoNumero}` }
+        });
+      }
     }
 
     // Cálculo INSS Progressivo
@@ -579,11 +987,12 @@ export async function processBatchPayrollFirestore(
       type: 'Desconto',
       reference: `${inssCalc.effectiveRate}%`,
       amount: inssCalc.amount,
+      origin: 'cadastro',
       calculationMemory: { baseValue: inssCalc.base, rateUsed: inssCalc.effectiveRate, notes: 'Alíquota progressiva oficial 2026' }
     });
 
     // Cálculo IRRF
-    const irrfCalc = calculateIRRF(totalProventos, inssCalc.amount, dependentsCount, pensaoAlimenticiaValue);
+    const irrfCalc = calculateIRRF(totalProventos, inssCalc.amount, dependentsCount, pensaoTotal);
     items.push({
       id: `item-${Date.now()}-irrf`,
       code: '5002',
@@ -591,7 +1000,8 @@ export async function processBatchPayrollFirestore(
       type: 'Desconto',
       reference: `${irrfCalc.ratePercent}%`,
       amount: irrfCalc.amount,
-      calculationMemory: { baseValue: irrfCalc.base, rateUsed: irrfCalc.ratePercent, notes: 'Com abatimento legal de dependentes' }
+      origin: 'cadastro',
+      calculationMemory: { baseValue: irrfCalc.base, rateUsed: irrfCalc.ratePercent, notes: 'Com abatimento legal de dependentes e pensão' }
     });
 
     // Informativos FGTS
@@ -602,7 +1012,8 @@ export async function processBatchPayrollFirestore(
       name: 'Base do FGTS (Informativa)',
       type: 'Informativa',
       reference: 'Base',
-      amount: totalProventos
+      amount: totalProventos,
+      origin: 'cadastro'
     });
     items.push({
       id: `item-${Date.now()}-fgts`,
@@ -610,12 +1021,13 @@ export async function processBatchPayrollFirestore(
       name: 'FGTS do Mês (8% Informativo)',
       type: 'Informativa',
       reference: '8,0%',
-      amount: fgtsCalc.amount
+      amount: fgtsCalc.amount,
+      origin: 'cadastro'
     });
 
     // Totais do Holerite
     const totalDescontos = Number(
-      items.filter(i => i.type === 'Desconto').reduce((acc, i) => acc + i.amount, 0).toFixed(2)
+      items.filter(i => i.type === 'Desconto' || i.type === 'desconto').reduce((acc, i) => acc + i.amount, 0).toFixed(2)
     );
     const valorLiquido = Number((totalProventos - totalDescontos).toFixed(2));
     const employer = calculateEmployerCharges(totalProventos);
@@ -623,6 +1035,7 @@ export async function processBatchPayrollFirestore(
     const paystub: Paystub = {
       id: stubId,
       companyId,
+      empresaId: companyId,
       periodId,
       periodName: `Folha ${type} - ${monthStr}/${year}`,
       employeeId: colab.id,
@@ -634,7 +1047,7 @@ export async function processBatchPayrollFirestore(
       salarioBase,
       diasTrabalhados: 30,
       dependentsCount,
-      pensaoAlimenticiaValue,
+      pensaoAlimenticiaValue: pensaoTotal,
       items,
       totalProventos: Number(totalProventos.toFixed(2)),
       totalDescontos,
@@ -651,6 +1064,22 @@ export async function processBatchPayrollFirestore(
 
     newPaystubs.push(paystub);
     await savePaystubFirestore(companyId, paystub);
+
+    // Gerar registro de Pagamento Bancário
+    await savePayrollPaymentFirestore(companyId, {
+      paymentId: `pay-${stubId}`,
+      payrollPeriodId: periodId,
+      employeeId: colab.id,
+      employeeName: colab.nomeCompleto,
+      companyId,
+      valor: valorLiquido,
+      banco: (colab.trabalhistas as any)?.banco || '341 - Itaú',
+      agencia: (colab.trabalhistas as any)?.agencia || '0001',
+      conta: (colab.trabalhistas as any)?.conta || '12345-6',
+      pixKey: (colab.trabalhistas as any)?.chavePix || cpf,
+      forma: 'PIX',
+      status: 'pendente'
+    });
   }
 
   // Consolidação dos Totais do Período
@@ -662,12 +1091,17 @@ export async function processBatchPayrollFirestore(
 
   const period: PayrollPeriod = {
     id: periodId,
+    payrollPeriodId: periodId,
     companyId,
+    empresaId: companyId,
     referenceMonth,
     year,
     month,
     type,
-    status: 'Aberto',
+    status: 'aberta',
+    dataInicial: `${referenceMonth}-01`,
+    dataFinal: `${referenceMonth}-30`,
+    dataDePagamento: `${referenceMonth}-05`,
     totalEmployees: newPaystubs.length,
     totalGross: Number(totalGross.toFixed(2)),
     totalDiscounts: Number(totalDiscounts.toFixed(2)),
@@ -676,6 +1110,8 @@ export async function processBatchPayrollFirestore(
     totalPatronal: Number(totalPatronal.toFixed(2)),
     paystubsCount: newPaystubs.length,
     paystubsSignedCount: 0,
+    versionNumber: 1,
+    createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString()
   };
 
@@ -687,7 +1123,7 @@ export async function processBatchPayrollFirestore(
     'Processamento Automatizado de Folha',
     userEmail,
     userName,
-    `Folha de pagamento ${referenceMonth} (${type}) reprocessada com sucesso para ${newPaystubs.length} colaboradores.`
+    `Folha de pagamento ${referenceMonth} (${type}) reprocessada com sucesso para ${newPaystubs.length} colaboradores com integração completa ao Ponto Digital e Benefícios.`
   );
 
   return { period, paystubs: newPaystubs };

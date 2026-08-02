@@ -13,7 +13,9 @@ import {
   UserPlus, 
   ShieldAlert, 
   Key,
-  HeartPulse 
+  HeartPulse,
+  Network,
+  Briefcase
 } from 'lucide-react';
 import { useAuth } from '../auth';
 import { SstView } from '../sst/SstView';
@@ -75,10 +77,14 @@ import { DocumentsSignatureView } from '../documents-signature/DocumentsSignatur
 import { RelatoriosDpView } from './components/RelatoriosDpView';
 import { ConfiguracoesTrabalhistasView } from './components/ConfiguracoesTrabalhistas';
 import { PainelAcessosPortal } from './components/PainelAcessosPortal';
+import { OrganogramaEmpresa } from './components/OrganogramaEmpresa';
+import { GestaoCargosSalarios } from './components/GestaoCargosSalarios';
 
 export type DPSubTab = 
   | 'visao-geral' 
   | 'colaboradores' 
+  | 'organograma'
+  | 'cargos-salarios'
   | 'ponto-digital' 
   | 'admissoes' 
   | 'beneficios' 
@@ -253,6 +259,8 @@ export const DepartamentoPessoalView: React.FC<DepartamentoPessoalViewProps> = (
   const allSubMenuItems = [
     { id: 'visao-geral', label: 'Visão Geral', icon: LayoutDashboard, module: 'dp' },
     { id: 'colaboradores', label: 'Colaboradores', icon: Users, module: 'equipeInterna' },
+    { id: 'organograma', label: 'Organograma', icon: Network, module: 'equipeInterna' },
+    { id: 'cargos-salarios', label: 'Cargos e Salários', icon: Briefcase, module: 'equipeInterna' },
     { id: 'ponto-digital', label: 'Jornada', icon: Clock, module: 'pontoDigital' },
     { id: 'admissoes', label: 'Admissões', icon: UserPlus, module: 'equipeInterna' },
     { id: 'beneficios', label: 'Benefícios', icon: Gift, module: 'beneficios' },
@@ -330,6 +338,20 @@ export const DepartamentoPessoalView: React.FC<DepartamentoPessoalViewProps> = (
             colaboradores={colaboradores}
             onSalvarColaborador={handleSalvarColaborador}
             companyId={companyId}
+          />
+        )}
+
+        {activeSubTab === 'organograma' && (
+          <OrganogramaEmpresa
+            companyId={companyId}
+            colaboradores={colaboradores}
+          />
+        )}
+
+        {activeSubTab === 'cargos-salarios' && (
+          <GestaoCargosSalarios
+            companyId={companyId}
+            colaboradores={colaboradores}
           />
         )}
 

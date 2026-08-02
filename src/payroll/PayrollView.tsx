@@ -59,6 +59,11 @@ import { ESocialModule } from './components/ESocialModule';
 import { ReopenPeriodModal } from './components/ReopenPeriodModal';
 import { RubricsAndTaxesModule } from './components/RubricsAndTaxesModule';
 import { PayrollAuditTab } from './components/PayrollAuditTab';
+import { CompanyPayrollSettingsTab } from './components/CompanyPayrollSettingsTab';
+import { PayrollPaymentsModule } from './components/PayrollPaymentsModule';
+import { PayrollAccountingAndProvisions } from './components/PayrollAccountingAndProvisions';
+import { PayrollVariablePayAndLaunches } from './components/PayrollVariablePayAndLaunches';
+import { PayrollReportsAndDashboard } from './components/PayrollReportsAndDashboard';
 
 export const PayrollView: React.FC = () => {
   const { user } = useAuth();
@@ -75,7 +80,9 @@ export const PayrollView: React.FC = () => {
   const [auditLogs, setAuditLogs] = useState<PayrollAuditLog[]>([]);
 
   const [activePeriodId, setActivePeriodId] = useState<string>('per-2026-07');
-  const [activeTab, setActiveTab] = useState<'gestao' | 'rubricas' | 'esocial' | 'auditoria' | 'portal'>('gestao');
+  const [activeTab, setActiveTab] = useState<
+    'gestao' | 'rubricas' | 'esocial' | 'auditoria' | 'portal' | 'configuracao' | 'pagamentos' | 'contabil' | 'lancamentos' | 'relatorios'
+  >('gestao');
   
   const [searchTerm, setSearchTerm] = useState('');
   const [departmentFilter, setDepartmentFilter] = useState('Todos');
@@ -427,62 +434,122 @@ export const PayrollView: React.FC = () => {
       <div className="flex border-b border-slate-200 gap-2 overflow-x-auto">
         <button
           onClick={() => setActiveTab('gestao')}
-          className={`px-4 py-2.5 font-extrabold text-xs rounded-t-xl transition-all cursor-pointer flex items-center gap-2 whitespace-nowrap ${
+          className={`px-3.5 py-2.5 font-extrabold text-xs rounded-t-xl transition-all cursor-pointer flex items-center gap-2 whitespace-nowrap ${
             activeTab === 'gestao'
               ? 'bg-white text-indigo-600 border-t-2 border-x border-slate-200 border-t-indigo-600 shadow-xs'
               : 'text-slate-500 hover:text-slate-800 hover:bg-slate-50'
           }`}
         >
           <Calculator className="w-4 h-4" />
-          <span>Processamento Mensal & Holerites ({periodPaystubs.length})</span>
+          <span>Folha Mensal ({periodPaystubs.length})</span>
+        </button>
+
+        <button
+          onClick={() => setActiveTab('lancamentos')}
+          className={`px-3.5 py-2.5 font-extrabold text-xs rounded-t-xl transition-all cursor-pointer flex items-center gap-2 whitespace-nowrap ${
+            activeTab === 'lancamentos'
+              ? 'bg-white text-indigo-600 border-t-2 border-x border-slate-200 border-t-indigo-600 shadow-xs'
+              : 'text-slate-500 hover:text-slate-800 hover:bg-slate-50'
+          }`}
+        >
+          <DollarSign className="w-4 h-4 text-blue-600" />
+          <span>Lançamentos Variáveis & Consignados</span>
+        </button>
+
+        <button
+          onClick={() => setActiveTab('pagamentos')}
+          className={`px-3.5 py-2.5 font-extrabold text-xs rounded-t-xl transition-all cursor-pointer flex items-center gap-2 whitespace-nowrap ${
+            activeTab === 'pagamentos'
+              ? 'bg-white text-indigo-600 border-t-2 border-x border-slate-200 border-t-indigo-600 shadow-xs'
+              : 'text-slate-500 hover:text-slate-800 hover:bg-slate-50'
+          }`}
+        >
+          <Zap className="w-4 h-4 text-emerald-600" />
+          <span>Pagamentos & CNAB 240</span>
+        </button>
+
+        <button
+          onClick={() => setActiveTab('contabil')}
+          className={`px-3.5 py-2.5 font-extrabold text-xs rounded-t-xl transition-all cursor-pointer flex items-center gap-2 whitespace-nowrap ${
+            activeTab === 'contabil'
+              ? 'bg-white text-indigo-600 border-t-2 border-x border-slate-200 border-t-indigo-600 shadow-xs'
+              : 'text-slate-500 hover:text-slate-800 hover:bg-slate-50'
+          }`}
+        >
+          <Percent className="w-4 h-4 text-violet-600" />
+          <span>Provisões & Contabilidade</span>
+        </button>
+
+        <button
+          onClick={() => setActiveTab('relatorios')}
+          className={`px-3.5 py-2.5 font-extrabold text-xs rounded-t-xl transition-all cursor-pointer flex items-center gap-2 whitespace-nowrap ${
+            activeTab === 'relatorios'
+              ? 'bg-white text-indigo-600 border-t-2 border-x border-slate-200 border-t-indigo-600 shadow-xs'
+              : 'text-slate-500 hover:text-slate-800 hover:bg-slate-50'
+          }`}
+        >
+          <FileText className="w-4 h-4 text-slate-700" />
+          <span>Relatórios Executivos</span>
         </button>
 
         <button
           onClick={() => setActiveTab('rubricas')}
-          className={`px-4 py-2.5 font-extrabold text-xs rounded-t-xl transition-all cursor-pointer flex items-center gap-2 whitespace-nowrap ${
+          className={`px-3.5 py-2.5 font-extrabold text-xs rounded-t-xl transition-all cursor-pointer flex items-center gap-2 whitespace-nowrap ${
             activeTab === 'rubricas'
               ? 'bg-white text-indigo-600 border-t-2 border-x border-slate-200 border-t-indigo-600 shadow-xs'
               : 'text-slate-500 hover:text-slate-800 hover:bg-slate-50'
           }`}
         >
           <FileCode className="w-4 h-4 text-amber-600" />
-          <span>Rúbricas & Tabelas Tributárias</span>
+          <span>Rúbricas & Tabelas</span>
         </button>
 
         <button
           onClick={() => setActiveTab('esocial')}
-          className={`px-4 py-2.5 font-extrabold text-xs rounded-t-xl transition-all cursor-pointer flex items-center gap-2 whitespace-nowrap ${
+          className={`px-3.5 py-2.5 font-extrabold text-xs rounded-t-xl transition-all cursor-pointer flex items-center gap-2 whitespace-nowrap ${
             activeTab === 'esocial'
               ? 'bg-white text-indigo-600 border-t-2 border-x border-slate-200 border-t-indigo-600 shadow-xs'
               : 'text-slate-500 hover:text-slate-800 hover:bg-slate-50'
           }`}
         >
           <FileCheck className="w-4 h-4 text-emerald-600" />
-          <span>Obrigações eSocial & SEFIP</span>
+          <span>eSocial</span>
+        </button>
+
+        <button
+          onClick={() => setActiveTab('configuracao')}
+          className={`px-3.5 py-2.5 font-extrabold text-xs rounded-t-xl transition-all cursor-pointer flex items-center gap-2 whitespace-nowrap ${
+            activeTab === 'configuracao'
+              ? 'bg-white text-indigo-600 border-t-2 border-x border-slate-200 border-t-indigo-600 shadow-xs'
+              : 'text-slate-500 hover:text-slate-800 hover:bg-slate-50'
+          }`}
+        >
+          <Building2 className="w-4 h-4 text-slate-600" />
+          <span>Empresa & Parâmetros</span>
         </button>
 
         <button
           onClick={() => setActiveTab('auditoria')}
-          className={`px-4 py-2.5 font-extrabold text-xs rounded-t-xl transition-all cursor-pointer flex items-center gap-2 whitespace-nowrap ${
+          className={`px-3.5 py-2.5 font-extrabold text-xs rounded-t-xl transition-all cursor-pointer flex items-center gap-2 whitespace-nowrap ${
             activeTab === 'auditoria'
               ? 'bg-white text-indigo-600 border-t-2 border-x border-slate-200 border-t-indigo-600 shadow-xs'
               : 'text-slate-500 hover:text-slate-800 hover:bg-slate-50'
           }`}
         >
           <Shield className="w-4 h-4 text-indigo-600" />
-          <span>Trilha de Auditoria ({auditLogs.length})</span>
+          <span>Trilha de Auditoria</span>
         </button>
 
         <button
           onClick={() => setActiveTab('portal')}
-          className={`px-4 py-2.5 font-extrabold text-xs rounded-t-xl transition-all cursor-pointer flex items-center gap-2 whitespace-nowrap ${
+          className={`px-3.5 py-2.5 font-extrabold text-xs rounded-t-xl transition-all cursor-pointer flex items-center gap-2 whitespace-nowrap ${
             activeTab === 'portal'
               ? 'bg-white text-indigo-600 border-t-2 border-x border-slate-200 border-t-indigo-600 shadow-xs'
               : 'text-slate-500 hover:text-slate-800 hover:bg-slate-50'
           }`}
         >
           <Users className="w-4 h-4" />
-          <span>Visão do Funcionário (Simulação)</span>
+          <span>Visão do Funcionário</span>
         </button>
       </div>
 
@@ -661,6 +728,45 @@ export const PayrollView: React.FC = () => {
           </div>
 
         </div>
+      )}
+
+      {/* Lançamentos Variáveis & Consignados Tab */}
+      {activeTab === 'lancamentos' && (
+        <PayrollVariablePayAndLaunches
+          companyId={companyId}
+          referenceMonth={currentPeriod?.referenceMonth || '2026-08'}
+        />
+      )}
+
+      {/* Pagamentos & CNAB 240 Tab */}
+      {activeTab === 'pagamentos' && (
+        <PayrollPaymentsModule
+          companyId={companyId}
+          selectedPeriodId={activePeriodId}
+        />
+      )}
+
+      {/* Provisões & Contabilidade Tab */}
+      {activeTab === 'contabil' && (
+        <PayrollAccountingAndProvisions
+          period={currentPeriod}
+          paystubs={periodPaystubs}
+        />
+      )}
+
+      {/* Relatórios Executivos Tab */}
+      {activeTab === 'relatorios' && (
+        <PayrollReportsAndDashboard
+          period={currentPeriod}
+          paystubs={periodPaystubs}
+        />
+      )}
+
+      {/* Configuração de Parâmetros da Empresa Tab */}
+      {activeTab === 'configuracao' && (
+        <CompanyPayrollSettingsTab
+          companyId={companyId}
+        />
       )}
 
       {/* Rúbricas e Tabelas Tab */}

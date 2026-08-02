@@ -35,7 +35,9 @@ import {
   AjustePontoColaborador, 
   HistoricoEventoColaborador, 
   AdmissaoPending, 
-  ConfiguracoesTrabalhistas 
+  ConfiguracoesTrabalhistas,
+  UnidadeOrganizacional,
+  CargoSalarioItem
 } from '../types/dp';
 import {
   SolicitacaoPortalItem,
@@ -82,7 +84,9 @@ export const DP_COLLECTIONS = {
   SOLICITACOES_PORTAL: 'solicitacoes_portal',
   CHAMADOS_SUPORTE: 'chamados_suporte',
   COMUNICADOS: 'comunicados_empresa',
-  DOCUMENTOS_ASSINATURA: 'documentos_assinatura_portal'
+  DOCUMENTOS_ASSINATURA: 'documentos_assinatura_portal',
+  ORGANOGRAMA: 'organograma_empresa',
+  CARGOS: 'cargos_salarios'
 } as const;
 
 /**
@@ -1551,6 +1555,195 @@ export async function saveDocumentoAssinaturaFirestore(docItem: DocumentoAssinat
     }), { merge: true });
   } catch (error) {
     console.error('[DP Firestore] Erro ao salvar documento de assinatura:', error);
+  }
+}
+
+// ==========================================
+// 15. CONVERSÃO DE CANDIDATO EM ADMISSÃO DP
+// ==========================================
+
+export async function enviarCandidatoParaAdmissaoDP(candidato: {
+  id?: string;
+  candidateId?: string;
+  jobId?: string;
+  companyId?: string;
+  empresaId?: string;
+  name?: string;
+  nome?: string;
+  email?: string;
+  phone?: string;
+  telefone?: string;
+  cpf?: string;
+  rg?: string;
+  role?: string;
+  cargoAtual?: string;
+  vagaTitulo?: string;
+  department?: string;
+  departamento?: string;
+  salaryExpectation?: string | number;
+  pretensaoSalarial?: number;
+  city?: string;
+  state?: string;
+  cidade?: string;
+  responsavel?: string;
+}): Promise<AdmissaoPending> {
+  const companyId = candidateCompanyId(candidato);
+  const candId = candidato.candidateId || candidato.id || `cand-${Date.now()}`;
+  const admId = `adm-${candId.replace(/[^a-zA-Z0-9]/g, '')}`;
+
+  const nome = candidato.name || candidato.nome || 'Candidato sem nome';
+  const email = candidato.email || 'candidato@email.com';
+  const telefone = candidato.phone || candidato.telefone || '';
+  const cargo = candidato.role || candidato.cargoAtual || candidato.vagaTitulo || 'Colaborador';
+  const depto = candidato.department || candidato.departamento || 'Operações';
+  
+  let salario = 4500;
+  if (typeof candidato.salaryExpectation === 'number') salario = candidato.salaryExpectation;
+  else if (typeof candidato.salaryExpectation === 'string') {
+    const parsed = parseFloat(candidato.salaryExpectation.replace(/\D/g, ''));
+    if (!isNaN(parsed) && parsed > 0) salario = parsed;
+  } else if (candidato.pretensaoSalarial) {
+    salario = candidato.pretensaoSalarial;
+  }
+
+  const newAdmissao: AdmissaoPending = {
+    id: admId,
+    empresaId: companyId,
+    candidatoId: candId,
+    contratacaoId: candidato.id,
+    nomeCompleto: nome,
+    email: email,
+    telefone: telefone,
+    cpf: candidato.cpf || '',
+    rg: candidato.rg || '',
+    cargo: cargo,
+    departamento: depto,
+    salarioCombinado: salario,
+    tipoContrato: 'CLT',
+    dataAdmissaoPrevista: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+    gestor: candidato.responsavel || 'Gestor RH',
+    endereco: {
+      cidade: candidato.city || candidato.cidade || 'São Paulo',
+      estado: candidato.state || 'SP'
+    },
+    status: 'Documentação Pendente',
+    checklist: [
+      { item: 'RG', obrigatorio: true, concluido: !!candidato.rg },
+      { item: 'CPF', obrigatorio: true, concluido: !!candidato.cpf },
+      { item: 'Carteira de Trabalho (CTPS)', obrigatorio: true, concluido: false },
+      { item: 'Comprovante de Residência', obrigatorio: true, concluido: false },
+      { item: 'Título de Eleitor', obrigatorio: false, concluido: false },
+      { item: 'Certificado Militar', obrigatorio: false, concluido: false },
+      { item: 'Exame Admissional (ASO)', obrigatorio: true, concluido: false },
+      { item: 'Foto 3x4', obrigatorio: false, concluido: false },
+      { item: 'Diploma / Certificados', obrigatorio: false, concluido: false }
+    ],
+    historicoEtapas: [
+      {
+        dataHora: new Date().toISOString(),
+        usuario: candidato.responsavel || 'Sistema ATS',
+        acao: 'Candidato Enviado para Admissão',
+        descricao: `Processo de admissão iniciado no DP a partir do ATS (Vaga: ${candidato.jobId || 'N/A'})`
+      }
+    ],
+    createdAt: new Date().toISOString()
+  };
+
+  await saveAdmissaoFirestore(newAdmissao);
+  return newAdmissao;
+}
+
+function candidateCompanyId(cand: any): string {
+  return cand.companyId || cand.empresaId || 'emp-001';
+}
+
+// ==========================================
+// 16. ORGANOGRAMA E ESTRUTURA ORGANIZACIONAL
+// ==========================================
+
+export async function getOrganogramaFirestore(companyId: string): Promise<UnidadeOrganizacional[]> {
+  const empId = normalizeCompanyId(companyId);
+  try {
+    const q = query(
+      collection(db, DP_COLLECTIONS.ORGANOGRAMA),
+      where('companyId', '==', empId)
+    );
+    const snapshot = await getDocs(q);
+    const list: UnidadeOrganizacional[] = [];
+    snapshot.forEach(docSnap => {
+      list.push(docSnap.data() as UnidadeOrganizacional);
+    });
+    return list;
+  } catch (error) {
+    console.warn('[DP Firestore] Erro ao buscar organograma:', error);
+    return [];
+  }
+}
+
+export async function saveUnidadeOrganizacionalFirestore(unidade: UnidadeOrganizacional): Promise<void> {
+  try {
+    const docRef = doc(db, DP_COLLECTIONS.ORGANOGRAMA, unidade.id);
+    await setDoc(docRef, sanitizeFirestoreData({
+      ...unidade,
+      companyId: unidade.companyId || 'emp-001',
+      updatedAt: new Date().toISOString()
+    }), { merge: true });
+  } catch (error) {
+    console.error('[DP Firestore] Erro ao salvar unidade do organograma:', error);
+  }
+}
+
+export async function deleteUnidadeOrganizacionalFirestore(id: string): Promise<void> {
+  try {
+    const docRef = doc(db, DP_COLLECTIONS.ORGANOGRAMA, id);
+    await deleteDoc(docRef);
+  } catch (error) {
+    console.error('[DP Firestore] Erro ao excluir unidade do organograma:', error);
+  }
+}
+
+// ==========================================
+// 17. GESTÃO DE CARGOS E SALÁRIOS
+// ==========================================
+
+export async function getCargosSalariosFirestore(companyId: string): Promise<CargoSalarioItem[]> {
+  const empId = normalizeCompanyId(companyId);
+  try {
+    const q = query(
+      collection(db, DP_COLLECTIONS.CARGOS),
+      where('companyId', '==', empId)
+    );
+    const snapshot = await getDocs(q);
+    const list: CargoSalarioItem[] = [];
+    snapshot.forEach(docSnap => {
+      list.push(docSnap.data() as CargoSalarioItem);
+    });
+    return list;
+  } catch (error) {
+    console.warn('[DP Firestore] Erro ao buscar cargos e salários:', error);
+    return [];
+  }
+}
+
+export async function saveCargoSalarioFirestore(cargoItem: CargoSalarioItem): Promise<void> {
+  try {
+    const docRef = doc(db, DP_COLLECTIONS.CARGOS, cargoItem.id);
+    await setDoc(docRef, sanitizeFirestoreData({
+      ...cargoItem,
+      companyId: cargoItem.companyId || 'emp-001',
+      updatedAt: new Date().toISOString()
+    }), { merge: true });
+  } catch (error) {
+    console.error('[DP Firestore] Erro ao salvar cargo e salário:', error);
+  }
+}
+
+export async function deleteCargoSalarioFirestore(id: string): Promise<void> {
+  try {
+    const docRef = doc(db, DP_COLLECTIONS.CARGOS, id);
+    await deleteDoc(docRef);
+  } catch (error) {
+    console.error('[DP Firestore] Erro ao excluir cargo e salário:', error);
   }
 }
 

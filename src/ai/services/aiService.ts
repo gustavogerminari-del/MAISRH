@@ -385,6 +385,44 @@ export const reportsAiService = {
   },
 };
 
+// 12. CONFIGURAÇÕES E CONSUMO
+export const settingsAndUsageAiService = {
+  async getSettings(companyId: string) {
+    try {
+      const res = await fetch(`/api/ai/company-settings/${companyId}`);
+      return await res.json();
+    } catch (err) {
+      console.error('Error fetching AI settings:', err);
+      return { success: false, data: null };
+    }
+  },
+
+  async updateSettings(companyId: string, settings: any) {
+    try {
+      const res = await fetch(`/api/ai/company-settings/${companyId}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(settings),
+      });
+      return await res.json();
+    } catch (err) {
+      console.error('Error updating AI settings:', err);
+      return { success: false, error: 'Falha ao atualizar configurações de IA' };
+    }
+  },
+
+  async getUsageDashboard(companyId?: string) {
+    try {
+      const url = companyId ? `/api/ai/usage-dashboard?companyId=${companyId}` : '/api/ai/usage-dashboard';
+      const res = await fetch(url);
+      return await res.json();
+    } catch (err) {
+      console.error('Error fetching AI usage dashboard:', err);
+      return { success: false, data: null };
+    }
+  }
+};
+
 export const aiService = {
   recruitment: recruitmentAiService,
   candidate: candidateAiService,
@@ -397,6 +435,7 @@ export const aiService = {
   vacation: vacationAiService,
   documents: documentsAiService,
   reports: reportsAiService,
+  settingsAndUsage: settingsAndUsageAiService,
 };
 
 export default aiService;
