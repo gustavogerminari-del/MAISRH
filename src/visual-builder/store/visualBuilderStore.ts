@@ -6,7 +6,10 @@ import {
   CustomFieldDefinition, 
   NavigationMenuItem, 
   ClientTemplate,
-  BuilderScope
+  BuilderScope,
+  CompanyThemeConfig,
+  ThemeExportImportFormat,
+  AiDesignProposal
 } from '../types/builderTypes';
 
 const STORAGE_KEYS = {
@@ -295,6 +298,390 @@ export const INITIAL_SYSTEM_PAGES: PageConfig[] = [
           paddingBottom: '32px',
           textAlign: 'center'
         },
+        responsive: {},
+        visibilityRules: { hidden: false },
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
+      }
+    ]
+  },
+  {
+    id: 'page-login',
+    name: 'Tela de Login e Autenticação',
+    slug: 'login',
+    route: '/login',
+    pageType: 'system',
+    isSystemPage: true,
+    scope: 'global',
+    status: 'published',
+    version: 1,
+    layoutType: 'flex',
+    requiredPermissions: [],
+    updatedAt: new Date().toISOString(),
+    updatedBy: 'MASTER Admin',
+    components: [
+      {
+        id: 'comp-login-title',
+        pageId: 'page-login',
+        componentType: 'title',
+        componentKey: 'title_login',
+        name: 'Título de Boas-Vindas Login',
+        order: 1,
+        protectionLevel: 'editable',
+        content: { text: 'Acesse sua Conta RL Connect' },
+        styles: { fontSize: '24px', fontWeight: '800', textColor: '#ffffff' },
+        responsive: {},
+        visibilityRules: { hidden: false },
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
+      }
+    ]
+  },
+  {
+    id: 'page-entrevistas',
+    name: 'Agendamento & Entrevistas IA',
+    slug: 'entrevistas',
+    route: '/entrevistas',
+    pageType: 'system',
+    isSystemPage: true,
+    scope: 'global',
+    status: 'published',
+    version: 1,
+    layoutType: 'dashboard',
+    requiredPermissions: ['interviews.view'],
+    updatedAt: new Date().toISOString(),
+    updatedBy: 'MASTER Admin',
+    components: [
+      {
+        id: 'comp-ent-title',
+        pageId: 'page-entrevistas',
+        componentType: 'title',
+        componentKey: 'title_entrevistas',
+        name: 'Título Gestão de Entrevistas',
+        order: 1,
+        protectionLevel: 'protected',
+        content: { text: 'Gestão de Entrevistas & Pareceres com IA' },
+        styles: { fontSize: '22px', fontWeight: '800', textColor: '#0f172a' },
+        responsive: {},
+        visibilityRules: { hidden: false },
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
+      }
+    ]
+  },
+  {
+    id: 'page-headhunter',
+    name: 'Consultoria & Headhunter',
+    slug: 'headhunter',
+    route: '/headhunter',
+    pageType: 'system',
+    isSystemPage: true,
+    scope: 'global',
+    status: 'published',
+    version: 1,
+    layoutType: 'dashboard',
+    requiredPermissions: ['headhunter.view'],
+    updatedAt: new Date().toISOString(),
+    updatedBy: 'MASTER Admin',
+    components: [
+      {
+        id: 'comp-head-title',
+        pageId: 'page-headhunter',
+        componentType: 'title',
+        componentKey: 'title_headhunter',
+        name: 'Título Módulo Headhunter',
+        order: 1,
+        protectionLevel: 'protected',
+        content: { text: 'Painel do Consultor Headhunter' },
+        styles: { fontSize: '22px', fontWeight: '800', textColor: '#0f172a' },
+        responsive: {},
+        visibilityRules: { hidden: false },
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
+      }
+    ]
+  },
+  {
+    id: 'page-clientes',
+    name: 'Gestão de Empresas Clientes',
+    slug: 'clientes',
+    route: '/clientes',
+    pageType: 'system',
+    isSystemPage: true,
+    scope: 'global',
+    status: 'published',
+    version: 1,
+    layoutType: 'table_view',
+    requiredPermissions: ['clients.view'],
+    updatedAt: new Date().toISOString(),
+    updatedBy: 'MASTER Admin',
+    components: [
+      {
+        id: 'comp-cli-title',
+        pageId: 'page-clientes',
+        componentType: 'title',
+        componentKey: 'title_clientes',
+        name: 'Título Empresas Clientes',
+        order: 1,
+        protectionLevel: 'protected',
+        content: { text: 'Empresas Parceiras & Contratos' },
+        styles: { fontSize: '22px', fontWeight: '800', textColor: '#0f172a' },
+        responsive: {},
+        visibilityRules: { hidden: false },
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
+      }
+    ]
+  },
+  {
+    id: 'page-colaboradores',
+    name: 'Departamento Pessoal & Colaboradores',
+    slug: 'departamento-pessoal',
+    route: '/departamento-pessoal',
+    pageType: 'system',
+    isSystemPage: true,
+    scope: 'global',
+    status: 'published',
+    version: 1,
+    layoutType: 'table_view',
+    requiredPermissions: ['employees.view'],
+    updatedAt: new Date().toISOString(),
+    updatedBy: 'MASTER Admin',
+    components: [
+      {
+        id: 'comp-dp-title',
+        pageId: 'page-colaboradores',
+        componentType: 'title',
+        componentKey: 'title_dp',
+        name: 'Título Departamento Pessoal',
+        order: 1,
+        protectionLevel: 'protected',
+        content: { text: 'Gestão de Colaboradores & Admissão' },
+        styles: { fontSize: '22px', fontWeight: '800', textColor: '#0f172a' },
+        responsive: {},
+        visibilityRules: { hidden: false },
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
+      }
+    ]
+  },
+  {
+    id: 'page-folha',
+    name: 'Folha de Pagamento',
+    slug: 'folha-pagamento',
+    route: '/folha-pagamento',
+    pageType: 'system',
+    isSystemPage: true,
+    scope: 'global',
+    status: 'published',
+    version: 1,
+    layoutType: 'dashboard',
+    requiredPermissions: ['payroll.view'],
+    updatedAt: new Date().toISOString(),
+    updatedBy: 'MASTER Admin',
+    components: [
+      {
+        id: 'comp-folha-title',
+        pageId: 'page-folha',
+        componentType: 'title',
+        componentKey: 'title_folha',
+        name: 'Título Folha de Pagamento',
+        order: 1,
+        protectionLevel: 'protected',
+        content: { text: 'Processamento de Folha & Encargos' },
+        styles: { fontSize: '22px', fontWeight: '800', textColor: '#0f172a' },
+        responsive: {},
+        visibilityRules: { hidden: false },
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
+      }
+    ]
+  },
+  {
+    id: 'page-beneficios',
+    name: 'Gestão de Benefícios',
+    slug: 'beneficios',
+    route: '/beneficios',
+    pageType: 'system',
+    isSystemPage: true,
+    scope: 'global',
+    status: 'published',
+    version: 1,
+    layoutType: 'grid',
+    requiredPermissions: ['benefits.view'],
+    updatedAt: new Date().toISOString(),
+    updatedBy: 'MASTER Admin',
+    components: [
+      {
+        id: 'comp-ben-title',
+        pageId: 'page-beneficios',
+        componentType: 'title',
+        componentKey: 'title_beneficios',
+        name: 'Título Benefícios',
+        order: 1,
+        protectionLevel: 'protected',
+        content: { text: 'Plano de Benefícios & Vales' },
+        styles: { fontSize: '22px', fontWeight: '800', textColor: '#0f172a' },
+        responsive: {},
+        visibilityRules: { hidden: false },
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
+      }
+    ]
+  },
+  {
+    id: 'page-ferias',
+    name: 'Gestão de Férias & Afastamentos',
+    slug: 'ferias',
+    route: '/ferias',
+    pageType: 'system',
+    isSystemPage: true,
+    scope: 'global',
+    status: 'published',
+    version: 1,
+    layoutType: 'table_view',
+    requiredPermissions: ['leaves.view'],
+    updatedAt: new Date().toISOString(),
+    updatedBy: 'MASTER Admin',
+    components: [
+      {
+        id: 'comp-ferias-title',
+        pageId: 'page-ferias',
+        componentType: 'title',
+        componentKey: 'title_ferias',
+        name: 'Título Controle de Férias',
+        order: 1,
+        protectionLevel: 'protected',
+        content: { text: 'Programação e Controle de Férias' },
+        styles: { fontSize: '22px', fontWeight: '800', textColor: '#0f172a' },
+        responsive: {},
+        visibilityRules: { hidden: false },
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
+      }
+    ]
+  },
+  {
+    id: 'page-documentos',
+    name: 'Documentos & Assinatura Digital',
+    slug: 'documentos',
+    route: '/documentos',
+    pageType: 'system',
+    isSystemPage: true,
+    scope: 'global',
+    status: 'published',
+    version: 1,
+    layoutType: 'grid',
+    requiredPermissions: ['documents.view'],
+    updatedAt: new Date().toISOString(),
+    updatedBy: 'MASTER Admin',
+    components: [
+      {
+        id: 'comp-doc-title',
+        pageId: 'page-documentos',
+        componentType: 'title',
+        componentKey: 'title_documentos',
+        name: 'Título Documentos',
+        order: 1,
+        protectionLevel: 'protected',
+        content: { text: 'Ged & Assinatura Eletrônica' },
+        styles: { fontSize: '22px', fontWeight: '800', textColor: '#0f172a' },
+        responsive: {},
+        visibilityRules: { hidden: false },
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
+      }
+    ]
+  },
+  {
+    id: 'page-relatorios',
+    name: 'Relatórios & Business Intelligence',
+    slug: 'relatorios',
+    route: '/relatorios',
+    pageType: 'system',
+    isSystemPage: true,
+    scope: 'global',
+    status: 'published',
+    version: 1,
+    layoutType: 'dashboard',
+    requiredPermissions: ['reports.view'],
+    updatedAt: new Date().toISOString(),
+    updatedBy: 'MASTER Admin',
+    components: [
+      {
+        id: 'comp-rel-title',
+        pageId: 'page-relatorios',
+        componentType: 'title',
+        componentKey: 'title_relatorios',
+        name: 'Título Relatórios',
+        order: 1,
+        protectionLevel: 'protected',
+        content: { text: 'Relatórios Gerenciais e Analytics de RH' },
+        styles: { fontSize: '22px', fontWeight: '800', textColor: '#0f172a' },
+        responsive: {},
+        visibilityRules: { hidden: false },
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
+      }
+    ]
+  },
+  {
+    id: 'page-configuracoes',
+    name: 'Configurações do Sistema',
+    slug: 'configuracoes',
+    route: '/configuracoes',
+    pageType: 'system',
+    isSystemPage: true,
+    scope: 'global',
+    status: 'published',
+    version: 1,
+    layoutType: 'flex',
+    requiredPermissions: ['settings.manage'],
+    updatedAt: new Date().toISOString(),
+    updatedBy: 'MASTER Admin',
+    components: [
+      {
+        id: 'comp-cfg-title',
+        pageId: 'page-configuracoes',
+        componentType: 'title',
+        componentKey: 'title_configuracoes',
+        name: 'Título Configurações',
+        order: 1,
+        protectionLevel: 'protected',
+        content: { text: 'Configurações Gerais da Organização' },
+        styles: { fontSize: '22px', fontWeight: '800', textColor: '#0f172a' },
+        responsive: {},
+        visibilityRules: { hidden: false },
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
+      }
+    ]
+  },
+  {
+    id: 'page-mais-ia',
+    name: 'Assistente IA MAIS RH',
+    slug: 'mais-rh-ia',
+    route: '/mais-rh-ia',
+    pageType: 'system',
+    isSystemPage: true,
+    scope: 'global',
+    status: 'published',
+    version: 1,
+    layoutType: 'flex',
+    requiredPermissions: [],
+    updatedAt: new Date().toISOString(),
+    updatedBy: 'MASTER Admin',
+    components: [
+      {
+        id: 'comp-ia-title',
+        pageId: 'page-mais-ia',
+        componentType: 'title',
+        componentKey: 'title_mais_ia',
+        name: 'Título IA MAIS RH',
+        order: 1,
+        protectionLevel: 'protected',
+        content: { text: 'Assistente Inteligente Copiloto de RH' },
+        styles: { fontSize: '22px', fontWeight: '800', textColor: '#0f172a' },
         responsive: {},
         visibilityRules: { hidden: false },
         createdAt: new Date().toISOString(),
@@ -787,6 +1174,240 @@ class VisualBuilderStore {
 
     return true;
   }
+
+  // --- SANITIZATION & SECURITY ---
+  public sanitizeText(input: string): string {
+    if (!input) return '';
+    return input
+      .replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, '')
+      .replace(/on\w+="[^"]*"/gi, '')
+      .replace(/javascript:[^\s'"]*/gi, '');
+  }
+
+  // --- THEMES & BRANDING ---
+  public getCompanyTheme(companyId: string = 'GLOBAL'): CompanyThemeConfig {
+    try {
+      const savedThemes = localStorage.getItem(STORAGE_KEYS.THEMES);
+      const themesMap: Record<string, CompanyThemeConfig> = savedThemes ? JSON.parse(savedThemes) : {};
+      if (themesMap[companyId]) {
+        return themesMap[companyId];
+      }
+    } catch (e) {
+      console.warn('Failed to parse themes storage', e);
+    }
+
+    return {
+      companyId: companyId || 'GLOBAL',
+      companyName: 'RL Connect - Gestão de RH',
+      slogan: 'Plataforma Integrada de Inteligência e Departamento Pessoal',
+      logoUrl: '/logo.png',
+      primaryColor: '#2563eb',
+      secondaryColor: '#1e293b',
+      backgroundColor: '#0f172a',
+      surfaceColor: '#1e293b',
+      textColor: '#f8fafc',
+      borderRadius: '12px',
+      fontFamily: 'Plus Jakarta Sans',
+      headingFontFamily: 'Plus Jakarta Sans',
+      baseFontSize: '14px',
+      sidebarWidth: '260px',
+      headerHeight: '64px',
+      updatedAt: new Date().toISOString(),
+      updatedBy: 'MASTER Admin'
+    };
+  }
+
+  public saveCompanyTheme(config: CompanyThemeConfig, authorName: string = 'MASTER Admin'): CompanyThemeConfig {
+    let themesMap: Record<string, CompanyThemeConfig> = {};
+    try {
+      const savedThemes = localStorage.getItem(STORAGE_KEYS.THEMES);
+      themesMap = savedThemes ? JSON.parse(savedThemes) : {};
+    } catch (e) {
+      themesMap = {};
+    }
+
+    const updated: CompanyThemeConfig = {
+      ...config,
+      companyName: this.sanitizeText(config.companyName || ''),
+      slogan: this.sanitizeText(config.slogan || ''),
+      updatedAt: new Date().toISOString(),
+      updatedBy: authorName
+    };
+
+    themesMap[config.companyId || 'GLOBAL'] = updated;
+    localStorage.setItem(STORAGE_KEYS.THEMES, JSON.stringify(themesMap));
+
+    this.addAuditLog({
+      scope: config.companyId && config.companyId !== 'GLOBAL' ? 'company' : 'global',
+      companyId: config.companyId,
+      userId: 'master-user',
+      userName: authorName,
+      action: 'SALVAR_TEMA_VISUAL',
+      description: `Tema e identidade visual atualizados para o escopo ${config.companyId || 'GLOBAL'}.`
+    });
+
+    return updated;
+  }
+
+  // --- EXPORT & IMPORT THEME ---
+  public exportThemePackage(companyId: string = 'GLOBAL'): ThemeExportImportFormat {
+    const themeConfig = this.getCompanyTheme(companyId);
+    const pages = this.getPages();
+    const menus = this.getNavigationMenus();
+    const customFields = this.getCustomFields();
+
+    return {
+      version: '1.0.0',
+      exportedAt: new Date().toISOString(),
+      exportedBy: 'MASTER Admin',
+      scope: companyId === 'GLOBAL' ? 'global' : 'company',
+      companyId,
+      themeConfig,
+      menus,
+      customFields,
+      pages
+    };
+  }
+
+  public importThemePackage(jsonContent: string, targetCompanyId: string = 'GLOBAL', authorName: string = 'MASTER Admin') {
+    let parsed: ThemeExportImportFormat;
+    try {
+      parsed = JSON.parse(jsonContent);
+    } catch (e) {
+      throw new Error('Arquivo de tema inválido. Certifique-se de carregar um JSON válido do RL Connect.');
+    }
+
+    if (/<script|javascript:/i.test(jsonContent)) {
+      throw new Error('Bloqueio de Segurança: O arquivo importado contém código executável perigoso.');
+    }
+
+    if (parsed.themeConfig) {
+      this.saveCompanyTheme({ ...parsed.themeConfig, companyId: targetCompanyId }, authorName);
+    }
+
+    if (parsed.menus && Array.isArray(parsed.menus)) {
+      this.saveNavigationMenus(parsed.menus, authorName);
+    }
+
+    if (parsed.customFields && Array.isArray(parsed.customFields)) {
+      parsed.customFields.forEach(f => this.saveCustomField({ ...f, companyId: targetCompanyId }, authorName));
+    }
+
+    this.addAuditLog({
+      scope: targetCompanyId === 'GLOBAL' ? 'global' : 'company',
+      companyId: targetCompanyId,
+      userId: 'master-user',
+      userName: authorName,
+      action: 'IMPORTAR_PACOTE_TEMA',
+      description: `Pacote visual e de configurações importado com sucesso para o escopo ${targetCompanyId}.`
+    });
+
+    return true;
+  }
+
+  // --- AI DESIGN ASSISTANT ---
+  public generateAiDesignProposal(userPrompt: string, currentPageId: string): AiDesignProposal {
+    const cleanPrompt = this.sanitizeText(userPrompt);
+    const promptLower = cleanPrompt.toLowerCase();
+
+    let summary = 'Proposta de design gerada pela IA com base nas suas instruções:';
+    let themeChanges: Partial<CompanyThemeConfig> = {};
+    let textChanges: { pageId: string; componentId: string; oldText: string; newText: string }[] = [];
+    let menuChanges: { menuId: string; oldLabel: string; newLabel: string }[] = [];
+
+    if (promptLower.includes('azul') || promptLower.includes('blue')) {
+      themeChanges.primaryColor = '#2563eb';
+      themeChanges.secondaryColor = '#1d4ed8';
+      summary += ' • Aplicada paleta de cores azul corporativo.';
+    } else if (promptLower.includes('verde') || promptLower.includes('green')) {
+      themeChanges.primaryColor = '#059669';
+      themeChanges.secondaryColor = '#047857';
+      summary += ' • Aplicada paleta de cores verde moderna.';
+    } else if (promptLower.includes('limp') || promptLower.includes('clean') || promptLower.includes('escuro')) {
+      themeChanges.backgroundColor = '#0f172a';
+      themeChanges.surfaceColor = '#1e293b';
+      summary += ' • Layout ajustado para tema limpo de alto contraste.';
+    }
+
+    if (promptLower.includes('vagas') || promptLower.includes('recrutamento')) {
+      const page = this.getPageById('page-vagas') || this.getPageById(currentPageId);
+      if (page && page.components[0]) {
+        textChanges.push({
+          pageId: page.id,
+          componentId: page.components[0].id,
+          oldText: page.components[0].content.text || '',
+          newText: 'Painel Central de Recrutamento & Seleção'
+        });
+      }
+
+      const menuVagas = this.menus.find(m => m.route === 'vagas');
+      if (menuVagas) {
+        menuChanges.push({
+          menuId: menuVagas.id,
+          oldLabel: menuVagas.label,
+          newLabel: 'Recrutamento & Seleção'
+        });
+      }
+
+      summary += ' • Renomeado "Gestão de Vagas" para "Recrutamento & Seleção".';
+    }
+
+    return {
+      proposalId: `prop-${Date.now()}`,
+      userPrompt: cleanPrompt,
+      suggestedChangesSummary: summary,
+      affectedPageIds: [currentPageId],
+      themeChanges,
+      textChanges,
+      menuChanges,
+      createdAt: new Date().toISOString(),
+      status: 'pending'
+    };
+  }
+
+  public applyAiProposal(proposal: AiDesignProposal, authorName: string = 'MASTER Admin') {
+    if (proposal.themeChanges && Object.keys(proposal.themeChanges).length > 0) {
+      const currentTheme = this.getCompanyTheme('GLOBAL');
+      this.saveCompanyTheme({ ...currentTheme, ...proposal.themeChanges }, authorName);
+    }
+
+    if (proposal.textChanges && proposal.textChanges.length > 0) {
+      proposal.textChanges.forEach(tc => {
+        const page = this.getPageById(tc.pageId);
+        if (page) {
+          const updatedComponents = page.components.map(c => {
+            if (c.id === tc.componentId) {
+              return { ...c, content: { ...c.content, text: tc.newText } };
+            }
+            return c;
+          });
+          this.updatePageConfig({ ...page, components: updatedComponents }, authorName);
+        }
+      });
+    }
+
+    if (proposal.menuChanges && proposal.menuChanges.length > 0) {
+      const updatedMenus = this.menus.map(m => {
+        const match = proposal.menuChanges?.find(mc => mc.menuId === m.id);
+        if (match) {
+          return { ...m, label: match.newLabel };
+        }
+        return m;
+      });
+      this.saveNavigationMenus(updatedMenus, authorName);
+    }
+
+    this.addAuditLog({
+      scope: 'global',
+      userId: 'master-user',
+      userName: authorName,
+      action: 'ACEITAR_PROPOSTA_IA',
+      description: `Proposta de design por IA aceita e aplicada como rascunho: "${proposal.userPrompt}"`
+    });
+
+    return true;
+  }
 }
+
 
 export const visualBuilderStore = new VisualBuilderStore();

@@ -29,10 +29,17 @@ import {
 import { DashboardView } from '../../components/DashboardView';
 import { JobsView } from '../../components/JobsView';
 import { TalentBankView } from '../../components/TalentBankView';
+import { InterviewsView } from '../../components/InterviewsView';
+import { CompanyView } from '../../components/CompanyView';
+import { ReportsView } from '../../components/ReportsView';
+import { SettingsView } from '../../components/SettingsView';
 import { PontoDigitalView } from '../../ponto-digital';
 import { PublicJobsView } from '../../public-jobs';
 import { HeadhunterView } from '../../headhunter/HeadhunterView';
 import { DepartamentoPessoalView } from '../../departamento-pessoal/DepartamentoPessoalView';
+import { PayrollView } from '../../payroll/PayrollView';
+import { BenefitsLeavesView } from '../../benefits-leaves/BenefitsLeavesView';
+import { DocumentsSignatureView } from '../../documents-signature/DocumentsSignatureView';
 import { INITIAL_JOBS, INITIAL_CANDIDATES, INITIAL_INTERVIEWS, fontStages } from '../../data/initialData';
 
 interface VisualCanvasFrameProps {
@@ -150,20 +157,88 @@ export const VisualCanvasFrame: React.FC<VisualCanvasFrameProps> = ({
           />
         );
 
-      case 'ponto-digital':
-        return <PontoDigitalView />;
-
-      case 'site-vagas':
-        return <PublicJobsView jobs={INITIAL_JOBS as any} onApplyCandidate={() => {}} isInternalView={true} />;
+      case 'entrevistas':
+        return (
+          <InterviewsView
+            interviews={INITIAL_INTERVIEWS as any}
+            candidates={INITIAL_CANDIDATES as any}
+            jobs={INITIAL_JOBS as any}
+            openScheduleModal={() => {}}
+            searchTerm=""
+          />
+        );
 
       case 'headhunter':
         return <HeadhunterView initialSubTab="dashboard" />;
 
+      case 'clientes':
+        return (
+          <CompanyView
+            jobs={INITIAL_JOBS as any}
+            candidates={INITIAL_CANDIDATES as any}
+            openNewJobModal={() => {}}
+          />
+        );
+
       case 'departamento-pessoal':
+      case 'colaboradores':
         return <DepartamentoPessoalView initialSubTab="colaboradores" />;
 
+      case 'ponto-digital':
+      case 'ponto':
+        return <PontoDigitalView />;
+
+      case 'folha-pagamento':
+      case 'folha':
+        return <PayrollView />;
+
+      case 'beneficios':
+      case 'ferias':
+        return <BenefitsLeavesView />;
+
+      case 'documentos':
+        return <DocumentsSignatureView />;
+
+      case 'relatorios':
+        return (
+          <ReportsView
+            jobs={INITIAL_JOBS as any}
+            candidates={INITIAL_CANDIDATES as any}
+            interviews={INITIAL_INTERVIEWS as any}
+          />
+        );
+
+      case 'configuracoes':
+        return <SettingsView />;
+
+      case 'site-vagas':
+        return <PublicJobsView jobs={INITIAL_JOBS as any} onApplyCandidate={() => {}} isInternalView={true} />;
+
+      case 'login':
+        return (
+          <div className="min-h-[500px] bg-slate-900 rounded-2xl p-8 flex flex-col items-center justify-center text-white space-y-6">
+            <div className="w-12 h-12 rounded-2xl bg-amber-500 text-slate-950 font-black text-xl flex items-center justify-center shadow-lg">
+              RL
+            </div>
+            <div className="text-center space-y-1">
+              <h2 className="text-2xl font-black text-white">{pageConfig.components[0]?.content.text || 'Acesse sua Conta RL Connect'}</h2>
+              <p className="text-xs text-slate-400">Plataforma Inteligente de RH e Departamento Pessoal</p>
+            </div>
+            <div className="w-full max-w-sm bg-slate-950 p-6 rounded-2xl border border-slate-800 space-y-4 text-xs">
+              <div>
+                <label className="text-slate-400 font-bold block mb-1">E-mail Corporativo</label>
+                <input type="email" placeholder="usuario@empresa.com.br" className="w-full p-2.5 rounded-xl bg-slate-900 border border-slate-800 text-white" disabled />
+              </div>
+              <div>
+                <label className="text-slate-400 font-bold block mb-1">Senha de Acesso</label>
+                <input type="password" placeholder="••••••••" className="w-full p-2.5 rounded-xl bg-slate-900 border border-slate-800 text-white" disabled />
+              </div>
+              <button className="w-full py-2.5 rounded-xl bg-amber-500 text-slate-950 font-black">Entrar no Sistema</button>
+            </div>
+          </div>
+        );
+
       default:
-        // Generic page view fallback
         return (
           <div className="p-8 space-y-6">
             <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200">
@@ -174,6 +249,7 @@ export const VisualCanvasFrame: React.FC<VisualCanvasFrameProps> = ({
         );
     }
   };
+
 
   return (
     <div className="flex-1 bg-slate-950 overflow-auto p-4 sm:p-8 flex justify-center items-start select-none relative">

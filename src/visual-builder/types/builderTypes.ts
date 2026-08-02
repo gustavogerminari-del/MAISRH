@@ -207,6 +207,60 @@ export interface BuilderAuditLog {
   createdAt: string;
 }
 
+export interface CompanyThemeConfig {
+  companyId: string;
+  brandingId?: string;
+  domain?: string;
+  subdomain?: string;
+  sslVerified?: boolean;
+  companyName?: string;
+  slogan?: string;
+  logoUrl?: string;
+  logoSmallUrl?: string;
+  faviconUrl?: string;
+  loginBgUrl?: string;
+  bannerUrl?: string;
+  primaryColor: string;
+  secondaryColor: string;
+  backgroundColor: string;
+  surfaceColor: string;
+  textColor: string;
+  borderRadius: string;
+  fontFamily: string;
+  headingFontFamily: string;
+  baseFontSize: string;
+  sidebarWidth: string;
+  headerHeight: string;
+  footerText?: string;
+  privacyPolicyText?: string;
+  updatedAt: string;
+  updatedBy: string;
+}
+
+export interface AiDesignProposal {
+  proposalId: string;
+  userPrompt: string;
+  suggestedChangesSummary: string;
+  affectedPageIds: string[];
+  themeChanges?: Partial<CompanyThemeConfig>;
+  textChanges?: { pageId: string; componentId: string; oldText: string; newText: string }[];
+  menuChanges?: { menuId: string; oldLabel: string; newLabel: string }[];
+  createdAt: string;
+  status: 'pending' | 'accepted' | 'rejected';
+}
+
+export interface ThemeExportImportFormat {
+  version: string;
+  exportedAt: string;
+  exportedBy: string;
+  scope: BuilderScope;
+  companyId?: string;
+  themeConfig: CompanyThemeConfig;
+  menus: NavigationMenuItem[];
+  customFields: CustomFieldDefinition[];
+  pages: PageConfig[];
+}
+
 export interface MasterVisualState {
   activePageId: string;
   builderMode: BuilderMode;
@@ -231,3 +285,4 @@ export interface MasterVisualState {
   hasUnsavedChanges: boolean;
   lastSavedAt?: string;
 }
+

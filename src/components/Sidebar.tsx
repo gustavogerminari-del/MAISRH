@@ -31,6 +31,7 @@ import {
   Layers, 
   Palette, 
   Shield, 
+  LifeBuoy,
   ChevronLeft, 
   ChevronRight, 
   X,
@@ -70,6 +71,7 @@ export type MainTab =
   | 'agenda' 
   | 'relatorios' 
   | 'configuracoes' 
+  | 'suporte-ajuda'
   | 'site-vagas' 
   | 'acesso-master' 
   | 'master-empresas' 
@@ -186,6 +188,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
         { id: 'agenda', label: 'Agenda', icon: Calendar },
         { id: 'relatorios', label: 'Relatórios Gerais', icon: BarChart2 },
         { id: 'configuracoes', label: 'Configurações', icon: Settings },
+        { id: 'suporte-ajuda', label: 'Ajuda & Suporte', icon: LifeBuoy },
       ]
     },
     ...(isMaster ? [{

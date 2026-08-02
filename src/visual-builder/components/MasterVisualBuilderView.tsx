@@ -15,6 +15,8 @@ import { MenuNavigationEditor } from './MenuNavigationEditor';
 import { CustomFieldsEditorModal } from './CustomFieldsEditorModal';
 import { VersionHistoryModal } from './VersionHistoryModal';
 import { TemplateManagerModal } from './TemplateManagerModal';
+import { ThemeBrandingModal } from './ThemeBrandingModal';
+import { AiDesignAssistantModal } from './AiDesignAssistantModal';
 
 import { 
   Crown, 
@@ -71,6 +73,8 @@ export const MasterVisualBuilderView: React.FC<{ onBackToMaster?: () => void }> 
   const [isHistoryModalOpen, setIsHistoryModalOpen] = useState(false);
   const [isFieldsModalOpen, setIsFieldsModalOpen] = useState(false);
   const [isTemplateModalOpen, setIsTemplateModalOpen] = useState(false);
+  const [isThemeModalOpen, setIsThemeModalOpen] = useState(false);
+  const [isAiModalOpen, setIsAiModalOpen] = useState(false);
 
   // Status Alerts
   const [saveStatus, setSaveStatus] = useState<string | null>(null);
@@ -317,6 +321,24 @@ export const MasterVisualBuilderView: React.FC<{ onBackToMaster?: () => void }> 
 
           {/* Action Modals Triggers */}
           <button
+            onClick={() => setIsAiModalOpen(true)}
+            className="p-2 rounded-xl bg-amber-500/20 text-amber-300 border border-amber-500/40 hover:bg-amber-500/30 transition flex items-center gap-1.5 text-xs font-black shadow-inner"
+            title="Assistente de IA para Design"
+          >
+            <Sparkles className="w-4 h-4 text-amber-400" />
+            <span className="hidden xl:inline">IA Designer</span>
+          </button>
+
+          <button
+            onClick={() => setIsThemeModalOpen(true)}
+            className="p-2 rounded-xl bg-slate-800 text-amber-400 hover:bg-slate-700 transition flex items-center gap-1 text-xs font-bold"
+            title="Personalizar Tema & Marca Branca"
+          >
+            <Palette className="w-4 h-4" />
+            <span className="hidden xl:inline">Tema & Marca</span>
+          </button>
+
+          <button
             onClick={() => setIsFieldsModalOpen(true)}
             className="p-2 rounded-xl bg-slate-800 text-amber-400 hover:bg-slate-700 transition flex items-center gap-1 text-xs font-bold"
             title="Campos Personalizados"
@@ -330,7 +352,7 @@ export const MasterVisualBuilderView: React.FC<{ onBackToMaster?: () => void }> 
             className="p-2 rounded-xl bg-slate-800 text-amber-400 hover:bg-slate-700 transition flex items-center gap-1 text-xs font-bold"
             title="Modelos"
           >
-            <Palette className="w-4 h-4" />
+            <Building2 className="w-4 h-4" />
             <span className="hidden xl:inline">Modelos</span>
           </button>
 
@@ -594,6 +616,22 @@ export const MasterVisualBuilderView: React.FC<{ onBackToMaster?: () => void }> 
       <TemplateManagerModal
         isOpen={isTemplateModalOpen}
         onClose={() => setIsTemplateModalOpen(false)}
+      />
+
+      {/* MODAL DE TEMA E MARCA BRANCA */}
+      <ThemeBrandingModal
+        isOpen={isThemeModalOpen}
+        onClose={() => setIsThemeModalOpen(false)}
+        selectedCompanyId={selectedCompanyId}
+        onSaved={() => setPages(visualBuilderStore.getPages())}
+      />
+
+      {/* MODAL DE IA DESIGNER */}
+      <AiDesignAssistantModal
+        isOpen={isAiModalOpen}
+        onClose={() => setIsAiModalOpen(false)}
+        activePageId={activePage.id}
+        onProposalApplied={() => setPages(visualBuilderStore.getPages())}
       />
 
     </div>

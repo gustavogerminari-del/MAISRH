@@ -9,6 +9,7 @@ import { InterviewsView } from './components/InterviewsView';
 import { ReportsView } from './components/ReportsView';
 import { CompanyView } from './components/CompanyView';
 import { SettingsView } from './components/SettingsView';
+import { SupportHelpView } from './support/SupportHelpView';
 import { PublicJobsView } from './public-jobs';
 import { HeadhunterView } from './headhunter/HeadhunterView';
 import { BenefitsLeavesView } from './benefits-leaves';
@@ -452,6 +453,8 @@ function MainAppContent() {
             {(activeTab === 'acesso-master' || activeTab.startsWith('master-')) && <MasterAdminView />}
 
             {activeTab === 'configuracoes' && <SettingsView stages={fontStages} />}
+
+            {activeTab === 'suporte-ajuda' && <SupportHelpView />}
           </ProtectedRoute>
         </main>
       </div>
