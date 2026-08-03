@@ -150,6 +150,10 @@ export interface UnifiedCandidate {
   resumeUrl?: string;
   curriculoTexto?: string;
   compatibilidadePercent?: number;
+  matchIaPercent?: number;
+  escolaridade?: string;
+  anotacoes?: Array<{ id: string; autor: string; data: string; texto: string }>;
+  documentos?: Array<{ id: string; nome: string; tipo: string; url: string; dataUpload: string; status: 'Pendente' | 'Verificado' | 'Rejeitado' }>;
   
   // Headhunter / Triagem IA
   classificacao?: CandidateClassification;

@@ -11,6 +11,9 @@ import {
 import { db, auth } from '../lib/firebase';
 import { sanitizeFirestoreData } from '../lib/firestoreUtils';
 import { AuditService } from './AuditService';
+import { CandidateService } from './CandidateService';
+import { RecruitmentService } from '../recruitment-core/services/recruitmentService';
+import { INITIAL_CANDIDATES } from '../data/initialData';
 
 export interface InterviewData {
   id?: string;
@@ -111,6 +114,62 @@ export interface JobCandidateApplication {
   updatedAt: string;
 }
 
+export function mapCandidateToApplication(
+  cand: any, 
+  jobId: string, 
+  companyId: string = 'emp-001',
+  index: number = 0
+): JobCandidateApplication {
+  const scores = [92, 88, 85, 95, 82];
+  const compatScore = cand.compatibilityScore || cand.matchIaPercent || scores[index % scores.length];
+  
+  return {
+    id: `app-${jobId}-${cand.id}`,
+    companyId: cand.companyId || companyId,
+    jobId: jobId,
+    candidateId: cand.id,
+    name: cand.name || cand.nome || 'Candidato',
+    cpf: cand.cpf || '123.456.789-00',
+    photo: cand.avatar || cand.photo || cand.fotoUrl || '',
+    email: cand.email || 'candidato@email.com',
+    phone: cand.phone || cand.telefone || '(11) 99999-9999',
+    role: cand.role || cand.cargoAtual || 'Profissional',
+    city: cand.location ? cand.location.split('-')[0].trim() : cand.cidade || 'São Paulo',
+    state: cand.location && cand.location.includes('-') ? cand.location.split('-')[1].trim() : 'SP',
+    appliedDate: cand.appliedDate || new Date().toISOString().split('T')[0],
+    status: (cand.currentStageId === 'triagem' ? 'Triagem IA' : cand.currentStageId === 'entrevista_rh' ? 'Em Análise RH' : cand.status || 'Novos') as ApplicationStatus,
+    education: cand.education || cand.escolaridade || 'Superior Completo',
+    course: cand.course || cand.curso || 'Engenharia / Administração / TI',
+    experienceYears: cand.experienceYears || cand.experienciaAnos || 3,
+    salaryExpectation: cand.salaryExpectation || (cand.pretensaoSalarial ? `R$ ${cand.pretensaoSalarial}` : 'R$ 7.500'),
+    availability: 'Imediata',
+    isPCD: cand.isPCD || cand.pcd || false,
+    resumeUrl: cand.resumeUrl || cand.curriculoUrl || '',
+    resumeKeywords: cand.skills || cand.competencias || ['Logística', 'Supply Chain', 'Processos'],
+    compatibilityScore: compatScore,
+    compatibilityLevel: compatScore >= 85 ? 'Muito compatível' : 'Compatível',
+    objective: cand.objective || `Interesse na oportunidade para a vaga`,
+    experiences: cand.experiences || [
+      { company: 'Empresa Anterior S/A', role: cand.role || 'Analista Sênior', period: '2021 - Atual', description: 'Responsável pela execução de processos de alto desempenho.' }
+    ],
+    educationDetails: cand.educationDetails || [
+      { institution: 'Universidade de São Paulo', degree: 'Bacharelado', year: '2020' }
+    ],
+    aiAnalysis: cand.aiAnalysis || {
+      summary: 'Candidato de alto potencial, com boa aderência aos requisitos da vaga e perfil proativo.',
+      strengths: ['Organização e processos', 'Comunicação assertiva', 'Análise técnica'],
+      pointsOfAttention: ['Alinhamento prévio de expectativas'],
+      competencies: cand.skills || cand.competencias || ['Logística', 'Gestão', 'Processos'],
+      behavioralAnalysis: 'Demonstra postura colaborativa, excelente capacidade técnica e visão analítica.',
+      interviewSuggestions: ['Perguntar sobre soluções adotadas em situações desafiadoras anteriores'],
+      score: compatScore,
+      recommendation: compatScore >= 85 ? 'Altamente Recomendado' : 'Recomendado'
+    },
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString()
+  };
+}
+
 const COLLECTION_NAME = 'candidate_applications';
 
 export class JobCandidateService {
@@ -130,7 +189,9 @@ export class JobCandidateService {
       console.warn('Erro ao buscar todas as candidaturas no Firestore:', err);
     }
 
-    return [];
+    // Fallback: Map candidates from candidate bank
+    const bankCandidates = await CandidateService.list(companyId);
+    return bankCandidates.map((c, i) => mapCandidateToApplication(c, c.currentJobId || 'vaga-1', companyId, i));
   }
 
   static async listByJob(jobId: string, companyId?: string): Promise<JobCandidateApplication[]> {
@@ -147,7 +208,14 @@ export class JobCandidateService {
       console.warn('Erro ao buscar candidaturas por vaga no Firestore:', err);
     }
 
-    return [];
+    // Fallback if no specific candidatures exist for this jobId yet:
+    // Map candidates from CandidateService (talent bank) into applications for this jobId so they appear in this job's candidates view!
+    const bankCandidates = await CandidateService.list(companyId);
+    if (bankCandidates.length > 0) {
+      return bankCandidates.map((c, i) => mapCandidateToApplication(c, jobId, companyId, i));
+    }
+
+    return INITIAL_CANDIDATES.map((c, i) => mapCandidateToApplication(c, jobId, companyId, i));
   }
 
   static async getById(id: string): Promise<JobCandidateApplication | null> {
@@ -159,6 +227,12 @@ export class JobCandidateService {
     } catch (err) {
       console.warn('Erro ao buscar candidatura por ID no Firestore:', err);
     }
+
+    // Fallback: search across mapped candidates
+    const all = await this.listAll();
+    const found = all.find(c => c.id === id);
+    if (found) return found;
+
     return null;
   }
 
@@ -244,11 +318,26 @@ export class JobCandidateService {
         }
       ];
 
-      await setDoc(doc(db, COLLECTION_NAME, id), sanitizeFirestoreData({
+      const updatedApp: JobCandidateApplication = {
+        ...existing,
         status,
         timeline: updatedTimeline,
         updatedAt: now
-      }), { merge: true });
+      };
+
+      await setDoc(doc(db, COLLECTION_NAME, id), sanitizeFirestoreData(updatedApp), { merge: true });
+
+      // Sincronizar com Banco de Talentos
+      if (existing.candidateId) {
+        let candStatus: 'Ativo' | 'Em Processo' | 'Contratado' | 'Indisponível' = 'Em Processo';
+        if (status === 'Contratado' || status === 'Aprovado') candStatus = 'Contratado';
+        else if (status === 'Reprovado') candStatus = 'Indisponível';
+
+        await CandidateService.update(existing.candidateId, {
+          status: candStatus,
+          currentJobId: existing.jobId
+        });
+      }
 
       await AuditService.log({
         action: 'UPDATE',
@@ -283,12 +372,66 @@ export class JobCandidateService {
         }
       ];
 
-      await setDoc(doc(db, COLLECTION_NAME, id), sanitizeFirestoreData({
+      const updatedApp: JobCandidateApplication = {
+        ...existing,
         status: 'Entrevista Agendada',
         interview: interviewObj,
         timeline: updatedTimeline,
         updatedAt: now
-      }), { merge: true });
+      };
+
+      await setDoc(doc(db, COLLECTION_NAME, id), sanitizeFirestoreData(updatedApp), { merge: true });
+
+      // Sincronizar com o módulo unificado de Entrevistas
+      try {
+        await RecruitmentService.createInterview({
+          id: `int-${existing.id}`,
+          empresaId: existing.companyId || 'emp-001',
+          origemProcesso: 'recrutamento_interno',
+          candidatoId: existing.candidateId || existing.id,
+          candidatoNome: existing.name,
+          candidateRole: existing.role,
+          vagaId: existing.jobId,
+          vagaTitulo: existing.role || 'Vaga Corporativa',
+          entrevistadorNome: interview.interviewer,
+          interviewerName: interview.interviewer,
+          dataHora: `${interview.date}T${interview.time}:00`,
+          date: interview.date,
+          time: interview.time,
+          tipo: interview.type === 'Presencial' ? 'Teste Técnico' : 'Entrevista RH',
+          type: interview.type,
+          modalidade: interview.type === 'Presencial' ? 'Presencial' : 'Online (Meet)',
+          salaVirtualUrl: interview.meetingLink,
+          status: 'Agendada',
+          pauta: interview.notes
+        });
+
+        await RecruitmentService.createAgendaEvent({
+          id: `age-${Date.now()}`,
+          empresaId: existing.companyId || 'emp-001',
+          origemProcesso: 'recrutamento_interno',
+          tipoEvento: 'Entrevista',
+          titulo: `Entrevista: ${existing.name}`,
+          responsavelNome: interview.interviewer || 'Recrutador RH',
+          dataHora: `${interview.date}T${interview.time}:00`,
+          descricao: `Entrevista ${interview.type} agendada para a vaga ${existing.role} com ${interview.interviewer}.`,
+          candidatoId: existing.candidateId || existing.id,
+          candidatoNome: existing.name,
+          vagaId: existing.jobId,
+          vagaTitulo: existing.role || 'Vaga Corporativa',
+          concluido: false
+        });
+      } catch (e) {
+        console.warn('Erro ao sincronizar entrevista no RecruitmentService:', e);
+      }
+
+      // Sincronizar com Banco de Talentos
+      if (existing.candidateId) {
+        await CandidateService.update(existing.candidateId, {
+          status: 'Em Processo',
+          currentStageId: 'entrevista_rh'
+        });
+      }
 
       await AuditService.log({
         action: 'UPDATE',
@@ -327,11 +470,14 @@ export class JobCandidateService {
         }
       ];
 
-      await setDoc(doc(db, COLLECTION_NAME, id), sanitizeFirestoreData({
+      const updatedApp: JobCandidateApplication = {
+        ...existing,
         evaluations: updatedEvaluations,
         timeline: updatedTimeline,
         updatedAt: now
-      }), { merge: true });
+      };
+
+      await setDoc(doc(db, COLLECTION_NAME, id), sanitizeFirestoreData(updatedApp), { merge: true });
 
       await AuditService.log({
         action: 'UPDATE',
@@ -353,10 +499,13 @@ export class JobCandidateService {
       const formattedNote = `[${now.replace('T', ' ').substring(0, 16)}] ${auth.currentUser?.displayName || 'RH'}: ${note}`;
       const updatedNotes = [...(existing.notes || []), formattedNote];
 
-      await setDoc(doc(db, COLLECTION_NAME, id), sanitizeFirestoreData({
+      const updatedApp: JobCandidateApplication = {
+        ...existing,
         notes: updatedNotes,
         updatedAt: now
-      }), { merge: true });
+      };
+
+      await setDoc(doc(db, COLLECTION_NAME, id), sanitizeFirestoreData(updatedApp), { merge: true });
     } catch (err) {
       console.warn('Erro ao adicionar nota no Firestore:', err);
     }

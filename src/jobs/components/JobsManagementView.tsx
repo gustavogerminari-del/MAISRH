@@ -97,10 +97,12 @@ export const JobsManagementView: React.FC<JobsManagementViewProps> = ({
   }, [jobs]);
 
   const handleFilterChange = (newFilters: Partial<JobFilterParams>) => {
+    setSelectedJobForCandidates(null);
     setFilters((prev) => ({ ...prev, ...newFilters }));
   };
 
   const handleResetFilters = () => {
+    setSelectedJobForCandidates(null);
     setFilters({
       searchTerm: '',
       department: 'Todos',
@@ -184,12 +186,14 @@ export const JobsManagementView: React.FC<JobsManagementViewProps> = ({
   const handleStatusChange = async (jobId: string, newStatus: JobStatus) => {
     const isArchiving = newStatus === 'Arquivada';
     const isRestoring = newStatus === 'Fechada' || newStatus === 'Aberta';
+    const isPublic = newStatus === 'Aberta';
 
     const updatedList = jobs.map((j) => {
       if (j.id === jobId) {
         return normalizeJobData({
           ...j,
           status: newStatus,
+          publicada: isPublic,
           archived: isArchiving ? true : isRestoring ? false : j.archived,
           isArchived: isArchiving ? true : isRestoring ? false : (j as any).isArchived,
           archivedAt: isArchiving ? new Date().toISOString() : isRestoring ? null : (j as any).archivedAt,
@@ -213,6 +217,7 @@ export const JobsManagementView: React.FC<JobsManagementViewProps> = ({
       if (isArchiving) {
         await JobService.update(jobId, {
           status: 'arquivada',
+          publicada: false,
           archived: true,
           isArchived: true,
           archivedAt: new Date().toISOString(),
@@ -221,6 +226,7 @@ export const JobsManagementView: React.FC<JobsManagementViewProps> = ({
       } else if (isRestoring) {
         await JobService.update(jobId, {
           status: newStatus.toLowerCase(),
+          publicada: isPublic,
           archived: false,
           isArchived: false,
           archivedAt: null,
@@ -229,6 +235,7 @@ export const JobsManagementView: React.FC<JobsManagementViewProps> = ({
       } else {
         await JobService.update(jobId, {
           status: newStatus,
+          publicada: isPublic,
           updatedAt: new Date().toISOString()
         });
       }

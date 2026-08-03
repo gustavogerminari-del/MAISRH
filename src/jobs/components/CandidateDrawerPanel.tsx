@@ -886,6 +886,7 @@ export const CandidateDrawerPanel: React.FC<CandidateDrawerPanelProps> = ({
         onSave={async (data) => {
           await JobCandidateService.scheduleInterview(candidate.id, data);
           await onRefresh();
+          alert(`🗓️ Entrevista para ${candidate.name} agendada com sucesso para ${data.date} às ${data.time}!`);
         }}
         initialData={candidate.interview}
       />

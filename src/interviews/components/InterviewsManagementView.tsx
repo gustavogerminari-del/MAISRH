@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import {
   Calendar,
   Clock,
@@ -23,6 +23,8 @@ import { Job } from '../../jobs';
 import { useAuth } from '../../auth';
 import { Button, Card } from '../../shared';
 import { logger } from '../../core';
+import { JobCandidateService } from '../../services/JobCandidateService';
+import { RecruitmentService } from '../../recruitment-core/services/recruitmentService';
 
 export interface InterviewsManagementViewProps {
   initialInterviewsList?: Interview[];
@@ -62,6 +64,64 @@ export const InterviewsManagementView: React.FC<InterviewsManagementViewProps> =
       return !cId || cId === userCompanyId;
     });
   }, [rawJobs, isMaster, userCompanyId]);
+
+  useEffect(() => {
+    let isMounted = true;
+    async function loadAllInterviews() {
+      try {
+        const apps = await JobCandidateService.listAll(userCompanyId);
+        const interviewsFromApps: Interview[] = apps
+          .filter(a => a.interview && a.interview.date)
+          .map(a => ({
+            id: `int-app-${a.id}`,
+            candidateId: a.candidateId || a.id,
+            candidateName: a.name,
+            candidateRole: a.role,
+            jobId: a.jobId,
+            jobTitle: a.role || 'Vaga Selecionada',
+            interviewerName: a.interview!.interviewer || 'Recrutador RH',
+            date: a.interview!.date,
+            time: a.interview!.time || '10:00',
+            type: (a.interview!.type === 'Presencial' ? 'Presencial' : a.interview!.type === 'Telefone' ? 'Telefone' : 'Online') as any,
+            meetingLink: a.interview!.meetingLink,
+            location: a.interview!.location,
+            status: (a.interview!.status as any) || 'Agendada',
+            notes: a.interview!.notes
+          }));
+
+        const recInterviews = RecruitmentService.getInterviews(userCompanyId);
+        const mappedRec: Interview[] = recInterviews.map(r => ({
+          id: r.id,
+          candidateId: r.candidatoId,
+          candidateName: r.candidatoNome,
+          candidateRole: r.candidateRole,
+          jobId: r.vagaId,
+          jobTitle: r.vagaTitulo,
+          interviewerName: r.entrevistadorNome || r.interviewerName || 'Recrutador RH',
+          date: r.date || (r.dataHora ? r.dataHora.split('T')[0] : new Date().toISOString().split('T')[0]),
+          time: r.time || (r.dataHora && r.dataHora.includes('T') ? r.dataHora.split('T')[1].substring(0, 5) : '10:00'),
+          type: (r.modalidade === 'Presencial' ? 'Presencial' : 'Online') as any,
+          meetingLink: r.salaVirtualUrl,
+          status: (r.status as any) || 'Agendada',
+          notes: r.pauta
+        }));
+
+        const combinedMap = new Map<string, Interview>();
+        (initialInterviewsList || []).forEach(i => combinedMap.set(i.id, i));
+        interviewsFromApps.forEach(i => combinedMap.set(i.id, i));
+        mappedRec.forEach(i => combinedMap.set(i.id, i));
+
+        if (isMounted) {
+          setInterviews(Array.from(combinedMap.values()));
+        }
+      } catch (err) {
+        console.warn('Erro ao carregar lista unificada de entrevistas:', err);
+      }
+    }
+
+    loadAllInterviews();
+    return () => { isMounted = false; };
+  }, [userCompanyId, initialInterviewsList]);
 
   // Modals state
   const [isScheduleModalOpen, setIsScheduleModalOpen] = useState(false);

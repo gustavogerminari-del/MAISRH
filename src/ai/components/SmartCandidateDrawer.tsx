@@ -36,6 +36,7 @@ import {
 } from '../../services/JobCandidateService';
 import { Button } from '../../shared';
 import { ScheduleInterviewModal } from '../../jobs/components/ScheduleInterviewModal';
+import { enviarCandidatoParaAdmissaoDP } from '../../departamento-pessoal/services/dpFirestoreService';
 
 interface SmartCandidateDrawerProps {
   candidate: JobCandidateApplication | null;
@@ -77,6 +78,31 @@ export const SmartCandidateDrawer: React.FC<SmartCandidateDrawerProps> = ({
 
   const handleStatusChange = async (newStatus: ApplicationStatus) => {
     await JobCandidateService.updateStatus(candidate.id, newStatus);
+    if (newStatus === 'Contratado') {
+      try {
+        await enviarCandidatoParaAdmissaoDP({
+          id: candidate.id,
+          candidateId: candidate.candidateId || candidate.id,
+          jobId: candidate.jobId,
+          companyId: candidate.companyId,
+          name: candidate.name,
+          email: candidate.email,
+          phone: candidate.phone,
+          cpf: candidate.cpf,
+          role: jobTitle || candidate.role,
+          vagaTitulo: jobTitle || candidate.role,
+          department: candidate.department,
+          salaryExpectation: candidate.salaryExpectation,
+          city: candidate.city,
+          state: candidate.state
+        });
+        alert(`🎉 Candidato(a) ${candidate.name} contratado(a) com sucesso! Enviado para a Fila de Admissão do DP.`);
+      } catch (err) {
+        console.error('Erro ao enviar para admissão DP:', err);
+      }
+    } else if (newStatus === 'Reprovado') {
+      alert(`Candidato(a) ${candidate.name} marcado(a) como Reprovado.`);
+    }
     await onRefresh();
   };
 
@@ -892,6 +918,7 @@ export const SmartCandidateDrawer: React.FC<SmartCandidateDrawerProps> = ({
         onSave={async (data) => {
           await JobCandidateService.scheduleInterview(candidate.id, data);
           await onRefresh();
+          alert(`🗓️ Entrevista para ${candidate.name} agendada com sucesso para ${data.date} às ${data.time}!`);
         }}
         initialData={candidate.interview}
       />

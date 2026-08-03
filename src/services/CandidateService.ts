@@ -140,7 +140,7 @@ export class CandidateService {
     } catch (err) {
       console.warn('Erro em CandidateService.list:', err);
     }
-    return [];
+    return INITIAL_CANDIDATES;
   }
 
   static async search(term: string, companyId?: string): Promise<Candidate[]> {

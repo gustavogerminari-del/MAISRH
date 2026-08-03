@@ -73,12 +73,16 @@ export const PublicJobsView: React.FC<PublicJobsViewProps> = ({
     });
 
     const customJobsMapped: PublicJob[] = Array.from(allSourceJobsMap.values())
-      .filter(j => 
-        j.status === 'ativa' || 
-        j.status === 'Aberta' || 
-        j.publicada === true || 
-        (!j.status && j.isArchived !== true)
-      )
+      .filter(j => {
+        const rawStatus = String(j.status || '').trim().toLowerCase();
+        const isArchived = j.archived === true || j.isArchived === true || rawStatus === 'arquivada' || rawStatus === 'arquivo';
+        if (isArchived) return false;
+        if (rawStatus === 'pausada' || rawStatus === 'fechada' || rawStatus === 'rascunho' || rawStatus === 'draft' || rawStatus === 'closed' || rawStatus === 'paused') {
+          return false;
+        }
+        if ((j as any).publicada === false) return false;
+        return rawStatus === 'aberta' || rawStatus === 'ativa' || rawStatus === 'open' || (!j.status && (j as any).publicada !== false);
+      })
       .map(j => {
         const title = j.title || j.titulo || 'Vaga em Aberto';
         const description = j.description || j.descricao || 'Oportunidade de carreira no portal oficial RL CONNECT.';

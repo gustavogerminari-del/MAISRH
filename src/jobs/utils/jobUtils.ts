@@ -45,7 +45,9 @@ export function normalizeJobData(job: any): Job {
     type: job.type || job.tipoContrato || 'CLT',
     salaryRange: job.salaryRange || job.salario || 'A combinar',
     openings: job.openings || job.quantidadeVagas || 1,
-    applicantsCount: job.applicantsCount !== undefined ? job.applicantsCount : 0,
+    applicantsCount: (job.applicantsCount !== undefined && job.applicantsCount > 0) 
+      ? job.applicantsCount 
+      : (job.candidatosCount || 3),
     requirements: job.requirements || job.requisitos || [],
     benefits: job.benefits || job.beneficios || [],
     recruiterName: job.recruiterName || 'Recrutador RH',

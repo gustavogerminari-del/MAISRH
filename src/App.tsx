@@ -350,6 +350,7 @@ function MainAppContent() {
 
             {activeTab === 'vagas' && (
               <JobsView
+                key={activeTab}
                 jobs={jobs}
                 candidates={candidates}
                 stages={fontStages}
