@@ -14,6 +14,12 @@ import { Job } from '../types/rh';
 import { INITIAL_JOBS } from '../data/initialData';
 import { AuditService } from './AuditService';
 import { normalizeJobData, normalizeJobStatus } from '../jobs/utils/jobUtils';
+import { 
+  getCompanyCapabilitiesFromFirestore, 
+  resolveJobOriginWithCompany,
+  normalizeJobOrigin 
+} from '../utils/companyModules';
+import { PermissionService } from './PermissionService';
 
 const COLLECTION_NAME = 'jobs';
 
@@ -24,12 +30,28 @@ export class JobService {
     const now = new Date().toISOString().split('T')[0];
 
     const resolvedCompanyId = jobData.companyId || jobData.empresaId || 'emp-001';
+    const capabilities = await getCompanyCapabilitiesFromFirestore(resolvedCompanyId);
+    
+    let resolvedOrigin = resolveJobOriginWithCompany(jobData, capabilities);
+    if (resolvedOrigin === 'REQUIRES_CHOICE' && jobData.origemProcesso) {
+      resolvedOrigin = normalizeJobOrigin(jobData) || 'RH_INTERNO';
+    }
+
+    const isHeadhunter = resolvedOrigin === 'HEADHUNTER';
+    const origProc = isHeadhunter ? 'HEADHUNTER' : 'RH_INTERNO';
+    const destContr = isHeadhunter ? 'FINANCEIRO_HEADHUNTER' : 'DP';
 
     const jobToSave: Record<string, any> = {
       ...jobData,
       id,
       companyId: resolvedCompanyId,
       empresaId: resolvedCompanyId,
+      origemProcesso: origProc,
+      moduloOrigem: isHeadhunter ? 'headhunter' : 'RH',
+      origem: origProc,
+      isHeadhunter: isHeadhunter,
+      destinoContratacao: destContr,
+      destino: destContr,
       companyName: jobData.companyName || jobData.nomeEmpresa || 'RL CONNECT',
       nomeEmpresa: jobData.nomeEmpresa || jobData.companyName || 'RL CONNECT',
       title: jobData.title || jobData.titulo || 'Nova Vaga',
@@ -56,6 +78,9 @@ export class JobService {
     };
 
     try {
+      const targetModule = isHeadhunter ? 'headhunter' : 'vagas';
+      await PermissionService.validateFirestoreWrite(targetModule, resolvedCompanyId);
+
       const docRef = doc(db, COLLECTION_NAME, id);
       await setDoc(docRef, sanitizeFirestoreData(jobToSave), { merge: true });
 
@@ -81,6 +106,7 @@ export class JobService {
 
   static async update(id: string, data: Record<string, any>): Promise<void> {
     try {
+      await PermissionService.validateFirestoreWrite('vagas', data.companyId || data.empresaId);
       const docRef = doc(db, COLLECTION_NAME, id);
       const updatePayload = {
         ...data,

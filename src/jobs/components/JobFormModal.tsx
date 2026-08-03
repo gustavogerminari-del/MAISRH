@@ -11,6 +11,7 @@ import {
 import { useAuth } from '../../auth';
 import { Button, Input, Select } from '../../shared';
 import { JobGeneratorModal } from '../../ai/components/JobGeneratorModal';
+import { normalizeCompanyModules } from '../../utils/companyModules';
 
 export interface JobFormModalProps {
   isOpen: boolean;
@@ -25,7 +26,11 @@ export const JobFormModal: React.FC<JobFormModalProps> = ({
   onSaveJob,
   initialJob,
 }) => {
-  const { user, hasActionAccess } = useAuth();
+  const { user, activeModules, hasActionAccess } = useAuth();
+  const capabilities = normalizeCompanyModules(activeModules);
+  const hasHeadhunter = capabilities.hasHeadhunter;
+  const hasDP = capabilities.hasDP;
+  const hasBothModules = hasHeadhunter && hasDP;
 
   const canCreate = hasActionAccess('create_job');
   const canEdit = hasActionAccess('edit_job');
@@ -38,6 +43,15 @@ export const JobFormModal: React.FC<JobFormModalProps> = ({
   const [location, setLocation] = useState('São Paulo - SP');
   const [locationType, setLocationType] = useState<JobLocationType>('Híbrido');
   const [type, setType] = useState<JobType>('CLT');
+  const [origemProcesso, setOrigemProcesso] = useState<'recrutamento_interno' | 'headhunter'>('recrutamento_interno');
+  
+  // Headhunter Client Fields State
+  const [clienteNome, setClienteNome] = useState('');
+  const [regraCobranca, setRegraCobranca] = useState('15% do salário bruto anual');
+  const [feePercentual, setFeePercentual] = useState<number>(15);
+  const [vencimentoPrazo, setVencimentoPrazo] = useState('30 dias após contratação');
+  const [responsavelComercial, setResponsavelComercial] = useState('Carlos Headhunter');
+
   const [status, setStatus] = useState<JobStatus | 'ativa'>('ativa');
   const [salaryRange, setSalaryRange] = useState('R$ 8.000 - R$ 12.000');
   const [openings, setOpenings] = useState<number>(1);
@@ -52,12 +66,31 @@ export const JobFormModal: React.FC<JobFormModalProps> = ({
   const [showAiModal, setShowAiModal] = useState(false);
 
   useEffect(() => {
+    // Determine default origin based on company modules
+    let defaultOrig: 'recrutamento_interno' | 'headhunter' = 'recrutamento_interno';
+    if (hasHeadhunter && !hasDP) {
+      defaultOrig = 'headhunter';
+    } else if (!hasHeadhunter && hasDP) {
+      defaultOrig = 'recrutamento_interno';
+    }
+
     if (initialJob) {
       setTitle(initialJob.title || initialJob.titulo || '');
       setDepartment(initialJob.department || 'Tecnologia & Engenharia');
       setLocation(initialJob.location || `${initialJob.cidade || 'São Paulo'} - ${initialJob.estado || 'SP'}`);
       setLocationType(initialJob.locationType || 'Híbrido');
       setType(initialJob.type || initialJob.tipoContrato || 'CLT');
+      
+      const orig = (initialJob as any).origemProcesso || (initialJob as any).moduloOrigem || ((initialJob as any).isHeadhunter ? 'headhunter' : defaultOrig);
+      const isHead = String(orig).toLowerCase().includes('headhunter') || (initialJob as any).isHeadhunter === true;
+      setOrigemProcesso(isHead ? 'headhunter' : 'recrutamento_interno');
+      
+      setClienteNome((initialJob as any).clienteNome || (initialJob as any).cliente || '');
+      setRegraCobranca((initialJob as any).regraCobranca || '15% do salário bruto anual');
+      setFeePercentual(Number((initialJob as any).feePercentual || (initialJob as any).percentual || 15));
+      setVencimentoPrazo((initialJob as any).vencimentoPrazo || '30 dias após contratação');
+      setResponsavelComercial((initialJob as any).responsavelComercial || 'Carlos Headhunter');
+
       setStatus(initialJob.status || 'ativa');
       setSalaryRange(initialJob.salaryRange || initialJob.salario || 'R$ 8.000 - R$ 12.000');
       setOpenings(initialJob.openings || initialJob.quantidadeVagas || 1);
@@ -73,6 +106,12 @@ export const JobFormModal: React.FC<JobFormModalProps> = ({
       setLocation('São Paulo - SP');
       setLocationType('Híbrido');
       setType('CLT');
+      setOrigemProcesso(defaultOrig);
+      setClienteNome('');
+      setRegraCobranca('15% do salário bruto anual');
+      setFeePercentual(15);
+      setVencimentoPrazo('30 dias após contratação');
+      setResponsavelComercial('Carlos Headhunter');
       setStatus('ativa');
       setSalaryRange('R$ 8.000 - R$ 12.000');
       setOpenings(1);
@@ -87,7 +126,7 @@ export const JobFormModal: React.FC<JobFormModalProps> = ({
       ]);
     }
     setError('');
-  }, [initialJob, isOpen]);
+  }, [initialJob, isOpen, hasHeadhunter, hasDP]);
 
   if (!isOpen) return null;
 
@@ -116,6 +155,23 @@ export const JobFormModal: React.FC<JobFormModalProps> = ({
       return;
     }
 
+    // Determine effective origin based on company capabilities
+    let effectiveOrigem = origemProcesso;
+    if (hasHeadhunter && !hasDP) {
+      effectiveOrigem = 'headhunter';
+    } else if (!hasHeadhunter && hasDP) {
+      effectiveOrigem = 'recrutamento_interno';
+    } else if (hasBothModules && !origemProcesso) {
+      setError('A empresa possui os módulos RH e Headhunter. Escolha obrigatoriamente a origem da vaga.');
+      return;
+    }
+
+    if (effectiveOrigem === 'headhunter' && !clienteNome.trim()) {
+      setError('Para vagas do Headhunter, informe obrigatoriamente o nome do cliente.');
+      return;
+    }
+
+    const isHead = effectiveOrigem === 'headhunter';
     const empresaId = user?.companyId || user?.tenantId || user?.id || 'emp-001';
     const nomeEmpresa = user?.companyName || user?.tenantName || 'MAIS RH Brasil';
     const parts = location.split('-');
@@ -127,6 +183,18 @@ export const JobFormModal: React.FC<JobFormModalProps> = ({
       {
         empresaId,
         nomeEmpresa,
+        origemProcesso: isHead ? 'HEADHUNTER' : 'RH_INTERNO',
+        moduloOrigem: isHead ? 'headhunter' : 'RH',
+        origem: isHead ? 'HEADHUNTER' : 'RH_INTERNO',
+        isHeadhunter: isHead,
+        destinoContratacao: isHead ? 'FINANCEIRO_HEADHUNTER' : 'DP',
+        destino: isHead ? 'Financeiro' : 'DP',
+        clienteNome: isHead ? clienteNome.trim() : null,
+        clienteId: isHead ? `cli-${Date.now()}` : null,
+        regraCobranca: isHead ? regraCobranca : null,
+        feePercentual: isHead ? Number(feePercentual) || 15 : null,
+        vencimentoPrazo: isHead ? vencimentoPrazo : null,
+        responsavelComercial: isHead ? responsavelComercial : null,
         titulo: title.trim(),
         title: title.trim(),
         descricao: description.trim(),
@@ -149,10 +217,11 @@ export const JobFormModal: React.FC<JobFormModalProps> = ({
         createdAt: nowIsoDate,
         deadline,
         status: status === 'Arquivada' || status === 'Fechada' ? status : 'ativa',
-        publicada: true, // Publicada automaticamente no Portal Público
+        publicada: true,
         department,
         recruiterName,
         managerName,
+        tipoProcesso: isHead ? 'headhunter' : 'interno',
         budget: {
           approvedSalaryRange: salaryRange,
           centerCostCode,
@@ -232,7 +301,26 @@ export const JobFormModal: React.FC<JobFormModalProps> = ({
               required
             />
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              {hasBothModules ? (
+                <Select
+                  label="Origem da Vaga (Obrigatório)*"
+                  value={origemProcesso}
+                  onChange={(e) => setOrigemProcesso(e.target.value as any)}
+                  options={[
+                    { value: 'recrutamento_interno', label: 'Vaga Interna (Encaminhar para DP)' },
+                    { value: 'headhunter', label: 'Vaga de Cliente (Encaminhar para Financeiro)' },
+                  ]}
+                />
+              ) : (
+                <div className="space-y-1">
+                  <label className="text-xs font-bold text-slate-700 block">Origem da Vaga (Módulo)</label>
+                  <div className="p-2.5 bg-slate-100 border border-slate-200 rounded-xl text-xs font-bold text-slate-800">
+                    {hasHeadhunter ? 'Headhunter (Destino: Financeiro)' : 'RH Interno (Destino: Admissão DP)'}
+                  </div>
+                </div>
+              )}
+
               <Select
                 label="Departamento"
                 value={department}
@@ -247,6 +335,59 @@ export const JobFormModal: React.FC<JobFormModalProps> = ({
                 options={JOB_STATUS_OPTIONS.map((s) => ({ value: s, label: s }))}
               />
             </div>
+
+            {/* Campos Específicos para Headhunter */}
+            {origemProcesso === 'headhunter' && (
+              <div className="p-4 bg-indigo-50/70 border border-indigo-200 rounded-2xl space-y-3">
+                <div className="flex items-center gap-2">
+                  <Briefcase className="w-4 h-4 text-indigo-600" />
+                  <h4 className="text-xs font-extrabold text-indigo-950 uppercase tracking-wider">
+                    Dados do Cliente & Faturamento (Headhunter)
+                  </h4>
+                </div>
+                
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <Input
+                    label="Nome do Cliente (Contratante)*"
+                    placeholder="Ex: Banco Itaú / TechCorp S.A."
+                    value={clienteNome}
+                    onChange={(e) => setClienteNome(e.target.value)}
+                    required
+                  />
+
+                  <Input
+                    label="Responsável Comercial"
+                    placeholder="Ex: Carlos Headhunter"
+                    value={responsavelComercial}
+                    onChange={(e) => setResponsavelComercial(e.target.value)}
+                  />
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  <Input
+                    type="number"
+                    label="Honorários (%)"
+                    placeholder="15"
+                    value={feePercentual}
+                    onChange={(e) => setFeePercentual(Number(e.target.value))}
+                  />
+
+                  <Input
+                    label="Regra de Cobrança"
+                    placeholder="Ex: 15% do salário bruto anual"
+                    value={regraCobranca}
+                    onChange={(e) => setRegraCobranca(e.target.value)}
+                  />
+
+                  <Input
+                    label="Prazo de Vencimento"
+                    placeholder="Ex: 30 dias após contratação"
+                    value={vencimentoPrazo}
+                    onChange={(e) => setVencimentoPrazo(e.target.value)}
+                  />
+                </div>
+              </div>
+            )}
 
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
               <Input

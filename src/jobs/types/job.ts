@@ -47,6 +47,13 @@ export interface Job {
   recruiterName: string;
   recruiterId?: string;
   managerName?: string;
+  origemProcesso?: 'recrutamento_interno' | 'headhunter' | 'banco_talent';
+  moduloOrigem?: string;
+  origem?: string;
+  tipoProcesso?: string;
+  isHeadhunter?: boolean;
+  clientId?: string;
+  clienteId?: string;
   budget?: JobBudgetInfo;
   isArchived?: boolean;
   archived?: boolean;

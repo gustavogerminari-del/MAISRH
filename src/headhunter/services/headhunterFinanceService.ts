@@ -28,12 +28,6 @@ const COLLECTIONS = {
   AUDIT: 'historicos_financeiros'
 };
 
-// Clean initial empty arrays for real Firestore data
-const INITIAL_RECEITAS: HeadhunterReceita[] = [];
-const INITIAL_DESPESAS: HeadhunterExpense[] = [];
-const INITIAL_COMISSOES: HeadhunterCommission[] = [];
-const INITIAL_GARANTIAS: HeadhunterGarantia[] = [];
-
 // In-memory caches for synchronous immediate access
 let receitasCache: HeadhunterReceita[] = [];
 let despesasCache: HeadhunterExpense[] = [];
@@ -45,17 +39,45 @@ export async function syncHeadhunterFinanceWithFirestore(): Promise<void> {
   try {
     const recSnap = await getDocs(collection(db, COLLECTIONS.RECEITAS));
     receitasCache = recSnap.docs.map(d => ({ id: d.id, ...d.data() } as HeadhunterReceita));
+  } catch (err: any) {
+    console.error('[HEADHUNTER SYNC]', {
+      collection: COLLECTIONS.RECEITAS,
+      code: err?.code,
+      message: err?.message
+    });
+  }
 
+  try {
     const despSnap = await getDocs(collection(db, COLLECTIONS.DESPESAS));
     despesasCache = despSnap.docs.map(d => ({ id: d.id, ...d.data() } as HeadhunterExpense));
+  } catch (err: any) {
+    console.error('[HEADHUNTER SYNC]', {
+      collection: COLLECTIONS.DESPESAS,
+      code: err?.code,
+      message: err?.message
+    });
+  }
 
+  try {
     const comSnap = await getDocs(collection(db, COLLECTIONS.COMISSOES));
     comissoesCache = comSnap.docs.map(d => ({ id: d.id, ...d.data() } as HeadhunterCommission));
+  } catch (err: any) {
+    console.error('[HEADHUNTER SYNC]', {
+      collection: COLLECTIONS.COMISSOES,
+      code: err?.code,
+      message: err?.message
+    });
+  }
 
+  try {
     const garSnap = await getDocs(collection(db, COLLECTIONS.GARANTIAS));
     garantiasCache = garSnap.docs.map(d => ({ id: d.id, ...d.data() } as HeadhunterGarantia));
-  } catch (err) {
-    console.warn('Headhunter Finance Firestore Sync Note:', err);
+  } catch (err: any) {
+    console.error('[HEADHUNTER SYNC]', {
+      collection: COLLECTIONS.GARANTIAS,
+      code: err?.code,
+      message: err?.message
+    });
   }
 }
 
@@ -64,29 +86,34 @@ syncHeadhunterFinanceWithFirestore();
 
 export class HeadhunterFinanceService {
   // RECEITAS
-  static getReceitas(companyId: string = 'emp-001'): HeadhunterReceita[] {
-    return receitasCache.filter(r => !companyId || r.empresaId === companyId || companyId === 'emp-001');
+  static getReceitas(companyId?: string): HeadhunterReceita[] {
+    return receitasCache.filter(r => !companyId || r.companyId === companyId || r.empresaId === companyId);
   }
 
   static async saveReceita(receita: HeadhunterReceita): Promise<HeadhunterReceita> {
+    const companyId = receita.companyId || receita.empresaId;
+    if (!companyId || companyId === 'emp-001') {
+      throw new Error("Não foi possível identificar a empresa do usuário.");
+    }
+
     const id = receita.id || `rec-${Date.now()}`;
     const newReceita: HeadhunterReceita = {
       ...receita,
       id,
-      empresaId: receita.empresaId || 'emp-001',
+      companyId,
+      empresaId: companyId,
       saldo: (receita.valorContratado || 0) - (receita.valorRecebido || 0),
       criadoEm: receita.criadoEm || new Date().toISOString().split('T')[0]
     };
 
-    receitasCache = [newReceita, ...receitasCache.filter(r => r.id !== id)];
-
     try {
       await setDoc(doc(db, COLLECTIONS.RECEITAS, id), sanitizeFirestoreData(newReceita), { merge: true });
+      receitasCache = [newReceita, ...receitasCache.filter(r => r.id !== id)];
+      return newReceita;
     } catch (err) {
-      console.error('Error saving receita in Firestore:', err);
+      console.error('[HEADHUNTER] Erro real ao salvar receita:', err);
+      throw err;
     }
-
-    return newReceita;
   }
 
   static async registrarPagamentoReceita(receitaId: string, valorPago: number, formaPagamento: string, dataPagamento: string, observacoes?: string): Promise<HeadhunterReceita | null> {
@@ -146,53 +173,63 @@ export class HeadhunterFinanceService {
   }
 
   // DESPESAS
-  static getDespesas(companyId: string = 'emp-001'): HeadhunterExpense[] {
-    return despesasCache.filter(d => !companyId || d.empresaId === companyId || companyId === 'emp-001');
+  static getDespesas(companyId?: string): HeadhunterExpense[] {
+    return despesasCache.filter(d => !companyId || d.companyId === companyId || d.empresaId === companyId);
   }
 
   static async saveDespesa(expense: HeadhunterExpense): Promise<HeadhunterExpense> {
+    const companyId = expense.companyId || expense.empresaId;
+    if (!companyId || companyId === 'emp-001') {
+      throw new Error("Não foi possível identificar a empresa do usuário.");
+    }
+
     const id = expense.id || `exp-${Date.now()}`;
     const newExpense: HeadhunterExpense = {
       ...expense,
       id,
-      empresaId: expense.empresaId || 'emp-001',
+      companyId,
+      empresaId: companyId,
       criadoEm: expense.criadoEm || new Date().toISOString().split('T')[0]
     };
 
-    despesasCache = [newExpense, ...despesasCache.filter(d => d.id !== id)];
-
     try {
       await setDoc(doc(db, COLLECTIONS.DESPESAS, id), sanitizeFirestoreData(newExpense), { merge: true });
+      despesasCache = [newExpense, ...despesasCache.filter(d => d.id !== id)];
+      return newExpense;
     } catch (err) {
-      console.error('Error saving expense in Firestore:', err);
+      console.error('[HEADHUNTER] Erro real ao salvar despesa:', err);
+      throw err;
     }
-
-    return newExpense;
   }
 
   // COMISSÕES
-  static getComissoes(companyId: string = 'emp-001'): HeadhunterCommission[] {
-    return comissoesCache.filter(c => !companyId || c.empresaId === companyId || companyId === 'emp-001');
+  static getComissoes(companyId?: string): HeadhunterCommission[] {
+    return comissoesCache.filter(c => !companyId || c.companyId === companyId || c.empresaId === companyId);
   }
 
   static async saveComissao(commission: HeadhunterCommission): Promise<HeadhunterCommission> {
+    const companyId = commission.companyId || commission.empresaId;
+    if (!companyId || companyId === 'emp-001') {
+      throw new Error("Não foi possível identificar a empresa do usuário.");
+    }
+
     const id = commission.id || `com-${Date.now()}`;
     const newCom: HeadhunterCommission = {
       ...commission,
       id,
-      empresaId: commission.empresaId || 'emp-001',
+      companyId,
+      empresaId: companyId,
       criadoEm: commission.criadoEm || new Date().toISOString().split('T')[0]
     };
 
-    comissoesCache = [newCom, ...comissoesCache.filter(c => c.id !== id)];
-
     try {
       await setDoc(doc(db, COLLECTIONS.COMISSOES, id), sanitizeFirestoreData(newCom), { merge: true });
+      comissoesCache = [newCom, ...comissoesCache.filter(c => c.id !== id)];
+      return newCom;
     } catch (err) {
-      console.error('Error saving commission in Firestore:', err);
+      console.error('[HEADHUNTER] Erro real ao salvar comissão:', err);
+      throw err;
     }
-
-    return newCom;
   }
 
   static async liberarComissao(commissionId: string, observacao?: string): Promise<HeadhunterCommission | null> {
@@ -237,11 +274,11 @@ export class HeadhunterFinanceService {
   }
 
   // GARANTIAS
-  static getGarantias(companyId: string = 'emp-001'): HeadhunterGarantia[] {
+  static getGarantias(companyId?: string): HeadhunterGarantia[] {
     const hoje = new Date();
 
     return garantiasCache
-      .filter(g => !companyId || g.empresaId === companyId || companyId === 'emp-001')
+      .filter(g => !companyId || g.companyId === companyId || g.empresaId === companyId)
       .map(g => {
         const dataFim = new Date(g.dataFinal);
         const diffMs = dataFim.getTime() - hoje.getTime();
@@ -259,27 +296,32 @@ export class HeadhunterFinanceService {
   }
 
   static async saveGarantia(garantia: HeadhunterGarantia): Promise<HeadhunterGarantia> {
+    const companyId = garantia.companyId || garantia.empresaId;
+    if (!companyId || companyId === 'emp-001') {
+      throw new Error("Não foi possível identificar a empresa do usuário.");
+    }
+
     const id = garantia.id || `gar-${Date.now()}`;
     const newGar: HeadhunterGarantia = {
       ...garantia,
       id,
-      empresaId: garantia.empresaId || 'emp-001',
+      companyId,
+      empresaId: companyId,
       criadoEm: garantia.criadoEm || new Date().toISOString().split('T')[0]
     };
 
-    garantiasCache = [newGar, ...garantiasCache.filter(g => g.id !== id)];
-
     try {
       await setDoc(doc(db, COLLECTIONS.GARANTIAS, id), sanitizeFirestoreData(newGar), { merge: true });
+      garantiasCache = [newGar, ...garantiasCache.filter(g => g.id !== id)];
+      return newGar;
     } catch (err) {
-      console.error('Error saving garantia in Firestore:', err);
+      console.error('[HEADHUNTER] Erro real ao salvar garantia:', err);
+      throw err;
     }
-
-    return newGar;
   }
 
   // RENTABILIDADE CALCULATOR
-  static calculateRentabilidadeVagas(vagas: any[], companyId: string = 'emp-001'): RentabilidadeVaga[] {
+  static calculateRentabilidadeVagas(vagas: any[], companyId?: string): RentabilidadeVaga[] {
     const receitas = this.getReceitas(companyId);
     const despesas = this.getDespesas(companyId).filter(d => d.tipoDespesa === 'vaga');
     const comissoes = this.getComissoes(companyId);
@@ -337,6 +379,10 @@ export class HeadhunterFinanceService {
     garantia: HeadhunterGarantia;
   }> {
     const { vaga, candidatoContratado, dataContratacao, valorFinalCobrado, formaCobranca, dataPrevistaRecebimento, beneficiarioComissao, tipoComissao, percentualComissao, valorFixoComissao, prazoGarantiaDias, numeroNotaFiscal, observacoes } = data;
+    const resolvedCompanyId = vaga.companyId || vaga.empresaId;
+    if (!resolvedCompanyId || resolvedCompanyId === 'emp-001') {
+      throw new Error("Não foi possível identificar a empresa do usuário.");
+    }
 
     // 1. Calculate Commission
     let valorComissao = 0;
@@ -351,7 +397,8 @@ export class HeadhunterFinanceService {
     // 2. Create Revenue Record
     const newReceita: HeadhunterReceita = {
       id: `rec-${vaga.id}-${Date.now()}`,
-      empresaId: vaga.empresaId || 'emp-001',
+      companyId: resolvedCompanyId,
+      empresaId: resolvedCompanyId,
       criadoPor: 'Headhunter',
       criadoEm: new Date().toISOString().split('T')[0],
       status: 'Ativo',
@@ -375,7 +422,8 @@ export class HeadhunterFinanceService {
     // 3. Create Commission Record
     const newCommission: HeadhunterCommission = {
       id: `com-${vaga.id}-${Date.now()}`,
-      empresaId: vaga.empresaId || 'emp-001',
+      companyId: resolvedCompanyId,
+      empresaId: resolvedCompanyId,
       criadoPor: 'Headhunter',
       criadoEm: new Date().toISOString().split('T')[0],
       status: 'Ativo',
@@ -405,7 +453,8 @@ export class HeadhunterFinanceService {
 
     const newGarantia: HeadhunterGarantia = {
       id: `gar-${vaga.id}-${Date.now()}`,
-      empresaId: vaga.empresaId || 'emp-001',
+      companyId: resolvedCompanyId,
+      empresaId: resolvedCompanyId,
       criadoPor: 'Headhunter',
       criadoEm: new Date().toISOString().split('T')[0],
       status: 'Ativo',

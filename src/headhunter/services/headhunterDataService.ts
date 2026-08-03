@@ -30,17 +30,45 @@ export async function syncHeadhunterDataWithFirestore(): Promise<void> {
   try {
     const cliSnap = await getDocs(collection(db, COLLECTIONS.CLIENTS));
     clientsCache = cliSnap.docs.map(d => ({ id: d.id, ...d.data() } as HeadhunterClient));
+  } catch (err: any) {
+    console.error('[HEADHUNTER SYNC]', {
+      collection: COLLECTIONS.CLIENTS,
+      code: err?.code,
+      message: err?.message
+    });
+  }
 
+  try {
     const leadSnap = await getDocs(collection(db, COLLECTIONS.LEADS));
     leadsCache = leadSnap.docs.map(d => ({ id: d.id, ...d.data() } as HeadhunterLead));
+  } catch (err: any) {
+    console.error('[HEADHUNTER SYNC]', {
+      collection: COLLECTIONS.LEADS,
+      code: err?.code,
+      message: err?.message
+    });
+  }
 
+  try {
     const propSnap = await getDocs(collection(db, COLLECTIONS.PROPOSALS));
     proposalsCache = propSnap.docs.map(d => ({ id: d.id, ...d.data() } as HeadhunterProposal));
+  } catch (err: any) {
+    console.error('[HEADHUNTER SYNC]', {
+      collection: COLLECTIONS.PROPOSALS,
+      code: err?.code,
+      message: err?.message
+    });
+  }
 
+  try {
     const ctrSnap = await getDocs(collection(db, COLLECTIONS.CONTRACTS));
     contractsCache = ctrSnap.docs.map(d => ({ id: d.id, ...d.data() } as HeadhunterContract));
-  } catch (err) {
-    console.warn('Headhunter Data Firestore Sync error:', err);
+  } catch (err: any) {
+    console.error('[HEADHUNTER SYNC]', {
+      collection: COLLECTIONS.CONTRACTS,
+      code: err?.code,
+      message: err?.message
+    });
   }
 }
 
@@ -48,58 +76,106 @@ syncHeadhunterDataWithFirestore();
 
 export class HeadhunterDataService {
   static getClients(companyId?: string): HeadhunterClient[] {
-    return clientsCache.filter(c => !companyId || c.empresaId === companyId || c.empresaId === 'emp-001');
+    return clientsCache.filter(c => !companyId || c.companyId === companyId || c.empresaId === companyId);
   }
 
   static async saveClient(client: HeadhunterClient): Promise<HeadhunterClient> {
-    clientsCache = [client, ...clientsCache.filter(c => c.id !== client.id)];
-    try {
-      await setDoc(doc(db, COLLECTIONS.CLIENTS, client.id), sanitizeFirestoreData(client), { merge: true });
-    } catch (e) {
-      console.error('Error saving client in Firestore:', e);
+    const companyId = client.companyId || client.empresaId;
+    if (!companyId || companyId === 'emp-001') {
+      throw new Error("Não foi possível identificar a empresa do usuário.");
     }
-    return client;
+
+    const clientToSave: HeadhunterClient = {
+      ...client,
+      companyId,
+      empresaId: companyId
+    };
+
+    try {
+      await setDoc(doc(db, COLLECTIONS.CLIENTS, clientToSave.id), sanitizeFirestoreData(clientToSave), { merge: true });
+      clientsCache = [clientToSave, ...clientsCache.filter(c => c.id !== clientToSave.id)];
+      return clientToSave;
+    } catch (e) {
+      console.error('[HEADHUNTER] Erro real ao salvar cliente:', e);
+      throw e;
+    }
   }
 
   static getLeads(companyId?: string): HeadhunterLead[] {
-    return leadsCache.filter(l => !companyId || l.empresaId === companyId || l.empresaId === 'emp-001');
+    return leadsCache.filter(l => !companyId || l.companyId === companyId || l.empresaId === companyId);
   }
 
   static async saveLead(lead: HeadhunterLead): Promise<HeadhunterLead> {
-    leadsCache = [lead, ...leadsCache.filter(l => l.id !== lead.id)];
-    try {
-      await setDoc(doc(db, COLLECTIONS.LEADS, lead.id), sanitizeFirestoreData(lead), { merge: true });
-    } catch (e) {
-      console.error('Error saving lead in Firestore:', e);
+    const companyId = lead.companyId || lead.empresaId;
+    if (!companyId || companyId === 'emp-001') {
+      throw new Error("Não foi possível identificar a empresa do usuário.");
     }
-    return lead;
+
+    const leadToSave: HeadhunterLead = {
+      ...lead,
+      companyId,
+      empresaId: companyId
+    };
+
+    try {
+      await setDoc(doc(db, COLLECTIONS.LEADS, leadToSave.id), sanitizeFirestoreData(leadToSave), { merge: true });
+      leadsCache = [leadToSave, ...leadsCache.filter(l => l.id !== leadToSave.id)];
+      return leadToSave;
+    } catch (e) {
+      console.error('[HEADHUNTER] Erro real ao salvar lead:', e);
+      throw e;
+    }
   }
 
   static getProposals(companyId?: string): HeadhunterProposal[] {
-    return proposalsCache.filter(p => !companyId || p.empresaId === companyId || p.empresaId === 'emp-001');
+    return proposalsCache.filter(p => !companyId || p.companyId === companyId || p.empresaId === companyId);
   }
 
   static async saveProposal(proposal: HeadhunterProposal): Promise<HeadhunterProposal> {
-    proposalsCache = [proposal, ...proposalsCache.filter(p => p.id !== proposal.id)];
-    try {
-      await setDoc(doc(db, COLLECTIONS.PROPOSALS, proposal.id), sanitizeFirestoreData(proposal), { merge: true });
-    } catch (e) {
-      console.error('Error saving proposal in Firestore:', e);
+    const companyId = proposal.companyId || proposal.empresaId;
+    if (!companyId || companyId === 'emp-001') {
+      throw new Error("Não foi possível identificar a empresa do usuário.");
     }
-    return proposal;
+
+    const proposalToSave: HeadhunterProposal = {
+      ...proposal,
+      companyId,
+      empresaId: companyId
+    };
+
+    try {
+      await setDoc(doc(db, COLLECTIONS.PROPOSALS, proposalToSave.id), sanitizeFirestoreData(proposalToSave), { merge: true });
+      proposalsCache = [proposalToSave, ...proposalsCache.filter(p => p.id !== proposalToSave.id)];
+      return proposalToSave;
+    } catch (e) {
+      console.error('[HEADHUNTER] Erro real ao salvar proposta:', e);
+      throw e;
+    }
   }
 
   static getContracts(companyId?: string): HeadhunterContract[] {
-    return contractsCache.filter(c => !companyId || c.empresaId === companyId || c.empresaId === 'emp-001');
+    return contractsCache.filter(c => !companyId || c.companyId === companyId || c.empresaId === companyId);
   }
 
   static async saveContract(contract: HeadhunterContract): Promise<HeadhunterContract> {
-    contractsCache = [contract, ...contractsCache.filter(c => c.id !== contract.id)];
-    try {
-      await setDoc(doc(db, COLLECTIONS.CONTRACTS, contract.id), sanitizeFirestoreData(contract), { merge: true });
-    } catch (e) {
-      console.error('Error saving contract in Firestore:', e);
+    const companyId = contract.companyId || contract.empresaId;
+    if (!companyId || companyId === 'emp-001') {
+      throw new Error("Não foi possível identificar a empresa do usuário.");
     }
-    return contract;
+
+    const contractToSave: HeadhunterContract = {
+      ...contract,
+      companyId,
+      empresaId: companyId
+    };
+
+    try {
+      await setDoc(doc(db, COLLECTIONS.CONTRACTS, contractToSave.id), sanitizeFirestoreData(contractToSave), { merge: true });
+      contractsCache = [contractToSave, ...contractsCache.filter(c => c.id !== contractToSave.id)];
+      return contractToSave;
+    } catch (e) {
+      console.error('[HEADHUNTER] Erro real ao salvar contrato:', e);
+      throw e;
+    }
   }
 }

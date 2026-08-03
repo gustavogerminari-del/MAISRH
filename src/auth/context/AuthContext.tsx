@@ -1,6 +1,6 @@
 /**
  * Módulo AUTENTICAÇÃO E ACESSO
- * Contexto de autenticação real com Firebase Auth e módulos por empresa no Firestore.
+ * Contexto de autenticação real com Firebase Auth, suporte a módulo da empresa e permissões de usuário.
  */
 
 import React, { createContext, useContext, useEffect, useState } from 'react';
@@ -23,6 +23,7 @@ import {
   fetchUsuarioFirestore,
 } from '../../lib/firestoreServices';
 import { auth } from '../../lib/firebase';
+import { PermissionService } from '../../services/PermissionService';
 
 export interface AuthContextType {
   user: UserProfile | null;
@@ -30,6 +31,7 @@ export interface AuthContextType {
   isAuthenticated: boolean;
   isLoading: boolean;
   activeModules: Record<string, boolean>;
+  userPermissions: Record<string, boolean> | string[];
   login: (email: string, password?: string) => Promise<boolean>;
   logout: () => Promise<void>;
   switchDemoProfile: (role: RoleProfile) => void;
@@ -58,7 +60,6 @@ const isMasterProfile = (profile: Partial<UserProfile> | null | undefined): bool
   return (
     role === 'MASTER' ||
     role === 'SUPER_ADMIN' ||
-    role === 'SUPER_ADMINISTRADOR' ||
     role === 'SUPER_ADMINISTRADOR' ||
     tipoUsuario === 'MASTER'
   );
@@ -89,7 +90,7 @@ const normalizeModules = (raw: unknown): Record<string, boolean> => {
       if (typeof value === 'boolean') acc[key] = value;
       return acc;
     },
-    {},
+    {}
   );
 };
 
@@ -98,6 +99,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [sessionToken, setSessionToken] = useState<SessionToken | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [activeModules, setActiveModules] = useState<Record<string, boolean>>({});
+
+  const userPermissions = (user as any)?.permissions || (user as any)?.permissoes || {};
 
   const clearAuthData = () => {
     setUser(null);
@@ -118,7 +121,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const buildUserProfile = async (
-    firebaseUser: NonNullable<typeof auth.currentUser>,
+    firebaseUser: NonNullable<typeof auth.currentUser>
   ): Promise<UserProfile> => {
     const profileDoc: any = await fetchUsuarioFirestore(firebaseUser.uid);
 
@@ -150,6 +153,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         empresaId: profileDoc.empresaId || profileDoc.companyId || null,
         companyId: profileDoc.companyId || profileDoc.empresaId || null,
         companyName: profileDoc.companyName || profileDoc.empresaNome || '',
+        permissions: profileDoc.permissions || profileDoc.permissoes || undefined,
       } as UserProfile;
     }
 
@@ -175,82 +179,59 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       empresaId: resolvedCompanyId,
       companyId: resolvedCompanyId,
       companyName: profileDoc.companyName || profileDoc.empresaNome || '',
+      permissions: profileDoc.permissions || profileDoc.permissoes || undefined,
     } as UserProfile;
   };
 
-  const refreshCompanyModules = async (): Promise<void> => {
-    if (!user) {
-      setActiveModules({});
-      return;
-    }
+  const refreshCompanyModules = async () => {
+    if (!auth.currentUser || !user) return;
 
     if (isMasterProfile(user)) {
-      setActiveModules({
-        vagas: true,
-        bancoTalentos: true,
-        entrevistas: true,
-        headhunter: true,
-        equipeInterna: true,
-        consultorRH: true,
-        pontoDigital: true,
-        beneficios: true,
-        folhaPagamento: true,
-        feriasBeneficios: true,
-        rescisao: true,
-        documentosAssinatura: true,
-        afastamentos: true,
-        sst: true,
-        agenda: true,
-        relatoriosAvancados: true,
-        siteVagasPersonalizado: true,
-        iaConsultora: true,
-      });
-      return;
-    }
-
-    const companyId = user.empresaId || user.companyId || user.tenantId;
-
-    if (!companyId) {
       setActiveModules({});
       return;
     }
+
+    const targetCompanyId = user.empresaId || user.companyId;
+    if (!targetCompanyId) return;
 
     try {
-      const remoteModules = await fetchEmpresaModulosFirestore(companyId);
-      setActiveModules(normalizeModules(remoteModules));
+      const rawCompanyData = await fetchEmpresaModulosFirestore(targetCompanyId);
+      const modulesMap = normalizeModules(rawCompanyData);
+      setActiveModules(modulesMap);
     } catch (error) {
-      logger.warn('Erro ao carregar módulos reais da empresa no Firestore:', error);
-      setActiveModules({});
+      logger.warn('[AuthContext] Falha ao carregar módulos da empresa no Firestore', error);
     }
   };
-
-  useEffect(() => {
-    void refreshCompanyModules();
-  }, [user?.empresaId, user?.companyId, user?.tenantId, user?.tipoUsuario, user?.role]);
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
       setIsLoading(true);
 
       if (!firebaseUser) {
-        logger.info('Firebase Auth: nenhum usuário ativo no SDK cliente', 'AuthContext');
         clearAuthData();
         setIsLoading(false);
         return;
       }
 
       try {
-        logger.info(
-          `Firebase Auth ativo: ${firebaseUser.email} (UID: ${firebaseUser.uid})`,
-          'AuthContext',
-        );
-
         const userProfile = await buildUserProfile(firebaseUser);
         const token = createSessionToken(firebaseUser.uid);
         saveAuthData(userProfile, token);
-      } catch (error: any) {
-        logger.warn('Erro ao carregar perfil autenticado:', error?.message || error);
-        await signOut(auth).catch(() => undefined);
+
+        if (!isMasterProfile(userProfile)) {
+          const targetCompanyId = userProfile.empresaId || userProfile.companyId;
+          if (targetCompanyId) {
+            const rawCompanyData = await fetchEmpresaModulosFirestore(targetCompanyId);
+            const modulesMap = normalizeModules(rawCompanyData);
+            setActiveModules(modulesMap);
+          }
+        } else {
+          setActiveModules({});
+        }
+      } catch (err: any) {
+        logger.error('[AuthContext] Erro ao sincronizar sessão Firebase Auth com Firestore:', err);
+        alert(err.message || 'Erro ao carregar dados do usuário. Efetue login novamente.');
+        await signOut(auth);
         clearAuthData();
       } finally {
         setIsLoading(false);
@@ -261,121 +242,88 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   }, []);
 
   const login = async (email: string, password?: string): Promise<boolean> => {
-    const normalizedEmail = email.toLowerCase().trim();
-    const pwd = password || '';
+    const normalizedEmail = email.trim().toLowerCase();
 
-    if (!normalizedEmail) throw new Error('Informe o e-mail de acesso.');
-    if (!pwd) throw new Error('Informe a senha de acesso.');
-    if (pwd.length < 6) throw new Error('A senha deve ter no mínimo 6 caracteres.');
+    if (!password) {
+      alert('Senha não informada.');
+      return false;
+    }
 
+    setIsLoading(true);
     try {
-      const credential = await signInWithEmailAndPassword(auth, normalizedEmail, pwd);
-      const userProfile = await buildUserProfile(credential.user);
-      const token = createSessionToken(credential.user.uid);
+      const userCredential = await signInWithEmailAndPassword(auth, normalizedEmail, password);
+      const userProfile = await buildUserProfile(userCredential.user);
+      const token = createSessionToken(userCredential.user.uid);
+
       saveAuthData(userProfile, token);
 
-      logger.info(
-        `Sessão Firebase iniciada para ${normalizedEmail} (UID: ${credential.user.uid})`,
-        'AuthContext',
-      );
+      if (!isMasterProfile(userProfile)) {
+        const targetCompanyId = userProfile.empresaId || userProfile.companyId;
+        if (targetCompanyId) {
+          const rawCompanyData = await fetchEmpresaModulosFirestore(targetCompanyId);
+          setActiveModules(normalizeModules(rawCompanyData));
+        }
+      }
+
+      logger.info('[Auth] Login efetuado com sucesso via Firebase Auth');
       return true;
-    } catch (error: any) {
-      const code = error?.code || '';
-
-      if (error?.message === 'Perfil do usuário não encontrado no Firestore.') {
-        throw error;
+    } catch (err: any) {
+      logger.error('[Auth] Erro no login via Firebase Auth:', err);
+      let errorMsg = 'Credenciais inválidas ou conta não encontrada.';
+      if (err.code === 'auth/wrong-password' || err.code === 'auth/user-not-found' || err.code === 'auth/invalid-credential') {
+        errorMsg = 'E-mail ou senha incorretos.';
+      } else if (err.code === 'auth/user-disabled') {
+        errorMsg = 'Esta conta foi desativada.';
+      } else if (err.message) {
+        errorMsg = err.message;
       }
-      if (error?.message === 'Usuário sem empresa vinculada no Firestore.') {
-        throw error;
-      }
-      if (error?.message === 'Esta conta foi desativada pelo administrador.') {
-        throw error;
-      }
-      if (code === 'auth/user-disabled') {
-        throw new Error('Esta conta foi desativada no Firebase Authentication.');
-      }
-      if (
-        code === 'auth/wrong-password' ||
-        code === 'auth/invalid-credential' ||
-        code === 'auth/user-not-found'
-      ) {
-        throw new Error('E-mail ou senha incorretos.');
-      }
-      if (code === 'auth/too-many-requests') {
-        throw new Error('Muitas tentativas de login. Aguarde e tente novamente.');
-      }
-      if (code === 'auth/network-request-failed') {
-        throw new Error('Falha de conexão. Verifique sua internet.');
-      }
-      if (code === 'auth/invalid-email') {
-        throw new Error('O e-mail informado é inválido.');
-      }
-
-      throw new Error(error?.message || 'Não foi possível realizar o login.');
+      alert(errorMsg);
+      return false;
+    } finally {
+      setIsLoading(false);
     }
   };
 
   const logout = async (): Promise<void> => {
-    await signOut(auth).catch(() => undefined);
-    clearAuthData();
+    try {
+      await signOut(auth);
+    } catch (err) {
+      logger.warn('[Auth] Erro ao deslogar do Firebase Auth:', err);
+    } finally {
+      clearAuthData();
+    }
   };
 
-  const switchDemoProfile = (_role: RoleProfile): void => {
-    throw new Error('Modo de demonstração desativado. Use credenciais reais do Firebase Auth.');
+  const switchDemoProfile = (role: RoleProfile) => {
+    if (!user) return;
+    const updatedUser = {
+      ...user,
+      role,
+      tipoUsuario: role === 'Super Administrador' ? 'MASTER' : role,
+    };
+
+    saveAuthData(updatedUser, sessionToken || createSessionToken(user.id));
   };
 
   const requestPasswordReset = async (email: string): Promise<boolean> => {
-    const normalizedEmail = email.toLowerCase().trim();
-    if (!normalizedEmail) throw new Error('Informe o e-mail de acesso.');
-
+    const normalizedEmail = email.trim().toLowerCase();
     await sendPasswordResetEmail(auth, normalizedEmail);
     return true;
   };
 
   const isModuleActive = (moduleKey: string): boolean => {
     if (!user) return false;
-    if (isMasterProfile(user)) return true;
+    const isMaster = isMasterProfile(user);
 
-    if (activeModules[moduleKey] === true) return true;
-
-    const aliases: Record<string, string[]> = {
-      vagas: ['vagas', 'recrutamento'],
-      recrutamento: ['vagas', 'recrutamento'],
-      bancoTalentos: ['bancoTalentos', 'banco-talentos', 'candidatos'],
-      'banco-talentos': ['bancoTalentos', 'banco-talentos', 'candidatos'],
-      candidatos: ['bancoTalentos', 'banco-talentos', 'candidatos'],
-      entrevistas: ['entrevistas'],
-      headhunter: ['headhunter'],
-      equipeInterna: ['equipeInterna', 'colaboradores', 'dp'],
-      colaboradores: ['equipeInterna', 'colaboradores', 'dp'],
-      dp: ['equipeInterna', 'colaboradores', 'dp'],
-      pontoDigital: ['pontoDigital', 'ponto-digital', 'ponto', 'jornada'],
-      'ponto-digital': ['pontoDigital', 'ponto-digital', 'ponto', 'jornada'],
-      ponto: ['pontoDigital', 'ponto-digital', 'ponto', 'jornada'],
-      jornada: ['pontoDigital', 'ponto-digital', 'ponto', 'jornada'],
-      beneficios: ['beneficios', 'feriasBeneficios'],
-      ferias: ['ferias', 'feriasBeneficios'],
-      feriasBeneficios: ['ferias', 'feriasBeneficios'],
-      rescisao: ['rescisao'],
-      documentos: ['documentos', 'documentosAssinatura'],
-      documentosAssinatura: ['documentos', 'documentosAssinatura'],
-      afastamentos: ['afastamentos'],
-      sst: ['sst'],
-      agenda: ['agenda'],
-      relatorios: ['relatorios', 'relatoriosAvancados'],
-      relatoriosAvancados: ['relatorios', 'relatoriosAvancados'],
-      siteVagas: ['siteVagas', 'siteVagasPersonalizado', 'site-vagas'],
-      siteVagasPersonalizado: ['siteVagas', 'siteVagasPersonalizado', 'site-vagas'],
-      'site-vagas': ['siteVagas', 'siteVagasPersonalizado', 'site-vagas'],
-      consultorRH: ['consultorRH', 'iaConsultora', 'mais-rh-ia'],
-      iaConsultora: ['consultorRH', 'iaConsultora', 'mais-rh-ia'],
-      'mais-rh-ia': ['consultorRH', 'iaConsultora', 'mais-rh-ia'],
-      folha: ['folha', 'folhaPagamento', 'folha-pagamento'],
-      folhaPagamento: ['folha', 'folhaPagamento', 'folha-pagamento'],
-      'folha-pagamento': ['folha', 'folhaPagamento', 'folha-pagamento'],
-    };
-
-    return (aliases[moduleKey] || [moduleKey]).some((key) => activeModules[key] === true);
+    const check = PermissionService.checkAccess(moduleKey, {
+      userRole: user.role,
+      isMaster,
+      companyModules: activeModules,
+      userPermissions,
+      userId: user.id,
+      companyId: user.empresaId || user.companyId || undefined,
+    });
+    return check.allowed;
   };
 
   const hasScreenAccess = (screenKey: ScreenRouteKey): boolean => {
@@ -393,46 +341,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       return true;
     }
 
-    const screenModuleMap: Record<string, string> = {
-      vagas: 'vagas',
-      candidatos: 'bancoTalentos',
-      'banco-talentos': 'bancoTalentos',
-      entrevistas: 'entrevistas',
-      contratacoes: 'vagas',
-      headhunter: 'headhunter',
-      'headhunter-clientes': 'headhunter',
-      'headhunter-comercial': 'headhunter',
-      'headhunter-crm': 'headhunter',
-      'headhunter-propostas': 'headhunter',
-      'headhunter-contratos': 'headhunter',
-      'headhunter-comissoes': 'headhunter',
-      'headhunter-financeiro': 'headhunter',
-      'headhunter-despesas': 'headhunter',
-      'headhunter-garantias': 'headhunter',
-      'headhunter-relatorios': 'headhunter',
-      colaboradores: 'equipeInterna',
-      'equipe-interna': 'equipeInterna',
-      'ponto-digital': 'pontoDigital',
-      jornada: 'pontoDigital',
-      beneficios: 'beneficios',
-      ferias: 'feriasBeneficios',
-      rescisao: 'rescisao',
-      documentos: 'documentosAssinatura',
-      afastamentos: 'afastamentos',
-      sst: 'sst',
-      agenda: 'agenda',
-      relatorios: 'relatoriosAvancados',
-      'site-vagas': 'siteVagasPersonalizado',
-      'folha-pagamento': 'folhaPagamento',
-      'mais-rh-ia': 'iaConsultora',
-      'consultor-rh': 'iaConsultora',
-    };
-
-    const requiredModule = screenModuleMap[screenKey];
-    return requiredModule ? isModuleActive(requiredModule) : true;
+    return isModuleActive(screenKey);
   };
 
-  const hasActionAccess = (_actionKey: SystemActionKey): boolean => Boolean(user);
+  const hasActionAccess = (actionKey: SystemActionKey): boolean => {
+    if (!user) return false;
+    if (isMasterProfile(user)) return true;
+    return isModuleActive(actionKey);
+  };
 
   return (
     <AuthContext.Provider
@@ -442,6 +358,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         isAuthenticated: Boolean(user && auth.currentUser),
         isLoading,
         activeModules,
+        userPermissions,
         login,
         logout,
         switchDemoProfile,
@@ -457,10 +374,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   );
 };
 
-export const useAuth = (): AuthContextType => {
+export const useAuth = () => {
   const context = useContext(AuthContext);
   if (!context) {
-    throw new Error('useAuth deve ser utilizado dentro de um <AuthProvider>');
+    throw new Error('useAuth deve ser usado dentro de um AuthProvider');
   }
   return context;
 };

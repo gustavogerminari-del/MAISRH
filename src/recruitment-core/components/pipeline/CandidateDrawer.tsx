@@ -32,6 +32,8 @@ import {
 import { CandidateWithProcess, VagaCandidatosService } from '../../services/vagaCandidatosService';
 import { ProcessStage, UnifiedJob } from '../../types/recruitment';
 import { enviarCandidatoParaAdmissaoDP } from '../../../departamento-pessoal/services/dpFirestoreService';
+import { JobCandidateService } from '../../../services/JobCandidateService';
+import { JobService } from '../../../services/JobService';
 
 interface CandidateDrawerProps {
   candidate: CandidateWithProcess;
@@ -100,28 +102,55 @@ export const CandidateDrawer: React.FC<CandidateDrawerProps> = ({
   };
 
   const handleContratar = async () => {
-    if (window.confirm(`Confirmar a CONTRATAÇÃO de ${candidate.nome} para a vaga ${job.titulo}?`)) {
-      onMoveStage(candidate.id, 'Contratado');
-      
-      // Auto send to Departamento Pessoal (DP Admissão)
-      try {
-        await enviarCandidatoParaAdmissaoDP({
-          id: candidate.id,
-          empresaId: job.empresaId || candidate.empresaId || 'emp-001',
-          nome: candidate.nome,
-          name: candidate.nome,
-          email: candidate.email,
-          phone: candidate.telefone,
-          telefone: candidate.telefone,
-          cpf: candidate.cpf || '',
-          role: job.titulo,
-          cargo: job.titulo,
-          jobId: job.id,
-          pretensaoSalarial: candidate.pretensaoSalarial || 5000
-        } as any);
-        alert(`Parabéns! ${candidate.nome} foi contratado e seus dados foram encaminhados para admissão no Departamento Pessoal.`);
-      } catch (e) {
-        console.warn('Integração DP:', e);
+    if (!window.confirm(`Confirmar a CONTRATAÇÃO de ${candidate.nome} para a vaga ${job.titulo}?`)) return;
+
+    const candApp: any = {
+      id: candidate.id,
+      candidateId: candidate.candidatoId || candidate.id,
+      companyId: job.empresaId || candidate.empresaId || 'emp-001',
+      jobId: job.id,
+      name: candidate.nome,
+      role: job.titulo,
+      email: candidate.email || '',
+      phone: candidate.telefone || '',
+      cpf: candidate.cpf || '',
+      status: 'Em Processo'
+    };
+
+    try {
+      const res = await JobCandidateService.hireCandidate(candApp, job.titulo);
+      if (res.success) {
+        onMoveStage(candidate.id, 'Contratado');
+        alert(`Parabéns! ${candidate.nome} foi contratado(a) com sucesso! Registrado na Central Única de Contratações.`);
+      }
+    } catch (err: any) {
+      if (err?.message?.includes('origem definida')) {
+        const choice = window.confirm(
+          "Esta vaga ainda não possui uma origem definida.\n\n" +
+          "Clique OK para defini-la como Vaga de Cliente (HEADHUNTER - Financeiro).\n" +
+          "Clique CANCELAR para defini-la como Vaga Interna (RH - Departamento Pessoal)."
+        );
+        const chosenOrigin = choice ? 'HEADHUNTER' : 'RH_INTERNO';
+
+        try {
+          await JobService.update(job.id, {
+            origemProcesso: chosenOrigin,
+            moduloOrigem: chosenOrigin === 'HEADHUNTER' ? 'headhunter' : 'RH',
+            origem: chosenOrigin,
+            isHeadhunter: chosenOrigin === 'HEADHUNTER',
+            destinoContratacao: chosenOrigin === 'HEADHUNTER' ? 'FINANCEIRO_HEADHUNTER' : 'DP'
+          });
+
+          const resRetry = await JobCandidateService.hireCandidate(candApp, job.titulo);
+          if (resRetry.success) {
+            onMoveStage(candidate.id, 'Contratado');
+            alert(`Parabéns! ${candidate.nome} foi contratado(a) com sucesso!`);
+          }
+        } catch (retryErr: any) {
+          alert(`Erro ao contratar candidato: ${retryErr?.message || 'Erro desconhecido'}`);
+        }
+      } else {
+        alert(`Erro ao contratar candidato: ${err?.message || 'Erro desconhecido'}`);
       }
     }
   };

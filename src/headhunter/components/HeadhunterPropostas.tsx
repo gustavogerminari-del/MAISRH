@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { useAuth } from '../../auth/context/AuthContext';
 import { 
   FileText, 
   Plus, 
@@ -37,6 +38,8 @@ export const HeadhunterPropostas: React.FC<HeadhunterPropostasProps> = ({
   onUpdateProposalStatus,
   onConvertToContract,
 }) => {
+  const { user } = useAuth();
+  const activeCompanyId = user?.companyId || user?.empresaId || user?.tenantId;
   const [showModal, setShowModal] = useState(false);
   const [viewProposal, setViewProposal] = useState<HeadhunterProposal | null>(null);
 
@@ -61,11 +64,17 @@ export const HeadhunterPropostas: React.FC<HeadhunterPropostasProps> = ({
 
   const handleCreateProposal = (e: React.FormEvent) => {
     e.preventDefault();
+    if (!activeCompanyId) {
+      alert("Não foi possível identificar a empresa do usuário.");
+      return;
+    }
+
     const clientObj = clients.find(c => c.id === clienteId);
     const newProposal: HeadhunterProposal = {
       id: `prop-${Date.now()}`,
-      empresaId: 'emp-001',
-      criadoPor: 'Carlos Headhunter',
+      companyId: activeCompanyId,
+      empresaId: activeCompanyId,
+      criadoPor: user?.name || 'Carlos Headhunter',
       criadoEm: new Date().toISOString().split('T')[0],
       status: 'Rascunho',
       clienteId: clienteId || 'cli-101',

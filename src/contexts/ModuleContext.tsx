@@ -10,6 +10,7 @@ import {
   saveCompanyReleasedModules
 } from '../services/ModuleCatalogService';
 import { ModuleService } from '../services/ModuleService';
+import { PermissionService } from '../services/PermissionService';
 import { useAuth } from '../auth/context/AuthContext';
 
 export interface ModuleContextType {
@@ -79,16 +80,15 @@ export const ModuleProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     if (user?.tipoUsuario === 'MASTER' || user?.role === 'Super Administrador') {
       return true;
     }
-    if (companyModulesMap[moduleKey] !== undefined) {
-      return Boolean(companyModulesMap[moduleKey]);
-    }
     if (isModuleActive) {
       return isModuleActive(moduleKey);
     }
-    if (activeModules && activeModules[moduleKey] !== undefined) {
-      return Boolean(activeModules[moduleKey]);
-    }
-    return false;
+    const check = PermissionService.checkAccess(moduleKey, {
+      userRole: user?.role || user?.tipoUsuario,
+      companyModules: Object.keys(companyModulesMap).length > 0 ? companyModulesMap : activeModules,
+      userPermissions: user?.permissions
+    });
+    return check.allowed;
   };
 
   // CRUD Functions for 'modulos'

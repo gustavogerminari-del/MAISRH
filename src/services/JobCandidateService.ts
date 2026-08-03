@@ -5,6 +5,8 @@ import {
   getDoc, 
   setDoc, 
   deleteDoc, 
+  updateDoc,
+  deleteField,
   query, 
   where,
   onSnapshot,
@@ -16,6 +18,10 @@ import { AuditService } from './AuditService';
 import { CandidateService } from './CandidateService';
 import { JobService } from './JobService';
 import { enviarCandidatoParaAdmissaoDP } from '../departamento-pessoal/services/dpFirestoreService';
+import { 
+  getCompanyCapabilitiesFromFirestore, 
+  resolveJobOriginWithCompany 
+} from '../utils/companyModules';
 
 export interface InterviewData {
   id?: string;
@@ -483,17 +489,33 @@ export class JobCandidateService {
         console.warn('[HIRE] Não foi possível buscar dados da vaga:', e);
       }
 
-      const isHeadhunter = 
-        (candidate as any).origemProcesso === 'headhunter' ||
-        (candidate as any).origem === 'headhunter' ||
-        jobData?.origemProcesso === 'headhunter' ||
-        jobData?.origem === 'headhunter' ||
-        jobData?.tipoProcesso === 'headhunter' ||
-        jobData?.isHeadhunter === true ||
-        !!(jobData?.clientId || jobData?.clienteId || (candidate as any).clientId || (candidate as any).clienteId);
+      const companyIdToUse = candidate.companyId || jobData?.companyId || 'emp-001';
+      const capabilities = await getCompanyCapabilitiesFromFirestore(companyIdToUse);
 
-      const origProc = isHeadhunter ? 'headhunter' : 'recrutamento_interno';
-      const destContr = isHeadhunter ? 'financeiro' : 'departamento_pessoal';
+      const resolvedOrigin = resolveJobOriginWithCompany(jobData || candidate, capabilities);
+
+      if (resolvedOrigin === 'REQUIRES_CHOICE') {
+        const err = new Error('Esta vaga ainda não possui uma origem definida. Escolha se ela é uma vaga interna ou de cliente do Headhunter.');
+        console.error('[HIRE] Origem indefinida:', err);
+        throw err;
+      }
+
+      if (resolvedOrigin === 'HEADHUNTER' && !capabilities.hasHeadhunter) {
+        const err = new Error('Esta empresa não possui o módulo Headhunter.');
+        console.error('[HIRE] Módulo não liberado:', err);
+        throw err;
+      }
+
+      if (resolvedOrigin === 'RH_INTERNO' && !capabilities.hasDP) {
+        const err = new Error('Esta empresa não possui o módulo de Admissão.');
+        console.error('[HIRE] Módulo não liberado:', err);
+        throw err;
+      }
+
+      const isHeadhunter = resolvedOrigin === 'HEADHUNTER';
+
+      const origProc = isHeadhunter ? 'HEADHUNTER' : 'RH_INTERNO';
+      const destContr = isHeadhunter ? 'FINANCEIRO_HEADHUNTER' : 'DP';
       const initialStatusForward = isHeadhunter ? 'Aguardando Cobrança' : 'Aguardando Admissão';
 
       // 1. Prepare timeline
@@ -1509,6 +1531,210 @@ export class JobCandidateService {
     } catch (err) {
       console.error('Erro ao excluir candidatura no Firestore:', err);
       throw err;
+    }
+  }
+
+  static async migrateIncompatibleHirings(companyId: string): Promise<{
+    migratedCount: number;
+    migratedIds: string[];
+    canceledAdmissionsCount: number;
+    financialLinkedCount: number;
+    details: Array<{
+      hiringId: string;
+      candidatoNome: string;
+      oldDestino: string;
+      newDestino: string;
+      existedAdmissionId?: string;
+      wasAdmissionCanceled?: boolean;
+      financialId?: string;
+    }>;
+  }> {
+    if (!companyId) return { migratedCount: 0, migratedIds: [], canceledAdmissionsCount: 0, financialLinkedCount: 0, details: [] };
+
+    try {
+      const capabilities = await getCompanyCapabilitiesFromFirestore(companyId);
+      if (!capabilities.hasHeadhunter || capabilities.hasDP) {
+        // Migration only applies to companies with Headhunter active AND DP inactive
+        return { migratedCount: 0, migratedIds: [], canceledAdmissionsCount: 0, financialLinkedCount: 0, details: [] };
+      }
+
+      const q = query(collection(db, 'contratacoes'), where('companyId', '==', companyId));
+      const snapshot = await getDocs(q);
+
+      const migratedIds: string[] = [];
+      let canceledAdmissionsCount = 0;
+      let financialLinkedCount = 0;
+      const details: Array<any> = [];
+
+      for (const docSnap of snapshot.docs) {
+        const h = { id: docSnap.id, ...docSnap.data() } as any;
+
+        const destUpper = String(h.destinoContratacao || h.destino || h.destinoProcesso || '').toUpperCase();
+        const isIncompatible = 
+          destUpper.includes('DP') ||
+          destUpper.includes('ADMISSAO') ||
+          destUpper.includes('DEPARTAMENTO PESSOAL') ||
+          Boolean(h.statusAdmissao) ||
+          Boolean(h.admissaoId) ||
+          h.destinoContratacao === 'DP' ||
+          h.destino === 'DP' ||
+          h.destino === 'Departamento Pessoal';
+
+        if (!isIncompatible) continue;
+
+        const now = new Date().toISOString();
+        const oldDestino = h.destinoProcesso || h.destinoContratacao || h.destino || 'Departamento Pessoal';
+        const existingAdmissionId = h.admissaoId || `adm_${h.id}`;
+
+        // 1. Locate or create financial billing document
+        let targetFinancialId = h.financeiroId || h.cobrancaId;
+        if (!targetFinancialId) {
+          const qCob = query(collection(db, 'financeiro_cobrancas'), where('contratacaoId', '==', h.id));
+          const snapCob = await getDocs(qCob);
+          if (!snapCob.empty) {
+            targetFinancialId = snapCob.docs[0].id;
+          } else {
+            const directRef = doc(db, 'financeiro_cobrancas', `cob_${h.id}`);
+            const directSnap = await getDoc(directRef);
+            if (directSnap.exists()) {
+              targetFinancialId = directSnap.id;
+            } else {
+              const qRec = query(collection(db, 'receitas'), where('contratacaoId', '==', h.id));
+              const snapRec = await getDocs(qRec);
+              if (!snapRec.empty) {
+                targetFinancialId = snapRec.docs[0].id;
+              }
+            }
+          }
+        }
+
+        // If still not found, create a single billing record
+        if (!targetFinancialId) {
+          targetFinancialId = `cob_${h.id}`;
+          const clientId = h.clientId || h.clienteId || '';
+          const clientName = h.clienteNome || h.clientName || 'Cliente Headhunter';
+          const candidateName = h.candidatoNome || h.candidateName || 'Candidato';
+          const jobTitle = h.vagaTitulo || h.jobTitle || 'Vaga Corporativa';
+          const isClientProvided = Boolean(clientId && clientId !== 'cli-001' && clientName !== 'Cliente Headhunter');
+
+          const billingDoc = sanitizeFirestoreData({
+            id: targetFinancialId,
+            companyId: companyId,
+            empresaId: companyId,
+            contratacaoId: h.id,
+            candidateId: h.candidateId || h.candidatoId || '',
+            candidatoId: h.candidateId || h.candidatoId || '',
+            applicationId: h.applicationId || h.candidaturaId || h.id,
+            candidaturaId: h.applicationId || h.candidaturaId || h.id,
+            jobId: h.jobId || h.vagaId || '',
+            vagaId: h.jobId || h.vagaId || '',
+            clientId: clientId || 'cli-001',
+            clienteId: clientId || 'cli-001',
+            clienteNome: clientName,
+            candidatoNome: candidateName,
+            vagaTitulo: jobTitle,
+            status: isClientProvided ? "Aguardando Cobrança" : "Pendente de Dados Comerciais",
+            valor: h.salarioContratado || h.salarioFinal || h.salario || 0,
+            dataContratacao: h.contratadoEm || h.dataContratacao || now,
+            createdAt: h.createdAt || now,
+            updatedAt: now
+          });
+
+          await setDoc(doc(db, 'financeiro_cobrancas', targetFinancialId), billingDoc, { merge: true });
+        }
+
+        financialLinkedCount++;
+
+        // 2. Check if solicitacoes_admissao doc exists and cancel if needed
+        let wasAdmissionCanceled = false;
+        try {
+          let admDocRef = doc(db, 'solicitacoes_admissao', existingAdmissionId);
+          let admSnap = await getDoc(admDocRef);
+          if (!admSnap.exists()) {
+            const qAdm = query(collection(db, 'solicitacoes_admissao'), where('contratacaoId', '==', h.id));
+            const snapAdm = await getDocs(qAdm);
+            if (!snapAdm.empty) {
+              admDocRef = doc(db, 'solicitacoes_admissao', snapAdm.docs[0].id);
+              admSnap = snapAdm.docs[0];
+            }
+          }
+
+          if (admSnap.exists()) {
+            const admData = admSnap.data();
+            if (admData?.status !== 'Cancelada') {
+              await setDoc(admDocRef, sanitizeFirestoreData({
+                status: "Cancelada",
+                motivoCancelamento: "Contratação pertence ao fluxo Headhunter",
+                updatedAt: now
+              }), { merge: true });
+              wasAdmissionCanceled = true;
+              canceledAdmissionsCount++;
+            }
+          }
+        } catch (errAdm) {
+          console.warn('Aviso ao verificar/cancelar admissão incorreta:', errAdm);
+        }
+
+        // 3. Update hiring doc in contratacoes with merge
+        const updatedTimeline = [
+          ...(h.timeline || []),
+          {
+            id: `evt-${Date.now()}-mig`,
+            title: 'Migrado para Fluxo Headhunter',
+            description: 'Ajuste de módulo: contratação redirecionada para Financeiro / Headhunter.',
+            date: now.replace('T', ' ').substring(0, 16),
+            by: 'Sistema ATS'
+          }
+        ];
+
+        const updatePayload = sanitizeFirestoreData({
+          origemProcesso: "HEADHUNTER",
+          destinoContratacao: "FINANCEIRO_HEADHUNTER",
+          destinoProcesso: "Financeiro / Headhunter",
+          destino: "Financeiro",
+          statusProcesso: "Aguardando Cobrança",
+          statusFinanceiro: "Aguardando Cobrança",
+          statusEncaminhamento: "Aguardando Cobrança",
+          encaminhadoPara: "financeiro",
+          encaminhadoFinanceiro: true,
+          cobrancaId: targetFinancialId,
+          financeiroId: targetFinancialId,
+          isHeadhunter: true,
+          timeline: updatedTimeline,
+          updatedAt: now
+        });
+
+        // Use updateDoc to also remove DP navigation fields cleanly
+        await updateDoc(doc(db, 'contratacoes', h.id), {
+          ...updatePayload,
+          admissaoId: deleteField(),
+          statusAdmissao: deleteField(),
+          encaminhadoAdmissao: deleteField(),
+          encaminhadoAdmissaoEm: deleteField()
+        });
+
+        migratedIds.push(h.id);
+        details.push({
+          hiringId: h.id,
+          candidatoNome: h.candidatoNome || h.candidateName || 'Candidato',
+          oldDestino,
+          newDestino: 'Financeiro / Headhunter',
+          existedAdmissionId: existingAdmissionId,
+          wasAdmissionCanceled,
+          financialId: targetFinancialId
+        });
+      }
+
+      return {
+        migratedCount: migratedIds.length,
+        migratedIds,
+        canceledAdmissionsCount,
+        financialLinkedCount,
+        details
+      };
+    } catch (err) {
+      console.error('Erro na migração de contratações incompatíveis:', err);
+      return { migratedCount: 0, migratedIds: [], canceledAdmissionsCount: 0, financialLinkedCount: 0, details: [] };
     }
   }
 }

@@ -15,7 +15,8 @@ import {
   Check
 } from 'lucide-react';
 import { Department } from '../../organization';
-import { RoleProfile } from '../../auth';
+import { RoleProfile, useAuth } from '../../auth';
+import { PermissionService } from '../../services/PermissionService';
 import { 
   InternalTeamMember, 
   TeamMemberRoleType, 
@@ -45,6 +46,7 @@ export const TeamMemberModal: React.FC<TeamMemberModalProps> = ({
   departments,
   isAdmin,
 }) => {
+  const { activeModules } = useAuth();
   // Tab state: 'dados' | 'acesso'
   const [activeTab, setActiveTab] = useState<'dados' | 'acesso'>('dados');
 
@@ -515,33 +517,48 @@ export const TeamMemberModal: React.FC<TeamMemberModalProps> = ({
 
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                       {[
-                        { key: 'canCreateJobs', label: 'Criar Novas Vagas' },
-                        { key: 'canEditJobs', label: 'Editar Vagas Existentes' },
-                        { key: 'canCloseJobs', label: 'Fechar / Encerrar Vagas' },
-                        { key: 'canViewSalaries', label: 'Ver Faixas Salariais' },
-                        { key: 'canApproveHires', label: 'Aprovar Contratações' },
-                        { key: 'canDeleteCandidates', label: 'Excluir Candidatos' },
-                        { key: 'canScheduleInterviews', label: 'Agendar Entrevistas' },
-                        { key: 'canExportReports', label: 'Exportar Relatórios' },
-                        { key: 'canManageTeam', label: 'Gerenciar Quadro de Funcionários' },
-                      ].map(item => (
-                        <label
-                          key={item.key}
-                          className={`flex items-center gap-2.5 p-2.5 rounded-xl border transition-all cursor-pointer select-none ${
-                            permissions[item.key as keyof InternalPermissions]
-                              ? 'bg-emerald-50/70 border-emerald-200 text-emerald-900 font-semibold'
-                              : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'
-                          }`}
-                        >
-                          <input
-                            type="checkbox"
-                            checked={permissions[item.key as keyof InternalPermissions]}
-                            onChange={() => togglePermission(item.key as keyof InternalPermissions)}
-                            className="w-4 h-4 text-[#00875a] rounded border-slate-300 focus:ring-[#00875a]"
-                          />
-                          <span className="text-xs">{item.label}</span>
-                        </label>
-                      ))}
+                        { key: 'canCreateJobs', label: 'Criar Novas Vagas', module: 'vagas' },
+                        { key: 'canEditJobs', label: 'Editar Vagas Existentes', module: 'vagas' },
+                        { key: 'canCloseJobs', label: 'Fechar / Encerrar Vagas', module: 'vagas' },
+                        { key: 'canViewSalaries', label: 'Ver Faixas Salariais', module: 'folhaPagamento' },
+                        { key: 'canApproveHires', label: 'Aprovar Contratações', module: 'contratacoes' },
+                        { key: 'canDeleteCandidates', label: 'Excluir Candidatos', module: 'candidatos' },
+                        { key: 'canScheduleInterviews', label: 'Agendar Entrevistas', module: 'entrevistas' },
+                        { key: 'canExportReports', label: 'Exportar Relatórios', module: 'relatorios' },
+                        { key: 'canManageTeam', label: 'Gerenciar Quadro de Funcionários', module: 'funcionarios' },
+                      ].map(item => {
+                        const isCompanyContracted = PermissionService.isCompanyModuleActive(item.module, activeModules);
+                        const isChecked = isCompanyContracted && permissions[item.key as keyof InternalPermissions];
+
+                        return (
+                          <div
+                            key={item.key}
+                            className={`flex items-center justify-between p-2.5 rounded-xl border transition-all ${
+                              !isCompanyContracted
+                                ? 'bg-slate-100/70 border-slate-200 text-slate-400 opacity-60 cursor-not-allowed'
+                                : isChecked
+                                  ? 'bg-emerald-50/70 border-emerald-200 text-emerald-900 font-semibold'
+                                  : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'
+                            }`}
+                          >
+                            <label className="flex items-center gap-2.5 cursor-pointer select-none w-full">
+                              <input
+                                type="checkbox"
+                                disabled={!isCompanyContracted}
+                                checked={isChecked}
+                                onChange={() => togglePermission(item.key as keyof InternalPermissions)}
+                                className="w-4 h-4 text-[#00875a] rounded border-slate-300 focus:ring-[#00875a] disabled:cursor-not-allowed"
+                              />
+                              <span className="text-xs">{item.label}</span>
+                            </label>
+                            {!isCompanyContracted && (
+                              <span className="text-[10px] font-bold text-amber-700 bg-amber-50 px-2 py-0.5 rounded border border-amber-200 shrink-0 ml-2">
+                                Não Contratado
+                              </span>
+                            )}
+                          </div>
+                        );
+                      })}
                     </div>
                   </div>
                 </>

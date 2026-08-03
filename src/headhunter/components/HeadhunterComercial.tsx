@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { useAuth } from '../../auth/context/AuthContext';
 import { 
   TrendingUp, 
   Plus, 
@@ -65,6 +66,8 @@ export const HeadhunterComercial: React.FC<HeadhunterComercialProps> = ({
   onUpdateContractStatus,
   onCreateJobFromContract,
 }) => {
+  const { user } = useAuth();
+  const activeCompanyId = user?.companyId || user?.empresaId || user?.tenantId;
   const [activeSubTab, setActiveSubTab] = useState<'oportunidades' | 'propostas' | 'contratos'>('oportunidades');
   
   // New Opportunity Modal State
@@ -92,11 +95,17 @@ export const HeadhunterComercial: React.FC<HeadhunterComercialProps> = ({
 
   const handleCreateLead = (e: React.FormEvent) => {
     e.preventDefault();
+    if (!activeCompanyId) {
+      alert("Não foi possível identificar a empresa do usuário.");
+      return;
+    }
+
     const selectedClient = clients.find(c => c.id === clienteId);
     const newLead: HeadhunterLead = {
       id: `lead-${Date.now()}`,
-      empresaId: 'emp-001',
-      criadoPor: consultor,
+      companyId: activeCompanyId,
+      empresaId: activeCompanyId,
+      criadoPor: user?.name || consultor,
       criadoEm: new Date().toISOString().split('T')[0],
       status: 'Em Andamento',
       clienteId,
@@ -136,10 +145,16 @@ export const HeadhunterComercial: React.FC<HeadhunterComercialProps> = ({
   };
 
   const handleConvertToContract = (proposal: HeadhunterProposal) => {
+    if (!activeCompanyId) {
+      alert("Não foi possível identificar a empresa do usuário.");
+      return;
+    }
+
     const newContract: HeadhunterContract = {
       id: `ctr-${Date.now()}`,
-      empresaId: 'emp-001',
-      criadoPor: 'Carlos Headhunter',
+      companyId: activeCompanyId,
+      empresaId: activeCompanyId,
+      criadoPor: user?.name || 'Carlos Headhunter',
       criadoEm: new Date().toISOString().split('T')[0],
       status: 'Aguardando assinatura',
       clienteId: proposal.clienteId,

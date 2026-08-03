@@ -35,6 +35,7 @@ import {
   JobCandidateService, 
   EvaluationData 
 } from '../../services/JobCandidateService';
+import { JobService } from '../../services/JobService';
 import { Button } from '../../shared';
 import { ScheduleInterviewModal } from './ScheduleInterviewModal';
 import { enviarCandidatoParaAdmissaoDP } from '../../departamento-pessoal/services/dpFirestoreService';
@@ -195,9 +196,39 @@ export const CandidateDrawerPanel: React.FC<CandidateDrawerPanelProps> = ({
         await onRefresh();
       }
     } catch (err: any) {
-      console.error("[HIRE] Erro completo no frontend:", err);
-      console.error("[HIRE] Stack trace:", err?.stack);
-      alert(`[HIRE FALHA] Erro ao contratar candidato:\n\nMensagem: ${err?.message || 'Erro desconhecido'}\nCódigo: ${err?.code || 'N/A'}\n\nStack:\n${err?.stack || 'N/A'}`);
+      console.error("[HIRE] Erro no fluxo de contratação:", err);
+      if (err?.message?.includes('origem definida')) {
+        const choice = window.confirm(
+          "Esta vaga ainda não possui uma origem definida.\n\n" +
+          "Clique OK para defini-la como Vaga de Cliente (HEADHUNTER - Financeiro).\n" +
+          "Clique CANCELAR para defini-la como Vaga Interna (RH - Departamento Pessoal)."
+        );
+        const chosenOrigin = choice ? 'HEADHUNTER' : 'RH_INTERNO';
+
+        try {
+          if (candidate?.jobId) {
+            await JobService.update(candidate.jobId, {
+              origemProcesso: chosenOrigin,
+              moduloOrigem: chosenOrigin === 'HEADHUNTER' ? 'headhunter' : 'RH',
+              origem: chosenOrigin,
+              isHeadhunter: chosenOrigin === 'HEADHUNTER',
+              destinoContratacao: chosenOrigin === 'HEADHUNTER' ? 'FINANCEIRO_HEADHUNTER' : 'DP'
+            });
+
+            const resRetry = await JobCandidateService.hireCandidate(candidate, jobTitle, { closeOtherCandidates });
+            if (resRetry.success) {
+              alert(`🎉 Candidato(a) ${candidate.name} contratado(a) com sucesso!`);
+              setIsHireModalOpen(false);
+              await onRefresh();
+              return;
+            }
+          }
+        } catch (retryErr: any) {
+          alert(`Erro ao salvar origem da vaga: ${retryErr?.message || 'Erro desconhecido'}`);
+        }
+      } else {
+        alert(`[HIRE FALHA] Erro ao contratar candidato:\n\nMensagem: ${err?.message || 'Erro desconhecido'}`);
+      }
     } finally {
       setIsSubmittingHire(false);
     }

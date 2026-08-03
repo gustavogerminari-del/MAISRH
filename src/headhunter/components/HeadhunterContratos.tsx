@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { useAuth } from '../../auth/context/AuthContext';
 import { 
   FileSignature, 
   Plus, 

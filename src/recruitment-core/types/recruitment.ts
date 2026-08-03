@@ -46,6 +46,10 @@ export interface UnifiedJob {
   empresaId: string;
   companyId?: string;
   origemProcesso: OrigemProcesso;
+  moduloOrigem?: string;
+  origem?: string;
+  isHeadhunter?: boolean;
+  destinoContratacao?: string;
   
   // Cliente (Headhunter)
   clienteId?: string;

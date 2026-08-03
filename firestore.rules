@@ -279,6 +279,10 @@ service cloud.firestore {
       allow read, write: if signedIn();
     }
 
+    match /headhunter_leads/{id} {
+      allow read, write: if signedIn();
+    }
+
     match /headhunter_jobs/{id} {
       allow read, write: if signedIn();
     }
@@ -308,6 +312,30 @@ service cloud.firestore {
     }
 
     match /headhunter_interviews/{id} {
+      allow read, write: if signedIn();
+    }
+
+    match /receitas/{id} {
+      allow read, write: if signedIn();
+    }
+
+    match /despesas/{id} {
+      allow read, write: if signedIn();
+    }
+
+    match /comissoes/{id} {
+      allow read, write: if signedIn();
+    }
+
+    match /garantias/{id} {
+      allow read, write: if signedIn();
+    }
+
+    match /historicos_financeiros/{id} {
+      allow read, write: if signedIn();
+    }
+
+    match /financeiro_cobrancas/{id} {
       allow read, write: if signedIn();
     }
 

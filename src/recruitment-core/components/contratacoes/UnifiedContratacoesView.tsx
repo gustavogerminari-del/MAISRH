@@ -46,7 +46,11 @@ export const UnifiedContratacoesView: React.FC<UnifiedContratacoesViewProps> = (
   onOpenAiModal,
   onNavigateToTab
 }) => {
-  const { user } = useAuth();
+  const { user, isModuleActive } = useAuth();
+  const hasDpModule = isModuleActive('departamentoPessoal');
+  const hasAdmissaoModule = isModuleActive('admissao');
+  const hasHeadhunterModule = isModuleActive('headhunter');
+  const hasFinanceiroModule = isModuleActive('financeiroHeadhunter');
   const [firestoreHirings, setFirestoreHirings] = useState<any[]>([]);
   const [admissoesMap, setAdmissoesMap] = useState<Record<string, any>>({});
   const [cobrancasMap, setCobrancasMap] = useState<Record<string, any>>({});
@@ -56,9 +60,25 @@ export const UnifiedContratacoesView: React.FC<UnifiedContratacoesViewProps> = (
 
   // Modals state
   const [detailsItem, setDetailsItem] = useState<any | null>(null);
+  const [filterTab, setFilterTab] = useState<'TODAS' | 'DP' | 'HEADHUNTER' | 'AGUARDANDO_ADMISSAO' | 'AGUARDANDO_COBRANCA' | 'FINALIZADAS'>('TODAS');
 
   const activeCompanyId = companyId || user?.empresaId || user?.companyId || user?.tenantId;
   const isMaster = user?.role === 'Super Administrador' || user?.role === 'MASTER' || user?.tipoUsuario === 'MASTER' || user?.isMaster === true;
+
+  // Auto-migration effect for old hires erroneously classified as DP when company lacks DP module
+  useEffect(() => {
+    if (activeCompanyId && hasHeadhunterModule && !hasDpModule) {
+      JobCandidateService.migrateIncompatibleHirings(activeCompanyId)
+        .then((res) => {
+          if (res.migratedCount > 0) {
+            console.log(`[MIGRAÇÃO AUTOMÁTICA] ${res.migratedCount} contratação(ões) migrada(s) para Financeiro/Headhunter:`, res.details);
+          }
+        })
+        .catch((err) => {
+          console.warn('[MIGRAÇÃO AUTOMÁTICA] Erro ao executar migração:', err);
+        });
+    }
+  }, [activeCompanyId, hasHeadhunterModule, hasDpModule]);
 
   const vincularContratacaoEFinanceiro = async (hiring: any, financialId: string, billingData: any) => {
     try {
@@ -166,6 +186,27 @@ export const UnifiedContratacoesView: React.FC<UnifiedContratacoesViewProps> = (
 
   const handleOpenFinancial = async (hiring: any) => {
     if (openingFinancialId) return;
+
+    if (!hasHeadhunterModule || !hasFinanceiroModule) {
+      alert('Acesso não autorizado: Sua empresa não possui os módulos de Headhunter / Financeiro contratados.');
+      return;
+    }
+
+    const isRh = 
+      hasDpModule &&
+      (hiring.origemProcesso === 'recrutamento_interno' || hiring.origemProcesso === 'RH' || hiring.moduloOrigem === 'RH') &&
+      hiring.origemProcesso !== 'headhunter' &&
+      hiring.moduloOrigem !== 'headhunter' &&
+      hiring.destinoContratacao !== 'headhunter' &&
+      hiring.destino !== 'Financeiro' &&
+      hiring.destino !== 'Headhunter' &&
+      !hiring.isHeadhunter;
+
+    if (isRh) {
+      console.warn('[FINANCEIRO GUARDS] Contratação de RH não pode ser enviada para o Financeiro. Redirecionando para DP.');
+      return handleOpenAdmission(hiring);
+    }
+
     setOpeningFinancialId(hiring.id);
 
     console.log("[FINANCEIRO] Abrindo cobrança:", {
@@ -194,7 +235,41 @@ export const UnifiedContratacoesView: React.FC<UnifiedContratacoesViewProps> = (
           if (foundId) {
             financialId = foundId;
           } else {
-            throw new Error("Não foi possível localizar o processo vinculado a esta contratação.");
+            // Create single missing billing document for Headhunter hiring
+            const cobrancaId = `cob_${hiring.id}`;
+            const clientId = hiring.clientId || hiring.clienteId || '';
+            const clientName = hiring.clienteNome || hiring.clientName || 'Cliente Headhunter';
+            const candidateName = hiring.candidatoNome || hiring.candidateName || 'Candidato';
+            const jobTitle = hiring.vagaTitulo || hiring.jobTitle || 'Vaga Corporativa';
+            const isClientProvided = Boolean(clientId && clientId !== 'cli-001' && clientName !== 'Cliente Headhunter');
+            const now = new Date().toISOString();
+
+            const newBillingDoc = sanitizeFirestoreData({
+              id: cobrancaId,
+              companyId: activeCompanyId || hiring.companyId || hiring.empresaId || 'emp-001',
+              empresaId: activeCompanyId || hiring.companyId || hiring.empresaId || 'emp-001',
+              contratacaoId: hiring.id,
+              candidateId: hiring.candidateId || hiring.candidatoId || '',
+              candidatoId: hiring.candidateId || hiring.candidatoId || '',
+              applicationId: hiring.applicationId || hiring.candidaturaId || hiring.id,
+              candidaturaId: hiring.applicationId || hiring.candidaturaId || hiring.id,
+              jobId: hiring.jobId || hiring.vagaId || '',
+              vagaId: hiring.jobId || hiring.vagaId || '',
+              clientId: clientId || 'cli-001',
+              clienteId: clientId || 'cli-001',
+              clienteNome: clientName,
+              candidatoNome: candidateName,
+              vagaTitulo: jobTitle,
+              status: isClientProvided ? "Aguardando Cobrança" : "Pendente de Dados Comerciais",
+              valor: hiring.salarioContratado || hiring.salarioFinal || hiring.salario || 0,
+              dataContratacao: hiring.contratadoEm || hiring.dataContratacao || now,
+              createdAt: hiring.createdAt || now,
+              updatedAt: now
+            });
+
+            await setDoc(doc(db, 'financeiro_cobrancas', cobrancaId), newBillingDoc, { merge: true });
+            await vincularContratacaoEFinanceiro(hiring, cobrancaId, newBillingDoc);
+            financialId = cobrancaId;
           }
         } else {
           await vincularContratacaoEFinanceiro(hiring, financialId, recSnap.data());
@@ -330,6 +405,27 @@ export const UnifiedContratacoesView: React.FC<UnifiedContratacoesViewProps> = (
 
   const handleOpenAdmission = async (hiring: any) => {
     if (openingAdmissionId) return;
+
+    if (!hasDpModule || !hasAdmissaoModule) {
+      alert('Acesso não autorizado: Sua empresa não possui os módulos de Departamento Pessoal / Admissão contratados.');
+      return;
+    }
+
+    const isHeadhunter = 
+      hiring.origemProcesso === 'headhunter' ||
+      hiring.moduloOrigem === 'headhunter' ||
+      hiring.origem === 'headhunter' ||
+      hiring.destinoContratacao === 'headhunter' ||
+      hiring.destino === 'Financeiro' ||
+      hiring.destino === 'Headhunter' ||
+      hiring.encaminhadoPara === 'financeiro' ||
+      hiring.isHeadhunter === true;
+
+    if (isHeadhunter) {
+      console.warn('[ADMISSÃO GUARDS] Contratação Headhunter não pode ser enviada para o DP. Redirecionando para o Financeiro.');
+      return handleOpenFinancial(hiring);
+    }
+
     setOpeningAdmissionId(hiring.id);
 
     console.log("[ADMISSÃO] Abrindo processo:", {
@@ -472,8 +568,69 @@ export const UnifiedContratacoesView: React.FC<UnifiedContratacoesViewProps> = (
 
   // Calculate KPIs
   const totalContratacoes = rawList.length;
-  const rhHirings = rawList.filter(h => h.origemProcesso !== 'headhunter' && h.destinoContratacao !== 'headhunter');
-  const headhunterHirings = rawList.filter(h => h.origemProcesso === 'headhunter' || h.destinoContratacao === 'headhunter');
+  const rhHirings = hasDpModule
+    ? rawList.filter(h => 
+        h.origemProcesso !== 'HEADHUNTER' &&
+        h.origemProcesso !== 'headhunter' && 
+        h.moduloOrigem !== 'headhunter' && 
+        h.origem !== 'headhunter' &&
+        h.destinoContratacao !== 'FINANCEIRO_HEADHUNTER' &&
+        h.destinoContratacao !== 'headhunter' && 
+        h.destino !== 'Financeiro' && 
+        h.destino !== 'Financeiro / Headhunter' &&
+        h.destino !== 'Headhunter' && 
+        !h.isHeadhunter
+      )
+    : [];
+
+  const headhunterHirings = hasDpModule
+    ? rawList.filter(h => 
+        h.origemProcesso === 'HEADHUNTER' ||
+        h.origemProcesso === 'headhunter' || 
+        h.moduloOrigem === 'headhunter' || 
+        h.origem === 'headhunter' ||
+        h.destinoContratacao === 'FINANCEIRO_HEADHUNTER' ||
+        h.destinoContratacao === 'headhunter' || 
+        h.destino === 'Financeiro' || 
+        h.destino === 'Financeiro / Headhunter' ||
+        h.destino === 'Headhunter' || 
+        Boolean(h.isHeadhunter)
+      )
+    : rawList;
+
+  const filteredList = rawList.filter(h => {
+    const isHead = 
+      !hasDpModule ||
+      h.origemProcesso === 'HEADHUNTER' ||
+      h.origemProcesso === 'headhunter' || 
+      h.moduloOrigem === 'headhunter' || 
+      h.origem === 'headhunter' ||
+      h.destinoContratacao === 'FINANCEIRO_HEADHUNTER' ||
+      h.destinoContratacao === 'headhunter' || 
+      h.destino === 'Financeiro' || 
+      h.destino === 'Financeiro / Headhunter' ||
+      h.destino === 'Headhunter' || 
+      Boolean(h.isHeadhunter);
+
+    const admDoc = admissoesMap[h.id] || admissoesMap[`${h.jobId || h.vagaId}_${h.candidateId || h.candidatoId}`];
+    const cobDoc = cobrancasMap[h.id] || cobrancasMap[`${h.jobId || h.vagaId}_${h.candidateId || h.candidatoId}`];
+
+    const currentStatus = isHead 
+      ? (cobDoc?.status || h.statusCobranca || h.statusFinanceiro || h.statusProcesso || 'Aguardando Cobrança')
+      : (admDoc?.status || h.statusAdmissao || 'Aguardando Admissão');
+
+    const statusLower = String(currentStatus).toLowerCase();
+
+    if (filterTab === 'DP') return !isHead;
+    if (filterTab === 'HEADHUNTER') return isHead;
+    if (filterTab === 'AGUARDANDO_ADMISSAO') return !isHead && statusLower.includes('admissão');
+    if (filterTab === 'AGUARDANDO_COBRANCA') return isHead && (statusLower.includes('cobrança') || statusLower.includes('aguardando'));
+    if (filterTab === 'FINALIZADAS') {
+      return statusLower.includes('concluíd') || statusLower.includes('finaliz') || statusLower.includes('admitid') || statusLower.includes('pago');
+    }
+
+    return true;
+  });
 
   return (
     <div className="space-y-6">
@@ -495,24 +652,58 @@ export const UnifiedContratacoesView: React.FC<UnifiedContratacoesViewProps> = (
       </div>
 
       {/* KPI Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+      <div className={`grid grid-cols-1 ${hasDpModule ? 'sm:grid-cols-3' : 'sm:grid-cols-2'} gap-3`}>
         <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-2xs space-y-1">
           <span className="text-[10px] font-extrabold text-slate-500 uppercase tracking-wider block">Total de Contratações</span>
           <p className="text-2xl font-black text-slate-900">{totalContratacoes}</p>
           <span className="text-[10px] text-slate-400 font-medium">Contratações concluídas</span>
         </div>
 
-        <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-2xs space-y-1">
-          <span className="text-[10px] font-extrabold text-slate-500 uppercase tracking-wider block">Encaminhadas para DP</span>
-          <p className="text-2xl font-black text-emerald-600">{rhHirings.length}</p>
-          <span className="text-[10px] text-emerald-600 font-bold">Fluxo RH / Departamento Pessoal</span>
-        </div>
+        {hasDpModule && (
+          <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-2xs space-y-1">
+            <span className="text-[10px] font-extrabold text-slate-500 uppercase tracking-wider block">Encaminhadas para DP</span>
+            <p className="text-2xl font-black text-emerald-600">{rhHirings.length}</p>
+            <span className="text-[10px] text-emerald-600 font-bold">Fluxo RH / Departamento Pessoal</span>
+          </div>
+        )}
 
         <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-2xs space-y-1">
           <span className="text-[10px] font-extrabold text-slate-500 uppercase tracking-wider block">Encaminhadas para Financeiro</span>
           <p className="text-2xl font-black text-indigo-600">{headhunterHirings.length}</p>
           <span className="text-[10px] text-indigo-600 font-bold">Fluxo Headhunter / Faturamento</span>
         </div>
+      </div>
+
+      {/* Filter Tabs Bar */}
+      <div className="flex flex-wrap items-center gap-2 bg-slate-100 p-1.5 rounded-2xl border border-slate-200">
+        {[
+          { id: 'TODAS', label: 'Todas', count: rawList.length },
+          ...(hasDpModule ? [{ id: 'DP', label: 'Departamento Pessoal', count: rhHirings.length }] : []),
+          { id: 'HEADHUNTER', label: 'Financeiro / Headhunter', count: headhunterHirings.length },
+          ...(hasDpModule ? [{ id: 'AGUARDANDO_ADMISSAO', label: 'Aguardando Admissão' }] : []),
+          { id: 'AGUARDANDO_COBRANCA', label: 'Aguardando Cobrança' },
+          { id: 'FINALIZADAS', label: 'Finalizadas' }
+        ].map((tab) => (
+          <button
+            key={tab.id}
+            type="button"
+            onClick={() => setFilterTab(tab.id as any)}
+            className={`px-3.5 py-2 text-xs font-extrabold rounded-xl transition-all cursor-pointer flex items-center gap-1.5 ${
+              filterTab === tab.id
+                ? 'bg-white text-slate-900 shadow-xs border border-slate-200/80'
+                : 'text-slate-600 hover:text-slate-900 hover:bg-slate-200/50'
+            }`}
+          >
+            <span>{tab.label}</span>
+            {tab.count !== undefined && (
+              <span className={`px-1.5 py-0.5 text-[10px] rounded-full ${
+                filterTab === tab.id ? 'bg-slate-100 text-slate-800 font-bold' : 'bg-slate-200 text-slate-600'
+              }`}>
+                {tab.count}
+              </span>
+            )}
+          </button>
+        ))}
       </div>
 
       {/* Loading state */}
@@ -526,14 +717,26 @@ export const UnifiedContratacoesView: React.FC<UnifiedContratacoesViewProps> = (
       {/* Hirings Cards List */}
       {!loading && (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {rawList.length === 0 ? (
+          {filteredList.length === 0 ? (
             <div className="col-span-full bg-white p-12 rounded-2xl border border-slate-200 text-center text-slate-500 text-xs font-medium">
-              Nenhuma contratação registrada até o momento.
+              Nenhuma contratação encontrada para o filtro selecionado.
             </div>
           ) : (
-            rawList.map(h => {
+            filteredList.map(h => {
               const itemKey = h.id;
-              const isHeadhunter = h.origemProcesso === 'headhunter' || h.destinoContratacao === 'headhunter';
+              const isHeadhunter = 
+                !hasDpModule ||
+                h.origemProcesso === 'HEADHUNTER' ||
+                h.origemProcesso === 'headhunter' || 
+                h.moduloOrigem === 'headhunter' ||
+                h.origem === 'headhunter' ||
+                h.destinoContratacao === 'FINANCEIRO_HEADHUNTER' ||
+                h.destinoContratacao === 'headhunter' ||
+                h.destino === 'Financeiro' ||
+                h.destino === 'Financeiro / Headhunter' ||
+                h.destino === 'Headhunter' ||
+                h.encaminhadoPara === 'financeiro' ||
+                h.isHeadhunter === true;
               
               // Sincronização automática em tempo real dos status dos módulos DP e Financeiro
               const admDoc = admissoesMap[h.id] || admissoesMap[`${h.jobId}_${h.candidateId}`] || admissoesMap[`${h.jobId}_${h.candidatoId}`];
@@ -545,10 +748,10 @@ export const UnifiedContratacoesView: React.FC<UnifiedContratacoesViewProps> = (
               const salary = Number(h.salarioContratado || h.salarioFinal || h.salario || 0);
 
               const currentStatus = isHeadhunter
-                ? (cobDoc?.status || h.statusEncaminhamento || 'Aguardando Cobrança')
-                : (admDoc?.status || h.statusEncaminhamento || 'Aguardando Admissão');
+                ? (cobDoc?.status || h.statusFinanceiro || h.statusProcesso || h.statusEncaminhamento || 'Aguardando Cobrança')
+                : (admDoc?.status || h.statusAdmissao || h.statusEncaminhamento || 'Aguardando Admissão');
 
-              const destinationLabel = isHeadhunter ? 'Financeiro' : 'Departamento Pessoal';
+              const destinationLabel = isHeadhunter ? 'Financeiro / Headhunter' : 'Departamento Pessoal';
 
               return (
                 <div key={itemKey} className="bg-white p-5 rounded-2xl border border-slate-200 shadow-2xs space-y-4 hover:border-slate-300 transition-all flex flex-col justify-between">

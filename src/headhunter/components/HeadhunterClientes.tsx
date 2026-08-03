@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { useAuth } from '../../auth/context/AuthContext';
 import { 
   Building2, 
   Users, 
@@ -30,6 +31,8 @@ export const HeadhunterClientes: React.FC<HeadhunterClientesProps> = ({
   onAddClient,
   onOpenAiModal
 }) => {
+  const { user } = useAuth();
+  const activeCompanyId = user?.companyId || user?.empresaId || user?.tenantId;
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedStatus, setSelectedStatus] = useState<string>('Todos');
   const [selectedClient, setSelectedClient] = useState<HeadhunterClient | null>(clients[0] || null);
@@ -64,10 +67,16 @@ export const HeadhunterClientes: React.FC<HeadhunterClientesProps> = ({
 
   const handleCreateClient = (e: React.FormEvent) => {
     e.preventDefault();
+    if (!activeCompanyId) {
+      alert("Não foi possível identificar a empresa do usuário.");
+      return;
+    }
+
     const newClient: HeadhunterClient = {
       id: `cli-${Date.now()}`,
-      empresaId: 'emp-001',
-      criadoPor: 'Headhunter Logado',
+      companyId: activeCompanyId,
+      empresaId: activeCompanyId,
+      criadoPor: user?.name || 'Headhunter Logado',
       criadoEm: new Date().toISOString().split('T')[0],
       status: 'Ativo',
       razaoSocial,

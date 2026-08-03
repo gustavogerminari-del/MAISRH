@@ -47,9 +47,9 @@ export const ProtectedRoute: React.FC<ProtectedRouteProps> = ({
         </div>
 
         <div className="space-y-1">
-          <h3 className="text-lg font-black text-slate-900">Acesso Restrito ao Perfil</h3>
-          <p className="text-xs text-slate-500">
-            Seu perfil atual (<strong className="text-slate-800">{user.role}</strong>) não possui autorização para acionar este recurso.
+          <h3 className="text-lg font-black text-rose-900">Acesso não autorizado.</h3>
+          <p className="text-xs text-slate-600">
+            Este módulo não está contratado para a sua empresa ou seu usuário não possui permissão de acesso.
           </p>
         </div>
 

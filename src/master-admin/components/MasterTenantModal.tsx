@@ -31,6 +31,7 @@ import {
   SystemModule,
   INITIAL_SYSTEM_MODULES
 } from '../../services/ModuleCatalogService';
+import { PLATFORM_MODULE_CATEGORIES } from '../../services/PermissionService';
 
 interface MasterTenantModalProps {
   tenant?: ClientTenant | null;
@@ -888,39 +889,44 @@ export const MasterTenantModal: React.FC<MasterTenantModalProps> = ({
                 </div>
               )}
 
-              {/* Lista Dinâmica de Módulos do Catálogo */}
-              {!isLoadingModules && !modulesError && catalogModules.length > 0 && (
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  {catalogModules.map((mod) => {
-                    const isEnabled = !!modules[mod.key as keyof TenantModulePermissions];
-                    return (
-                      <div
-                        key={mod.key}
-                        onClick={() => handleToggleModule(mod.key as keyof TenantModulePermissions)}
-                        className={`p-3.5 rounded-xl border cursor-pointer transition-all flex items-start justify-between gap-3 ${
-                          isEnabled
-                            ? 'bg-emerald-50/60 border-emerald-300 text-slate-900 shadow-2xs hover:border-emerald-400'
-                            : 'bg-slate-50 border-slate-200 text-slate-400 hover:border-slate-300'
-                        }`}
-                      >
-                        <div>
-                          <div className="flex items-center gap-1.5 flex-wrap">
-                            <span className="text-xs font-bold text-slate-900">{mod.nome}</span>
-                            {mod.categoria && (
-                              <span className="text-[10px] px-1.5 py-0.2 rounded bg-slate-200/70 text-slate-600 font-semibold">
-                                {mod.categoria}
-                              </span>
-                            )}
-                          </div>
-                          <p className="text-[11px] text-slate-500 mt-0.5">{mod.descricao}</p>
-                        </div>
-
-                        <div className={`p-1.5 rounded-lg shrink-0 transition-colors ${isEnabled ? 'bg-emerald-600 text-white' : 'bg-slate-200 text-slate-500'}`}>
-                          {isEnabled ? <Unlock className="w-4 h-4" /> : <Lock className="w-4 h-4" />}
-                        </div>
+              {/* Lista Organizada por Categoria dos Módulos da Plataforma */}
+              {!isLoadingModules && !modulesError && (
+                <div className="space-y-6">
+                  {Object.entries(PLATFORM_MODULE_CATEGORIES).map(([catKey, catData]) => (
+                    <div key={catKey} className="space-y-2.5">
+                      <div className="flex items-center gap-2 border-b border-slate-200 pb-1.5">
+                        <span className="text-[11px] font-black uppercase tracking-wider text-indigo-900 bg-indigo-50 px-2.5 py-0.5 rounded-md border border-indigo-100">
+                          {catData.title}
+                        </span>
                       </div>
-                    );
-                  })}
+
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                        {catData.modules.map((mod) => {
+                          const isEnabled = !!modules[mod.key as keyof TenantModulePermissions];
+                          return (
+                            <div
+                              key={mod.key}
+                              onClick={() => handleToggleModule(mod.key as keyof TenantModulePermissions)}
+                              className={`p-3 rounded-xl border cursor-pointer transition-all flex items-start justify-between gap-2.5 select-none ${
+                                isEnabled
+                                  ? 'bg-emerald-50/70 border-emerald-300 text-slate-900 shadow-2xs hover:border-emerald-400'
+                                  : 'bg-slate-50 border-slate-200 text-slate-400 hover:border-slate-300'
+                              }`}
+                            >
+                              <div>
+                                <span className="text-xs font-bold text-slate-900 block">{mod.name}</span>
+                                <p className="text-[11px] text-slate-500 mt-0.5 leading-snug">{mod.description}</p>
+                              </div>
+
+                              <div className={`p-1.5 rounded-lg shrink-0 transition-colors ${isEnabled ? 'bg-emerald-600 text-white' : 'bg-slate-200 text-slate-500'}`}>
+                                {isEnabled ? <Unlock className="w-3.5 h-3.5" /> : <Lock className="w-3.5 h-3.5" />}
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  ))}
                 </div>
               )}
             </div>
