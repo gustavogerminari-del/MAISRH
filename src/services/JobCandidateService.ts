@@ -6,14 +6,14 @@ import {
   setDoc, 
   deleteDoc, 
   query, 
-  where 
+  where,
+  onSnapshot 
 } from 'firebase/firestore';
 import { db, auth } from '../lib/firebase';
 import { sanitizeFirestoreData } from '../lib/firestoreUtils';
 import { AuditService } from './AuditService';
 import { CandidateService } from './CandidateService';
-import { RecruitmentService } from '../recruitment-core/services/recruitmentService';
-import { INITIAL_CANDIDATES } from '../data/initialData';
+import { enviarCandidatoParaAdmissaoDP } from '../departamento-pessoal/services/dpFirestoreService';
 
 export interface InterviewData {
   id?: string;
@@ -24,7 +24,7 @@ export interface InterviewData {
   location?: string;
   meetingLink?: string;
   notes?: string;
-  status?: 'Agendada' | 'Realizada' | 'Cancelada';
+  status?: 'Agendada' | 'Reagendada' | 'Realizada' | 'Cancelada';
 }
 
 export interface EvaluationData {
@@ -33,7 +33,13 @@ export interface EvaluationData {
   communicationScore: number; // 1-5
   postureScore: number; // 1-5
   knowledgeScore: number; // 1-5
+  overallScore?: number; // 1-5
+  parecerRH?: string;
   notes: string;
+  competencies?: string[];
+  strengths?: string[];
+  improvements?: string[];
+  aiOpinion?: string;
   finalOpinion: 'Aprovado' | 'Reprovado' | 'Em Dúvida' | 'Pendente';
   evaluatedBy: string;
   evaluatedAt: string;
@@ -84,6 +90,12 @@ export interface JobCandidateApplication {
   appliedDate: string;
   status: ApplicationStatus;
   
+  // Rejection details
+  motivoReprovacao?: string;
+  observacaoReprovacao?: string;
+  manterBancoTalentos?: boolean;
+  reprovadoEm?: string;
+
   // Filtering fields
   education: string;
   course?: string;
@@ -114,136 +126,124 @@ export interface JobCandidateApplication {
   updatedAt: string;
 }
 
-export function mapCandidateToApplication(
-  cand: any, 
-  jobId: string, 
-  companyId: string = 'emp-001',
-  index: number = 0
-): JobCandidateApplication {
-  const scores = [92, 88, 85, 95, 82];
-  const compatScore = cand.compatibilityScore || cand.matchIaPercent || scores[index % scores.length];
-  
-  return {
-    id: `app-${jobId}-${cand.id}`,
-    companyId: cand.companyId || companyId,
-    jobId: jobId,
-    candidateId: cand.id,
-    name: cand.name || cand.nome || 'Candidato',
-    cpf: cand.cpf || '123.456.789-00',
-    photo: cand.avatar || cand.photo || cand.fotoUrl || '',
-    email: cand.email || 'candidato@email.com',
-    phone: cand.phone || cand.telefone || '(11) 99999-9999',
-    role: cand.role || cand.cargoAtual || 'Profissional',
-    city: cand.location ? cand.location.split('-')[0].trim() : cand.cidade || 'São Paulo',
-    state: cand.location && cand.location.includes('-') ? cand.location.split('-')[1].trim() : 'SP',
-    appliedDate: cand.appliedDate || new Date().toISOString().split('T')[0],
-    status: (cand.currentStageId === 'triagem' ? 'Triagem IA' : cand.currentStageId === 'entrevista_rh' ? 'Em Análise RH' : cand.status || 'Novos') as ApplicationStatus,
-    education: cand.education || cand.escolaridade || 'Superior Completo',
-    course: cand.course || cand.curso || 'Engenharia / Administração / TI',
-    experienceYears: cand.experienceYears || cand.experienciaAnos || 3,
-    salaryExpectation: cand.salaryExpectation || (cand.pretensaoSalarial ? `R$ ${cand.pretensaoSalarial}` : 'R$ 7.500'),
-    availability: 'Imediata',
-    isPCD: cand.isPCD || cand.pcd || false,
-    resumeUrl: cand.resumeUrl || cand.curriculoUrl || '',
-    resumeKeywords: cand.skills || cand.competencias || ['Logística', 'Supply Chain', 'Processos'],
-    compatibilityScore: compatScore,
-    compatibilityLevel: compatScore >= 85 ? 'Muito compatível' : 'Compatível',
-    objective: cand.objective || `Interesse na oportunidade para a vaga`,
-    experiences: cand.experiences || [
-      { company: 'Empresa Anterior S/A', role: cand.role || 'Analista Sênior', period: '2021 - Atual', description: 'Responsável pela execução de processos de alto desempenho.' }
-    ],
-    educationDetails: cand.educationDetails || [
-      { institution: 'Universidade de São Paulo', degree: 'Bacharelado', year: '2020' }
-    ],
-    aiAnalysis: cand.aiAnalysis || {
-      summary: 'Candidato de alto potencial, com boa aderência aos requisitos da vaga e perfil proativo.',
-      strengths: ['Organização e processos', 'Comunicação assertiva', 'Análise técnica'],
-      pointsOfAttention: ['Alinhamento prévio de expectativas'],
-      competencies: cand.skills || cand.competencias || ['Logística', 'Gestão', 'Processos'],
-      behavioralAnalysis: 'Demonstra postura colaborativa, excelente capacidade técnica e visão analítica.',
-      interviewSuggestions: ['Perguntar sobre soluções adotadas em situações desafiadoras anteriores'],
-      score: compatScore,
-      recommendation: compatScore >= 85 ? 'Altamente Recomendado' : 'Recomendado'
-    },
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString()
-  };
-}
-
 const COLLECTION_NAME = 'candidate_applications';
 
 export class JobCandidateService {
   static async listAll(companyId?: string): Promise<JobCandidateApplication[]> {
-    try {
-      const q = (companyId && companyId !== 'master')
-        ? query(collection(db, COLLECTION_NAME), where('companyId', '==', companyId))
-        : collection(db, COLLECTION_NAME);
-      
-      const snap = await getDocs(q as any);
-      if (!snap.empty) {
-        const list: JobCandidateApplication[] = [];
-        snap.forEach(d => list.push(d.data() as JobCandidateApplication));
-        return list;
-      }
-    } catch (err) {
-      console.warn('Erro ao buscar todas as candidaturas no Firestore:', err);
-    }
+    if (!companyId) return [];
 
-    // Fallback: Map candidates from candidate bank
-    const bankCandidates = await CandidateService.list(companyId);
-    return bankCandidates.map((c, i) => mapCandidateToApplication(c, c.currentJobId || 'vaga-1', companyId, i));
-  }
-
-  static async listByJob(jobId: string, companyId?: string): Promise<JobCandidateApplication[]> {
     try {
-      const q = query(collection(db, COLLECTION_NAME), where('jobId', '==', jobId));
+      const q = query(
+        collection(db, COLLECTION_NAME),
+        where('companyId', '==', companyId)
+      );
       
       const snap = await getDocs(q);
       if (!snap.empty) {
-        const list: JobCandidateApplication[] = [];
-        snap.forEach(d => list.push(d.data() as JobCandidateApplication));
-        return list;
+        return snap.docs.map(d => ({
+          ...(d.data() as JobCandidateApplication),
+          id: d.id
+        }));
       }
     } catch (err) {
-      console.warn('Erro ao buscar candidaturas por vaga no Firestore:', err);
+      console.error('Erro ao buscar candidaturas no Firestore:', err);
+      throw err;
     }
 
-    // Fallback if no specific candidatures exist for this jobId yet:
-    // Map candidates from CandidateService (talent bank) into applications for this jobId so they appear in this job's candidates view!
-    const bankCandidates = await CandidateService.list(companyId);
-    if (bankCandidates.length > 0) {
-      return bankCandidates.map((c, i) => mapCandidateToApplication(c, jobId, companyId, i));
+    return [];
+  }
+
+  static async listByJob(jobId: string, companyId?: string): Promise<JobCandidateApplication[]> {
+    if (!jobId || !companyId) return [];
+
+    try {
+      const q = query(
+        collection(db, COLLECTION_NAME),
+        where('companyId', '==', companyId),
+        where('jobId', '==', jobId)
+      );
+      
+      const snap = await getDocs(q);
+      if (!snap.empty) {
+        return snap.docs.map(d => ({
+          ...(d.data() as JobCandidateApplication),
+          id: d.id
+        }));
+      }
+    } catch (err) {
+      console.error('Erro ao buscar candidaturas por vaga no Firestore:', err);
+      throw err;
     }
 
-    return INITIAL_CANDIDATES.map((c, i) => mapCandidateToApplication(c, jobId, companyId, i));
+    return [];
+  }
+
+  static subscribeByJob(
+    jobId: string,
+    companyId: string | undefined,
+    onUpdate: (apps: JobCandidateApplication[]) => void,
+    onError?: (err: any) => void
+  ): () => void {
+    if (!jobId || !companyId) {
+      onUpdate([]);
+      return () => {};
+    }
+
+    const q = query(
+      collection(db, COLLECTION_NAME),
+      where('companyId', '==', companyId),
+      where('jobId', '==', jobId)
+    );
+
+    return onSnapshot(
+      q,
+      (snapshot) => {
+        const list: JobCandidateApplication[] = [];
+        snapshot.forEach((d) => {
+          const data = d.data() as JobCandidateApplication;
+          list.push({
+            ...data,
+            id: d.id
+          });
+        });
+        onUpdate(list);
+      },
+      (err) => {
+        console.error('Erro na assinatura em tempo real de candidaturas da vaga:', err);
+        if (onError) onError(err);
+        else onUpdate([]);
+      }
+    );
   }
 
   static async getById(id: string): Promise<JobCandidateApplication | null> {
     try {
       const snap = await getDoc(doc(db, COLLECTION_NAME, id));
       if (snap.exists()) {
-        return snap.data() as JobCandidateApplication;
+        return {
+          ...(snap.data() as JobCandidateApplication),
+          id: snap.id
+        };
       }
     } catch (err) {
-      console.warn('Erro ao buscar candidatura por ID no Firestore:', err);
+      console.error('Erro ao buscar candidatura por ID no Firestore:', err);
+      throw err;
     }
-
-    // Fallback: search across mapped candidates
-    const all = await this.listAll();
-    const found = all.find(c => c.id === id);
-    if (found) return found;
 
     return null;
   }
 
-  static async create(appData: Partial<JobCandidateApplication> & { jobId: string; companyId?: string }): Promise<JobCandidateApplication> {
-    const id = appData.id || `app-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`;
+  static async create(appData: Partial<JobCandidateApplication> & { jobId: string; companyId: string }): Promise<JobCandidateApplication> {
+    if (!appData.companyId) {
+      throw new Error('companyId é obrigatório para registrar uma candidatura.');
+    }
+
+    const id = appData.id || `app-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`;
     const now = new Date().toISOString();
-    const companyId = appData.companyId || 'emp-001';
 
     const newApp: JobCandidateApplication = {
       id,
-      companyId,
+      companyId: appData.companyId,
       jobId: appData.jobId,
       candidateId: appData.candidateId || `cand-${Date.now()}`,
       name: appData.name || '',
@@ -264,8 +264,8 @@ export class JobCandidateService {
       isPCD: appData.isPCD || false,
       resumeUrl: appData.resumeUrl || '',
       resumeKeywords: appData.resumeKeywords || [],
-      compatibilityScore: appData.compatibilityScore || 0,
-      compatibilityLevel: appData.compatibilityLevel || 'Baixa compatibilidade',
+      compatibilityScore: appData.compatibilityScore || 85,
+      compatibilityLevel: appData.compatibilityLevel || 'Compatível',
       objective: appData.objective || '',
       experiences: appData.experiences || [],
       educationDetails: appData.educationDetails || [],
@@ -292,10 +292,11 @@ export class JobCandidateService {
         description: `Candidatura de ${newApp.name} criada para a vaga ${newApp.jobId}`,
         moduleName: 'Recrutamento',
         targetEntity: 'Candidatura',
-        companyId
+        companyId: appData.companyId
       });
     } catch (err) {
-      console.warn('Erro ao salvar candidatura no Firestore:', err);
+      console.error('Erro ao salvar candidatura no Firestore:', err);
+      throw err;
     }
 
     return newApp;
@@ -304,7 +305,7 @@ export class JobCandidateService {
   static async updateStatus(id: string, status: ApplicationStatus, notes?: string): Promise<void> {
     try {
       const existing = await this.getById(id);
-      if (!existing) return;
+      if (!existing) throw new Error('Candidatura não encontrada.');
 
       const now = new Date().toISOString();
       const updatedTimeline = [
@@ -343,38 +344,220 @@ export class JobCandidateService {
         action: 'UPDATE',
         description: `Status da candidatura ${id} alterado para ${status}`,
         moduleName: 'Recrutamento',
-        targetEntity: 'Candidatura'
+        targetEntity: 'Candidatura',
+        companyId: existing.companyId
       });
     } catch (err) {
-      console.warn('Erro ao atualizar status da candidatura no Firestore:', err);
+      console.error('Erro ao atualizar status da candidatura no Firestore:', err);
+      throw err;
     }
   }
 
-  static async scheduleInterview(id: string, interview: InterviewData): Promise<void> {
+  static async hireCandidate(candidate: JobCandidateApplication, jobTitle?: string): Promise<void> {
+    if (!candidate || !candidate.id) throw new Error('Dados da candidatura inválidos.');
+
     try {
-      const existing = await this.getById(id);
-      if (!existing) return;
-
       const now = new Date().toISOString();
-      const interviewObj: InterviewData = {
-        ...interview,
-        status: 'Agendada'
-      };
+      const titleToUse = jobTitle || candidate.role || 'Vaga Corporativa';
 
+      // 1. Atualizar candidatura em candidate_applications
       const updatedTimeline = [
-        ...(existing.timeline || []),
+        ...(candidate.timeline || []),
         {
           id: `evt-${Date.now()}`,
-          title: 'Entrevista Agendada',
-          description: `Entrevista ${interview.type} agendada para ${interview.date} às ${interview.time} com ${interview.interviewer}.`,
+          title: 'Candidato Contratado',
+          description: `Candidato(a) aprovado(a) e contratado(a) para a vaga ${titleToUse}. Encaminhado para a fila de admissão DP.`,
           date: now.replace('T', ' ').substring(0, 16),
           by: auth.currentUser?.displayName || 'Recrutador RH'
         }
       ];
 
       const updatedApp: JobCandidateApplication = {
+        ...candidate,
+        status: 'Contratado',
+        timeline: updatedTimeline,
+        updatedAt: now
+      };
+
+      await setDoc(doc(db, COLLECTION_NAME, candidate.id), sanitizeFirestoreData(updatedApp), { merge: true });
+
+      // 2. Atualizar perfil em candidatos se existir
+      if (candidate.candidateId) {
+        try {
+          await CandidateService.update(candidate.candidateId, {
+            status: 'Contratado',
+            currentJobId: candidate.jobId,
+            currentStageId: 'contratado'
+          });
+        } catch (e) {
+          console.warn('Aviso ao atualizar perfil no Banco de Talentos:', e);
+        }
+      }
+
+      // 3. Criar registro em contratacoes
+      const contratacaoId = `${candidate.jobId}_${candidate.candidateId || candidate.id}`;
+      const contratacaoDoc = {
+        id: contratacaoId,
+        companyId: candidate.companyId,
+        empresaId: candidate.companyId,
+        jobId: candidate.jobId,
+        vagaId: candidate.jobId,
+        candidateId: candidate.candidateId || candidate.id,
+        candidatoId: candidate.candidateId || candidate.id,
+        candidaturaId: candidate.id,
+        candidateName: candidate.name,
+        candidatoNome: candidate.name,
+        jobTitle: titleToUse,
+        vagaTitulo: titleToUse,
+        status: 'Concluído',
+        createdAt: now,
+        updatedAt: now
+      };
+      await setDoc(doc(db, 'contratacoes', contratacaoId), sanitizeFirestoreData(contratacaoDoc), { merge: true });
+
+      // 4. Enviar para Admissão DP
+      await enviarCandidatoParaAdmissaoDP({
+        id: candidate.id,
+        candidateId: candidate.candidateId || candidate.id,
+        jobId: candidate.jobId,
+        companyId: candidate.companyId,
+        name: candidate.name,
+        email: candidate.email,
+        phone: candidate.phone,
+        cpf: candidate.cpf,
+        role: titleToUse,
+        vagaTitulo: titleToUse,
+        department: (candidate as any).department,
+        salaryExpectation: candidate.salaryExpectation,
+        city: candidate.city,
+        state: candidate.state
+      });
+
+      // 5. Log de auditoria
+      await AuditService.log({
+        action: 'UPDATE',
+        description: `Candidato ${candidate.name} contratado para a vaga ${titleToUse}`,
+        moduleName: 'Recrutamento',
+        targetEntity: 'Contratação',
+        companyId: candidate.companyId
+      });
+    } catch (err) {
+      console.error('Erro ao processar contratação:', err);
+      throw err;
+    }
+  }
+
+  static async rejectCandidate(
+    candidateId: string, 
+    data: {
+      motivoReprovacao: string;
+      observacaoReprovacao?: string;
+      manterBancoTalentos: boolean;
+    }
+  ): Promise<void> {
+    if (!candidateId) throw new Error('ID do candidato inválido.');
+
+    try {
+      const existing = await this.getById(candidateId);
+      if (!existing) throw new Error('Candidatura não encontrada.');
+
+      const now = new Date().toISOString();
+      const updatedTimeline = [
+        ...(existing.timeline || []),
+        {
+          id: `evt-${Date.now()}`,
+          title: 'Candidatura Reprovada',
+          description: `Motivo: ${data.motivoReprovacao}.${data.observacaoReprovacao ? ` Obs: ${data.observacaoReprovacao}` : ''}`,
+          date: now.replace('T', ' ').substring(0, 16),
+          by: auth.currentUser?.displayName || 'Recrutador RH'
+        }
+      ];
+
+      const updatedApp = {
         ...existing,
-        status: 'Entrevista Agendada',
+        status: 'Reprovado' as ApplicationStatus,
+        motivoReprovacao: data.motivoReprovacao,
+        observacaoReprovacao: data.observacaoReprovacao || '',
+        manterBancoTalentos: data.manterBancoTalentos,
+        reprovadoEm: now,
+        timeline: updatedTimeline,
+        updatedAt: now
+      };
+
+      await setDoc(doc(db, COLLECTION_NAME, candidateId), sanitizeFirestoreData(updatedApp), { merge: true });
+
+      // Atualizar no Banco de Talentos
+      if (existing.candidateId) {
+        try {
+          await CandidateService.update(existing.candidateId, {
+            status: data.manterBancoTalentos ? 'Ativo' : 'Indisponível'
+          });
+        } catch (e) {
+          console.warn('Aviso ao atualizar perfil no Banco de Talentos:', e);
+        }
+      }
+
+      await AuditService.log({
+        action: 'UPDATE',
+        description: `Candidato ${existing.name} reprovado na vaga ${existing.jobId}. Motivo: ${data.motivoReprovacao}`,
+        moduleName: 'Recrutamento',
+        targetEntity: 'Candidatura',
+        companyId: existing.companyId
+      });
+    } catch (err) {
+      console.error('Erro ao reprovar candidato:', err);
+      throw err;
+    }
+  }
+
+  static async updateInterview(id: string, interview: InterviewData, jobTitle?: string): Promise<void> {
+    try {
+      const existing = await this.getById(id);
+      if (!existing) throw new Error('Candidatura não encontrada.');
+
+      const now = new Date().toISOString();
+      const titleToUse = jobTitle || existing.role || 'Vaga Corporativa';
+      
+      const isNew = !existing.interview;
+      const statusToSet = interview.status || (isNew ? 'Agendada' : 'Reagendada');
+
+      const interviewObj: InterviewData = {
+        ...interview,
+        id: interview.id || existing.interview?.id || `int-${id}`,
+        status: statusToSet
+      };
+
+      const timelineTitle = isNew 
+        ? 'Entrevista Agendada' 
+        : statusToSet === 'Reagendada' 
+          ? 'Entrevista Reagendada' 
+          : statusToSet === 'Cancelada' 
+            ? 'Entrevista Cancelada' 
+            : statusToSet === 'Realizada' 
+              ? 'Entrevista Realizada' 
+              : 'Entrevista Atualizada';
+
+      const updatedTimeline = [
+        ...(existing.timeline || []),
+        {
+          id: `evt-${Date.now()}`,
+          title: timelineTitle,
+          description: `Entrevista ${interview.type} ${isNew ? 'agendada' : 'atualizada'} para ${interview.date} às ${interview.time} com ${interview.interviewer}. Status: ${statusToSet}.`,
+          date: now.replace('T', ' ').substring(0, 16),
+          by: auth.currentUser?.displayName || 'Recrutador RH'
+        }
+      ];
+
+      let appStatus: ApplicationStatus = existing.status;
+      if (statusToSet === 'Realizada') {
+        appStatus = 'Entrevista Realizada';
+      } else if (statusToSet === 'Agendada' || statusToSet === 'Reagendada') {
+        appStatus = 'Entrevista Agendada';
+      }
+
+      const updatedApp: JobCandidateApplication = {
+        ...existing,
+        status: appStatus,
         interview: interviewObj,
         timeline: updatedTimeline,
         updatedAt: now
@@ -382,72 +565,122 @@ export class JobCandidateService {
 
       await setDoc(doc(db, COLLECTION_NAME, id), sanitizeFirestoreData(updatedApp), { merge: true });
 
-      // Sincronizar com o módulo unificado de Entrevistas
-      try {
-        await RecruitmentService.createInterview({
-          id: `int-${existing.id}`,
-          empresaId: existing.companyId || 'emp-001',
-          origemProcesso: 'recrutamento_interno',
-          candidatoId: existing.candidateId || existing.id,
-          candidatoNome: existing.name,
-          candidateRole: existing.role,
-          vagaId: existing.jobId,
-          vagaTitulo: existing.role || 'Vaga Corporativa',
-          entrevistadorNome: interview.interviewer,
-          interviewerName: interview.interviewer,
-          dataHora: `${interview.date}T${interview.time}:00`,
-          date: interview.date,
-          time: interview.time,
-          tipo: interview.type === 'Presencial' ? 'Teste Técnico' : 'Entrevista RH',
-          type: interview.type,
-          modalidade: interview.type === 'Presencial' ? 'Presencial' : 'Online (Meet)',
-          salaVirtualUrl: interview.meetingLink,
-          status: 'Agendada',
-          pauta: interview.notes
-        });
+      // 1. Atualizar ou criar documento na coleção 'entrevistas'
+      let interviewDocId = interview.id || existing.interview?.id;
 
-        await RecruitmentService.createAgendaEvent({
-          id: `age-${Date.now()}`,
-          empresaId: existing.companyId || 'emp-001',
-          origemProcesso: 'recrutamento_interno',
-          tipoEvento: 'Entrevista',
-          titulo: `Entrevista: ${existing.name}`,
-          responsavelNome: interview.interviewer || 'Recrutador RH',
-          dataHora: `${interview.date}T${interview.time}:00`,
-          descricao: `Entrevista ${interview.type} agendada para a vaga ${existing.role} com ${interview.interviewer}.`,
-          candidatoId: existing.candidateId || existing.id,
-          candidatoNome: existing.name,
-          vagaId: existing.jobId,
-          vagaTitulo: existing.role || 'Vaga Corporativa',
-          concluido: false
-        });
-      } catch (e) {
-        console.warn('Erro ao sincronizar entrevista no RecruitmentService:', e);
+      if (!interviewDocId) {
+        try {
+          const qInt = query(
+            collection(db, 'entrevistas'),
+            where('jobId', '==', existing.jobId),
+            where('candidateId', '==', existing.candidateId || existing.id)
+          );
+          const snap = await getDocs(qInt);
+          if (!snap.empty) {
+            interviewDocId = snap.docs[0].id;
+          }
+        } catch (e) {
+          console.warn('Busca de entrevista existente no Firestore falhou:', e);
+        }
       }
 
-      // Sincronizar com Banco de Talentos
+      if (!interviewDocId) {
+        interviewDocId = `int-${id}-${Date.now()}`;
+      }
+
+      const interviewDoc = {
+        id: interviewDocId,
+        companyId: existing.companyId,
+        empresaId: existing.companyId,
+        candidateId: existing.candidateId || existing.id,
+        candidatoId: existing.candidateId || existing.id,
+        applicationId: existing.id,
+        candidateName: existing.name,
+        candidatoNome: existing.name,
+        jobId: existing.jobId,
+        vagaId: existing.jobId,
+        jobTitle: titleToUse,
+        vagaTitulo: titleToUse,
+        date: interview.date,
+        time: interview.time,
+        interviewer: interview.interviewer,
+        modalidade: interview.type,
+        location: interview.location || '',
+        meetingLink: interview.meetingLink || '',
+        notes: interview.notes || '',
+        status: statusToSet,
+        createdAt: now,
+        updatedAt: now
+      };
+      await setDoc(doc(db, 'entrevistas', interviewDocId), sanitizeFirestoreData(interviewDoc), { merge: true });
+
+      // 2. Atualizar ou criar documento na coleção 'agenda'
+      let agendaDocId = `age-${id}`;
+      try {
+        const qAge = query(
+          collection(db, 'agenda'),
+          where('jobId', '==', existing.jobId),
+          where('candidateId', '==', existing.candidateId || existing.id)
+        );
+        const snapAge = await getDocs(qAge);
+        if (!snapAge.empty) {
+          agendaDocId = snapAge.docs[0].id;
+        }
+      } catch (e) {
+        console.warn('Busca na agenda no Firestore falhou:', e);
+      }
+
+      const agendaDoc = {
+        id: agendaDocId,
+        companyId: existing.companyId,
+        empresaId: existing.companyId,
+        title: `Entrevista (${statusToSet}): ${existing.name} - ${titleToUse}`,
+        date: interview.date,
+        time: interview.time,
+        type: 'Entrevista',
+        candidateId: existing.candidateId || existing.id,
+        jobId: existing.jobId,
+        applicationId: existing.id,
+        interviewer: interview.interviewer,
+        notes: interview.notes || '',
+        status: statusToSet,
+        updatedAt: now
+      };
+      await setDoc(doc(db, 'agenda', agendaDocId), sanitizeFirestoreData(agendaDoc), { merge: true });
+
+      // 3. Atualizar perfil do candidato
       if (existing.candidateId) {
-        await CandidateService.update(existing.candidateId, {
-          status: 'Em Processo',
-          currentStageId: 'entrevista_rh'
-        });
+        try {
+          await CandidateService.update(existing.candidateId, {
+            status: 'Em Processo',
+            currentStageId: 'entrevista_rh'
+          });
+        } catch (e) {
+          console.warn('Aviso ao atualizar perfil no Banco de Talentos:', e);
+        }
       }
 
       await AuditService.log({
         action: 'UPDATE',
-        description: `Entrevista agendada para o candidato ${existing.name}`,
+        description: `Entrevista ${isNew ? 'agendada' : 'atualizada'} para o candidato ${existing.name}`,
         moduleName: 'Recrutamento',
-        targetEntity: 'Entrevista'
+        targetEntity: 'Entrevista',
+        companyId: existing.companyId
       });
     } catch (err) {
-      console.warn('Erro ao agendar entrevista no Firestore:', err);
+      console.error('Erro ao agendar/editar entrevista no Firestore:', err);
+      throw err;
     }
+  }
+
+  static async scheduleInterview(id: string, interview: InterviewData, jobTitle?: string): Promise<void> {
+    return this.updateInterview(id, interview, jobTitle);
   }
 
   static async addEvaluation(id: string, evaluation: Omit<EvaluationData, 'id' | 'evaluatedAt' | 'evaluatedBy'>): Promise<void> {
     try {
       const existing = await this.getById(id);
-      if (!existing) return;
+      if (!existing) throw new Error('Candidatura não encontrada.');
 
       const user = auth.currentUser;
       const now = new Date().toISOString();
@@ -483,17 +716,19 @@ export class JobCandidateService {
         action: 'UPDATE',
         description: `Nova avaliação adicionada para a candidatura ${id}`,
         moduleName: 'Recrutamento',
-        targetEntity: 'Avaliação'
+        targetEntity: 'Avaliação',
+        companyId: existing.companyId
       });
     } catch (err) {
-      console.warn('Erro ao adicionar avaliação no Firestore:', err);
+      console.error('Erro ao adicionar avaliação no Firestore:', err);
+      throw err;
     }
   }
 
   static async addNote(id: string, note: string): Promise<void> {
     try {
       const existing = await this.getById(id);
-      if (!existing) return;
+      if (!existing) throw new Error('Candidatura não encontrada.');
 
       const now = new Date().toISOString();
       const formattedNote = `[${now.replace('T', ' ').substring(0, 16)}] ${auth.currentUser?.displayName || 'RH'}: ${note}`;
@@ -507,21 +742,26 @@ export class JobCandidateService {
 
       await setDoc(doc(db, COLLECTION_NAME, id), sanitizeFirestoreData(updatedApp), { merge: true });
     } catch (err) {
-      console.warn('Erro ao adicionar nota no Firestore:', err);
+      console.error('Erro ao adicionar nota no Firestore:', err);
+      throw err;
     }
   }
 
   static async delete(id: string): Promise<void> {
     try {
+      const existing = await this.getById(id);
       await deleteDoc(doc(db, COLLECTION_NAME, id));
       await AuditService.log({
         action: 'DELETE',
         description: `Candidatura ${id} excluída do Firestore`,
         moduleName: 'Recrutamento',
-        targetEntity: 'Candidatura'
+        targetEntity: 'Candidatura',
+        companyId: existing?.companyId
       });
     } catch (err) {
-      console.warn('Erro ao excluir candidatura no Firestore:', err);
+      console.error('Erro ao excluir candidatura no Firestore:', err);
+      throw err;
     }
   }
 }
+

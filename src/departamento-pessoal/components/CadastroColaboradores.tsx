@@ -1152,11 +1152,17 @@ export const CadastroColaboradores: React.FC<CadastroColaboradoresProps> = ({
             {/* Header Lateral */}
             <div className="p-5 bg-slate-900 text-white flex items-center justify-between shrink-0">
               <div className="flex items-center gap-3.5">
-                <img
-                  src={selectedColaborador.fotoUrl}
-                  alt={selectedColaborador.nomeCompleto}
-                  className="w-14 h-14 rounded-full object-cover border-2 border-[#2563EB] shrink-0"
-                />
+                {selectedColaborador.fotoUrl ? (
+                  <img
+                    src={selectedColaborador.fotoUrl}
+                    alt={selectedColaborador.nomeCompleto}
+                    className="w-14 h-14 rounded-full object-cover border-2 border-[#2563EB] shrink-0"
+                  />
+                ) : (
+                  <div className="w-14 h-14 rounded-full bg-indigo-600 text-white font-bold flex items-center justify-center text-base border-2 border-[#2563EB] shrink-0">
+                    {selectedColaborador.nomeCompleto ? selectedColaborador.nomeCompleto.split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase() : 'RH'}
+                  </div>
+                )}
                 <div>
                   <div className="flex items-center gap-2">
                     <h3 className="text-base font-bold text-white">{selectedColaborador.nomeCompleto}</h3>

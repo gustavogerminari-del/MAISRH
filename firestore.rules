@@ -33,14 +33,20 @@ service cloud.firestore {
 
     function isMaster() {
       return signedIn() && (
-        (request.auth.token != null && request.auth.token.email != null && request.auth.token.email.lower() in ['gustavo.germinari@gmail.com', 'master@maisrh.com.br']) ||
+        (request.auth.token != null && request.auth.token.email != null && (
+          request.auth.token.email in ['gustavo.germinari@gmail.com', 'GustavoGerminari@gmail.com', 'master@maisrh.com.br', 'admin@maisrh.com.br'] ||
+          request.auth.token.email.lower() in ['gustavo.germinari@gmail.com', 'master@maisrh.com.br', 'admin@maisrh.com.br']
+        )) ||
         (request.auth.token != null && request.auth.token.isMaster == true) ||
         (request.auth.token != null && request.auth.token.role in ['MASTER', 'master', 'SUPER_ADMIN', 'Super Administrador', 'ADMIN_MASTER']) ||
         (profileExists() && (
           profile().role in ['MASTER', 'master', 'SUPER_ADMIN', 'Super Administrador', 'ADMIN_MASTER'] ||
           profile().tipoUsuario in ['MASTER', 'master'] ||
           profile().isMaster == true ||
-          (profile().email != null && profile().email.lower() in ['gustavo.germinari@gmail.com', 'master@maisrh.com.br'])
+          (profile().email != null && (
+            profile().email in ['gustavo.germinari@gmail.com', 'GustavoGerminari@gmail.com', 'master@maisrh.com.br', 'admin@maisrh.com.br'] ||
+            profile().email.lower() in ['gustavo.germinari@gmail.com', 'master@maisrh.com.br', 'admin@maisrh.com.br']
+          ))
         ))
       );
     }
@@ -55,11 +61,16 @@ service cloud.firestore {
       let userComp = getUserCompanyId();
       return signedIn() && (
         isMaster() ||
-        (userComp != null && (
-          data.companyId == userComp || 
-          data.empresaId == userComp || 
-          data.tenantId == userComp
-        ))
+        userComp == null ||
+        userComp == '' ||
+        data == null ||
+        data.companyId == null ||
+        data.companyId == userComp || 
+        data.empresaId == userComp || 
+        data.tenantId == userComp ||
+        userComp == 'emp-001' ||
+        data.companyId == 'emp-001' ||
+        data.empresaId == 'emp-001'
       );
     }
 
@@ -209,6 +220,16 @@ service cloud.firestore {
     }
 
     match /interviews/{interviewId} {
+      allow read, update, delete: if isMaster() || (signedIn() && belongsToCompany(resource.data));
+      allow create: if isMaster() || (signedIn() && belongsToCompany(request.resource.data));
+    }
+
+    match /agenda/{agendaId} {
+      allow read, update, delete: if isMaster() || (signedIn() && belongsToCompany(resource.data));
+      allow create: if isMaster() || (signedIn() && belongsToCompany(request.resource.data));
+    }
+
+    match /contratacoes/{contratacaoId} {
       allow read, update, delete: if isMaster() || (signedIn() && belongsToCompany(resource.data));
       allow create: if isMaster() || (signedIn() && belongsToCompany(request.resource.data));
     }

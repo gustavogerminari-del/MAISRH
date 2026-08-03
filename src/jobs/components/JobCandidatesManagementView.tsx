@@ -50,7 +50,7 @@ export const JobCandidatesManagementView: React.FC<JobCandidatesManagementViewPr
   onBack,
 }) => {
   const { user } = useAuth();
-  const companyId = user?.companyId || user?.tenantId || user?.id || 'emp-001';
+  const companyId = user?.empresaId || user?.companyId || user?.tenantId;
 
   // Navigation Tabs
   const [activeTab, setActiveTab] = useState<JobViewTab>('inscritos');
@@ -72,26 +72,51 @@ export const JobCandidatesManagementView: React.FC<JobCandidatesManagementViewPr
   const [pcdFilter, setPcdFilter] = useState<string>('Todos');
   const [iaFilter, setIaFilter] = useState<string>('Todas');
 
-  const loadCandidates = async () => {
+  const handleRefresh = async () => {
+    if (!companyId || !job.id) return;
     setLoading(true);
     try {
       const list = await JobCandidateService.listByJob(job.id, companyId);
       setCandidates(list);
-      // Keep selectedCandidate synced if drawer is open
-      if (selectedCandidate) {
-        const updated = list.find(c => c.id === selectedCandidate.id);
-        if (updated) setSelectedCandidate(updated);
-      }
     } catch (err) {
-      console.error('Erro ao carregar candidatos para a vaga:', err);
+      console.error('Erro ao recarregar candidatos:', err);
     } finally {
       setLoading(false);
     }
   };
 
   useEffect(() => {
-    loadCandidates();
+    if (!companyId || !job.id) {
+      setCandidates([]);
+      setLoading(false);
+      return;
+    }
+
+    setLoading(true);
+    const unsubscribe = JobCandidateService.subscribeByJob(
+      job.id,
+      companyId,
+      (list) => {
+        setCandidates(list);
+        setLoading(false);
+      },
+      (err) => {
+        console.error('Erro na assinatura de candidatos da vaga:', err);
+        setCandidates([]);
+        setLoading(false);
+      }
+    );
+
+    return () => unsubscribe();
   }, [job.id, companyId]);
+
+  // Sync selectedCandidate when candidates update
+  useEffect(() => {
+    if (selectedCandidate) {
+      const updated = candidates.find(c => c.id === selectedCandidate.id);
+      if (updated) setSelectedCandidate(updated);
+    }
+  }, [candidates]);
 
   // Metric Indicators Counts
   const counts = useMemo(() => {
@@ -212,7 +237,7 @@ export const JobCandidatesManagementView: React.FC<JobCandidatesManagementViewPr
               {(job.status === 'Arquivada' || (job as any).archived || (job as any).isArchived) ? 'Arquivada (Consulta)' : job.status}
             </span>
             <button
-              onClick={loadCandidates}
+              onClick={handleRefresh}
               className="p-2 text-slate-400 hover:text-indigo-600 hover:bg-slate-100 rounded-xl transition-colors cursor-pointer"
               title="Atualizar dados do Firestore"
             >
@@ -692,7 +717,7 @@ export const JobCandidatesManagementView: React.FC<JobCandidatesManagementViewPr
       {activeTab === 'banco_ia' && (
         <JobTalentBankAiTab
           job={job}
-          onCandidateInvited={loadCandidates}
+          onCandidateInvited={handleRefresh}
         />
       )}
 
@@ -717,7 +742,13 @@ export const JobCandidatesManagementView: React.FC<JobCandidatesManagementViewPr
               candidates.filter(c => c.interview || c.status === 'Entrevista Agendada').map((cand) => (
                 <div key={cand.id} className="p-4 rounded-2xl border border-slate-200 bg-slate-50 space-y-3">
                   <div className="flex items-center gap-3">
-                    <img src={cand.photo} alt={cand.name} className="w-10 h-10 rounded-xl object-cover" />
+                    {(cand.photo || cand.avatar) ? (
+                      <img src={cand.photo || cand.avatar} alt={cand.name} className="w-10 h-10 rounded-xl object-cover shrink-0" />
+                    ) : (
+                      <div className="w-10 h-10 rounded-xl bg-indigo-100 text-indigo-700 font-bold flex items-center justify-center text-xs shrink-0">
+                        {cand.name ? cand.name.split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase() : 'C'}
+                      </div>
+                    )}
                     <div>
                       <h4 className="font-extrabold text-xs text-slate-900">{cand.name}</h4>
                       <span className="text-[10px] text-slate-500 font-medium">{cand.role}</span>
@@ -760,7 +791,13 @@ export const JobCandidatesManagementView: React.FC<JobCandidatesManagementViewPr
                 <div key={cand.id} className="p-4 rounded-2xl border border-slate-200 bg-slate-50 space-y-3">
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-3">
-                      <img src={cand.photo} alt={cand.name} className="w-10 h-10 rounded-xl object-cover" />
+                      {(cand.photo || cand.avatar) ? (
+                        <img src={cand.photo || cand.avatar} alt={cand.name} className="w-10 h-10 rounded-xl object-cover shrink-0" />
+                      ) : (
+                        <div className="w-10 h-10 rounded-xl bg-indigo-100 text-indigo-700 font-bold flex items-center justify-center text-xs shrink-0">
+                          {cand.name ? cand.name.split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase() : 'C'}
+                        </div>
+                      )}
                       <div>
                         <h4 className="font-extrabold text-xs text-slate-900">{cand.name}</h4>
                         <span className="text-[10px] text-slate-500">{cand.role}</span>
@@ -821,7 +858,7 @@ export const JobCandidatesManagementView: React.FC<JobCandidatesManagementViewPr
         candidate={selectedCandidate}
         isOpen={isDrawerOpen}
         onClose={() => setIsDrawerOpen(false)}
-        onRefresh={loadCandidates}
+        onRefresh={handleRefresh}
         jobTitle={job.title}
       />
     </div>

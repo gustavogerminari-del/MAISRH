@@ -252,9 +252,7 @@ export class VagaCandidatosService {
 
     const unsubscribe = onSnapshot(q, async (snapshot) => {
       if (snapshot.empty) {
-        // Fallback or empty state
-        const sample = getSampleJobCandidates(vagaId, empresaId);
-        callback(sample);
+        callback([]);
         return;
       }
 
@@ -313,9 +311,8 @@ export class VagaCandidatosService {
 
       callback(list);
     }, (err) => {
-      console.warn('Firestore Snapshot error for vaga candidatos:', err);
-      // On error, return fallback candidates
-      callback(getSampleJobCandidates(vagaId, empresaId));
+      console.error('Firestore Snapshot error for vaga candidatos:', err);
+      callback([]);
     });
 
     return unsubscribe;

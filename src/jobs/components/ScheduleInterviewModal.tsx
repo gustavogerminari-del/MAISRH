@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { X, Calendar, Clock, MapPin, Video, Phone, User, FileText } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { X, Calendar, Clock, MapPin, Video, Phone, User, FileText, CheckCircle2 } from 'lucide-react';
 import { Button } from '../../shared';
 import { InterviewData } from '../../services/JobCandidateService';
 
@@ -18,14 +18,30 @@ export const ScheduleInterviewModal: React.FC<ScheduleInterviewModalProps> = ({
   onSave,
   initialData,
 }) => {
-  const [type, setType] = useState<'Presencial' | 'Online' | 'Telefone'>(initialData?.type || 'Online');
-  const [date, setDate] = useState(initialData?.date || new Date().toISOString().split('T')[0]);
-  const [time, setTime] = useState(initialData?.time || '10:00');
-  const [interviewer, setInterviewer] = useState(initialData?.interviewer || 'Recrutador RH');
-  const [location, setLocation] = useState(initialData?.location || 'Sede da Empresa - Sala 3B');
-  const [meetingLink, setMeetingLink] = useState(initialData?.meetingLink || 'https://meet.google.com/mais-rh-entrevista');
-  const [notes, setNotes] = useState(initialData?.notes || 'Entrevista por competências e alinhamento de expectativas.');
+  const [type, setType] = useState<'Presencial' | 'Online' | 'Telefone'>('Online');
+  const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
+  const [time, setTime] = useState('10:00');
+  const [interviewer, setInterviewer] = useState('Recrutador RH');
+  const [location, setLocation] = useState('Sede da Empresa - Sala 3B');
+  const [meetingLink, setMeetingLink] = useState('https://meet.google.com/mais-rh-entrevista');
+  const [notes, setNotes] = useState('Entrevista por competências e alinhamento de expectativas.');
+  const [status, setStatus] = useState<'Agendada' | 'Reagendada' | 'Realizada' | 'Cancelada'>('Agendada');
   const [saving, setSaving] = useState(false);
+
+  const isEditing = !!initialData?.date;
+
+  useEffect(() => {
+    if (isOpen) {
+      setType(initialData?.type || 'Online');
+      setDate(initialData?.date || new Date().toISOString().split('T')[0]);
+      setTime(initialData?.time || '10:00');
+      setInterviewer(initialData?.interviewer || 'Recrutador RH');
+      setLocation(initialData?.location || 'Sede da Empresa - Sala 3B');
+      setMeetingLink(initialData?.meetingLink || 'https://meet.google.com/mais-rh-entrevista');
+      setNotes(initialData?.notes || 'Entrevista por competências e alinhamento de expectativas.');
+      setStatus(initialData?.status || (initialData?.date ? 'Reagendada' : 'Agendada'));
+    }
+  }, [isOpen, initialData]);
 
   if (!isOpen) return null;
 
@@ -34,6 +50,7 @@ export const ScheduleInterviewModal: React.FC<ScheduleInterviewModalProps> = ({
     setSaving(true);
     try {
       await onSave({
+        id: initialData?.id,
         type,
         date,
         time,
@@ -41,11 +58,11 @@ export const ScheduleInterviewModal: React.FC<ScheduleInterviewModalProps> = ({
         location: type === 'Presencial' ? location : undefined,
         meetingLink: type === 'Online' ? meetingLink : undefined,
         notes,
-        status: 'Agendada'
+        status
       });
       onClose();
     } catch (err) {
-      console.error('Erro ao agendar entrevista:', err);
+      console.error('Erro ao salvar entrevista:', err);
     } finally {
       setSaving(false);
     }
@@ -55,6 +72,7 @@ export const ScheduleInterviewModal: React.FC<ScheduleInterviewModalProps> = ({
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-xs p-4 overflow-y-auto">
       <div className="bg-white rounded-3xl max-w-lg w-full p-6 shadow-2xl border border-slate-200 relative animate-in fade-in zoom-in-95 duration-200">
         <button
+          type="button"
           onClick={onClose}
           className="absolute top-5 right-5 text-slate-400 hover:text-slate-600 transition-colors p-1.5 rounded-full hover:bg-slate-100"
         >
@@ -66,7 +84,9 @@ export const ScheduleInterviewModal: React.FC<ScheduleInterviewModalProps> = ({
             <Calendar className="w-5 h-5" />
           </div>
           <div>
-            <h3 className="text-lg font-black text-slate-900">Agendar Entrevista</h3>
+            <h3 className="text-lg font-black text-slate-900">
+              {isEditing ? 'Editar Entrevista' : 'Agendar Entrevista'}
+            </h3>
             <p className="text-xs text-slate-500 font-medium">
               Candidato: <span className="font-bold text-slate-700">{candidateName}</span>
             </p>
@@ -74,6 +94,35 @@ export const ScheduleInterviewModal: React.FC<ScheduleInterviewModalProps> = ({
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-4">
+          {/* Status da Entrevista (Quando editando ou alterando) */}
+          <div>
+            <label className="block text-xs font-bold text-slate-700 mb-1.5 uppercase tracking-wider">
+              Status da Entrevista
+            </label>
+            <div className="grid grid-cols-4 gap-1.5">
+              {(['Agendada', 'Reagendada', 'Realizada', 'Cancelada'] as const).map((st) => (
+                <button
+                  key={st}
+                  type="button"
+                  onClick={() => setStatus(st)}
+                  className={`py-2 px-1 rounded-xl border text-[11px] font-bold flex items-center justify-center transition-all ${
+                    status === st
+                      ? st === 'Realizada'
+                        ? 'border-emerald-600 bg-emerald-50 text-emerald-700 shadow-2xs'
+                        : st === 'Cancelada'
+                        ? 'border-rose-600 bg-rose-50 text-rose-700 shadow-2xs'
+                        : st === 'Reagendada'
+                        ? 'border-amber-600 bg-amber-50 text-amber-700 shadow-2xs'
+                        : 'border-indigo-600 bg-indigo-50 text-indigo-700 shadow-2xs'
+                      : 'border-slate-200 hover:bg-slate-50 text-slate-600'
+                  }`}
+                >
+                  {st}
+                </button>
+              ))}
+            </div>
+          </div>
+
           {/* Tipo de Entrevista */}
           <div>
             <label className="block text-xs font-bold text-slate-700 mb-1.5 uppercase tracking-wider">
@@ -234,7 +283,7 @@ export const ScheduleInterviewModal: React.FC<ScheduleInterviewModalProps> = ({
               Cancelar
             </Button>
             <Button type="submit" variant="primary" size="sm" disabled={saving}>
-              {saving ? 'Salvando...' : 'Salvar e Agendar'}
+              {saving ? 'Salvando...' : isEditing ? 'Salvar Alterações' : 'Salvar e Agendar'}
             </Button>
           </div>
         </form>

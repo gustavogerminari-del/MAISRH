@@ -59,45 +59,96 @@ export const CandidateDrawerPanel: React.FC<CandidateDrawerPanelProps> = ({
   const [newNoteText, setNewNoteText] = useState('');
   const [addingNote, setAddingNote] = useState(false);
 
-  // New evaluation form state
+  // Evaluation modal state
+  const [isEvaluationModalOpen, setIsEvaluationModalOpen] = useState(false);
   const [techScore, setTechScore] = useState(4);
   const [commScore, setCommScore] = useState(4);
   const [postureScore, setPostureScore] = useState(4);
   const [knowScore, setKnowScore] = useState(4);
+  const [overallScore, setOverallScore] = useState(4);
+  const [parecerRH, setParecerRH] = useState('');
   const [evalNotes, setEvalNotes] = useState('');
-  const [finalOpinion, setFinalOpinion] = useState<'Aprovado' | 'Reprovado' | 'Em Dúvida'>('Aprovado');
+  const [compStr, setCompStr] = useState('');
+  const [strengthsStr, setStrengthsStr] = useState('');
+  const [improvementsStr, setImprovementsStr] = useState('');
+  const [aiOpinion, setAiOpinion] = useState('');
+  const [finalOpinion, setFinalOpinion] = useState<'Aprovado' | 'Reprovado' | 'Em Dúvida' | 'Pendente'>('Aprovado');
   const [savingEval, setSavingEval] = useState(false);
+
+  // State for Rejection Modal
+  const [isRejectModalOpen, setIsRejectModalOpen] = useState(false);
+  const [motivoReprovacao, setMotivoReprovacao] = useState('Requisitos técnicos não atingidos');
+  const [observacaoReprovacao, setObservacaoReprovacao] = useState('');
+  const [manterBancoTalentos, setManterBancoTalentos] = useState(true);
+  const [isSubmittingReject, setIsSubmittingReject] = useState(false);
+  const [isSubmittingHire, setIsSubmittingHire] = useState(false);
 
   const cleanPhone = candidate.phone.replace(/\D/g, '');
   const whatsappUrl = `https://wa.me/55${cleanPhone}?text=${encodeURIComponent(`Olá ${candidate.name}, vi seu perfil no MAIS RH para a vaga de ${jobTitle || candidate.role}.`)}`;
   const emailUrl = `mailto:${candidate.email}?subject=${encodeURIComponent(`Oportunidade - ${jobTitle || candidate.role} (MAIS RH)`)}`;
 
-  const handleStatusChange = async (newStatus: ApplicationStatus) => {
-    await JobCandidateService.updateStatus(candidate.id, newStatus);
-    if (newStatus === 'Contratado') {
-      try {
-        await enviarCandidatoParaAdmissaoDP({
-          id: candidate.id,
-          candidateId: candidate.candidateId || candidate.id,
-          jobId: candidate.jobId,
-          companyId: candidate.companyId,
-          name: candidate.name,
-          email: candidate.email,
-          phone: candidate.phone,
-          cpf: candidate.cpf,
-          role: jobTitle || candidate.role,
-          vagaTitulo: jobTitle || candidate.role,
-          department: candidate.department,
-          salaryExpectation: candidate.salaryExpectation,
-          city: candidate.city,
-          state: candidate.state
-        });
-        alert(`🎉 Candidato(a) ${candidate.name} contratado(a) com sucesso! Enviado para a Fila de Admissão do DP.`);
-      } catch (err) {
-        console.error('Erro ao enviar para admissão DP:', err);
-      }
+  const openEvaluationModal = () => {
+    setCompStr(candidate.aiAnalysis?.competencies?.join(', ') || 'Comunicação, Trabalho em Equipe, Resolução de Problemas');
+    setStrengthsStr(candidate.aiAnalysis?.strengths?.join('\n') || '');
+    setImprovementsStr(candidate.aiAnalysis?.pointsOfAttention?.join('\n') || '');
+    setAiOpinion(candidate.aiAnalysis?.summary || candidate.aiAnalysis?.recommendation || '');
+    setIsEvaluationModalOpen(true);
+  };
+
+  const handleHireCandidate = async () => {
+    if (!confirm(`Confirmar a contratação de ${candidate.name} para a vaga "${jobTitle || candidate.role}"?`)) return;
+    setIsSubmittingHire(true);
+    try {
+      await JobCandidateService.hireCandidate(candidate, jobTitle);
+      alert(`🎉 Candidato(a) ${candidate.name} contratado(a) com sucesso!\nEnviado para a Fila de Admissão do DP.`);
+      await onRefresh();
+    } catch (err: any) {
+      console.error('Erro ao contratar candidato:', err);
+      alert(`Erro ao contratar candidato: ${err?.message || 'Erro desconhecido'}`);
+    } finally {
+      setIsSubmittingHire(false);
     }
-    await onRefresh();
+  };
+
+  const handleConfirmReject = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!motivoReprovacao.trim()) {
+      alert('Selecione ou informe o motivo da reprovação.');
+      return;
+    }
+    setIsSubmittingReject(true);
+    try {
+      await JobCandidateService.rejectCandidate(candidate.id, {
+        motivoReprovacao,
+        observacaoReprovacao,
+        manterBancoTalentos
+      });
+      alert(`Candidatura de ${candidate.name} foi reprovada.`);
+      setIsRejectModalOpen(false);
+      await onRefresh();
+    } catch (err: any) {
+      console.error('Erro ao reprovar candidato:', err);
+      alert(`Erro ao reprovar candidato: ${err?.message || 'Erro desconhecido'}`);
+    } finally {
+      setIsSubmittingReject(false);
+    }
+  };
+
+  const handleStatusChange = async (newStatus: ApplicationStatus) => {
+    if (newStatus === 'Contratado') {
+      await handleHireCandidate();
+      return;
+    }
+    if (newStatus === 'Reprovado') {
+      setIsRejectModalOpen(true);
+      return;
+    }
+    try {
+      await JobCandidateService.updateStatus(candidate.id, newStatus);
+      await onRefresh();
+    } catch (err: any) {
+      alert(`Erro ao atualizar status: ${err?.message || 'Falha na operação'}`);
+    }
   };
 
   const handleSaveEvaluation = async (e: React.FormEvent) => {
@@ -109,13 +160,23 @@ export const CandidateDrawerPanel: React.FC<CandidateDrawerPanelProps> = ({
         communicationScore: commScore,
         postureScore: postureScore,
         knowledgeScore: knowScore,
+        overallScore: Math.round((techScore + commScore + postureScore + knowScore) / 4),
+        parecerRH,
         notes: evalNotes,
+        competencies: compStr ? compStr.split(',').map(s => s.trim()).filter(Boolean) : undefined,
+        strengths: strengthsStr ? strengthsStr.split('\n').map(s => s.trim()).filter(Boolean) : undefined,
+        improvements: improvementsStr ? improvementsStr.split('\n').map(s => s.trim()).filter(Boolean) : undefined,
+        aiOpinion,
         finalOpinion
       });
+      alert(`⭐ Avaliação de ${candidate.name} registrada com sucesso!`);
       setEvalNotes('');
+      setParecerRH('');
+      setIsEvaluationModalOpen(false);
       await onRefresh();
-    } catch (err) {
+    } catch (err: any) {
       console.error('Erro ao salvar avaliação:', err);
+      alert(`Erro ao salvar avaliação: ${err?.message || 'Falha na gravação'}`);
     } finally {
       setSavingEval(false);
     }
@@ -202,6 +263,7 @@ export const CandidateDrawerPanel: React.FC<CandidateDrawerPanelProps> = ({
 
             {/* Quick Action Buttons in Drawer Header */}
             <div className="flex items-center gap-2 flex-wrap shrink-0">
+              {/* 1. WhatsApp */}
               <a
                 href={whatsappUrl}
                 target="_blank"
@@ -212,6 +274,7 @@ export const CandidateDrawerPanel: React.FC<CandidateDrawerPanelProps> = ({
                 WhatsApp
               </a>
 
+              {/* 2. E-mail */}
               <a
                 href={emailUrl}
                 className="px-3 py-1.5 rounded-xl bg-blue-50 text-blue-700 hover:bg-blue-100 border border-blue-200 text-xs font-bold flex items-center gap-1.5 transition-colors"
@@ -220,28 +283,60 @@ export const CandidateDrawerPanel: React.FC<CandidateDrawerPanelProps> = ({
                 E-mail
               </a>
 
+              {/* 3. Agendar Entrevista */}
+              {!candidate.interview && (
+                <button
+                  type="button"
+                  onClick={() => setIsScheduleModalOpen(true)}
+                  className="px-3 py-1.5 rounded-xl bg-indigo-600 text-white hover:bg-indigo-700 text-xs font-bold flex items-center gap-1.5 shadow-2xs transition-colors"
+                >
+                  <Calendar className="w-3.5 h-3.5" />
+                  Agendar Entrevista
+                </button>
+              )}
+
+              {/* 4. Editar Entrevista */}
+              {candidate.interview && (
+                <button
+                  type="button"
+                  onClick={() => setIsScheduleModalOpen(true)}
+                  className="px-3 py-1.5 rounded-xl bg-amber-500 text-white hover:bg-amber-600 text-xs font-bold flex items-center gap-1.5 shadow-2xs transition-colors"
+                >
+                  <Calendar className="w-3.5 h-3.5" />
+                  Editar Entrevista
+                </button>
+              )}
+
+              {/* 5. Avaliar & Feedback */}
               <button
-                onClick={() => setIsScheduleModalOpen(true)}
-                className="px-3 py-1.5 rounded-xl bg-indigo-600 text-white hover:bg-indigo-700 text-xs font-bold flex items-center gap-1.5 shadow-2xs transition-colors"
+                type="button"
+                onClick={openEvaluationModal}
+                className="px-3 py-1.5 rounded-xl bg-purple-600 text-white hover:bg-purple-700 text-xs font-bold flex items-center gap-1.5 shadow-2xs transition-colors"
               >
-                <Calendar className="w-3.5 h-3.5" />
-                Agendar Entrevista
+                <Award className="w-3.5 h-3.5" />
+                Avaliar & Feedback
               </button>
 
+              {/* 6. Contratar */}
               <button
-                onClick={() => handleStatusChange('Contratado')}
-                className="px-3 py-1.5 rounded-xl bg-teal-600 text-white hover:bg-teal-700 text-xs font-bold flex items-center gap-1.5 shadow-2xs transition-colors"
+                type="button"
+                onClick={handleHireCandidate}
+                disabled={isSubmittingHire}
+                className="px-3 py-1.5 rounded-xl bg-teal-600 text-white hover:bg-teal-700 disabled:opacity-50 text-xs font-bold flex items-center gap-1.5 shadow-2xs transition-colors"
               >
                 <ThumbsUp className="w-3.5 h-3.5" />
-                Contratar
+                {isSubmittingHire ? 'Contratando...' : 'Contratar'}
               </button>
 
+              {/* 7. Reprovar */}
               <button
-                onClick={() => handleStatusChange('Reprovado')}
-                className="px-3 py-1.5 rounded-xl bg-rose-50 text-rose-700 hover:bg-rose-100 border border-rose-200 text-xs font-bold flex items-center gap-1.5 transition-colors"
+                type="button"
+                onClick={() => setIsRejectModalOpen(true)}
+                disabled={isSubmittingReject}
+                className="px-3 py-1.5 rounded-xl bg-rose-50 text-rose-700 hover:bg-rose-100 border border-rose-200 disabled:opacity-50 text-xs font-bold flex items-center gap-1.5 transition-colors"
               >
                 <ThumbsDown className="w-3.5 h-3.5" />
-                Reprovar
+                {isSubmittingReject ? 'Reprovando...' : 'Reprovar'}
               </button>
             </div>
           </div>
@@ -688,11 +783,11 @@ export const CandidateDrawerPanel: React.FC<CandidateDrawerPanelProps> = ({
                   )}
 
                   <div className="flex items-center gap-2 pt-2 flex-wrap">
-                    <Button variant="outline" size="sm" onClick={() => setIsScheduleModalOpen(true)}>
-                      Reagendar Entrevista
+                    <Button type="button" variant="outline" size="sm" onClick={() => setIsScheduleModalOpen(true)}>
+                      Editar Entrevista
                     </Button>
-                    <Button variant="primary" size="sm" onClick={() => handleStatusChange('Entrevista Realizada')}>
-                      Finalizar Entrevista
+                    <Button type="button" variant="primary" size="sm" onClick={openEvaluationModal}>
+                      Avaliar & Feedback
                     </Button>
                   </div>
                 </div>
@@ -884,12 +979,254 @@ export const CandidateDrawerPanel: React.FC<CandidateDrawerPanelProps> = ({
         onClose={() => setIsScheduleModalOpen(false)}
         candidateName={candidate.name}
         onSave={async (data) => {
-          await JobCandidateService.scheduleInterview(candidate.id, data);
-          await onRefresh();
-          alert(`🗓️ Entrevista para ${candidate.name} agendada com sucesso para ${data.date} às ${data.time}!`);
+          try {
+            await JobCandidateService.updateInterview(candidate.id, data, jobTitle);
+            await onRefresh();
+            alert(`🗓️ Entrevista para ${candidate.name} salva com sucesso para ${data.date} às ${data.time}!`);
+          } catch (err: any) {
+            console.error('Erro ao salvar entrevista:', err);
+            alert(`Erro ao salvar entrevista: ${err?.message || 'Falha na gravação'}`);
+          }
         }}
         initialData={candidate.interview}
       />
+
+      {/* Evaluation & Feedback Modal */}
+      {isEvaluationModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-xs p-4 overflow-y-auto">
+          <div className="bg-white rounded-3xl max-w-xl w-full p-6 shadow-2xl border border-slate-200 relative animate-in fade-in zoom-in-95 duration-200">
+            <button
+              type="button"
+              onClick={() => setIsEvaluationModalOpen(false)}
+              className="absolute top-5 right-5 text-slate-400 hover:text-slate-600 p-1.5 rounded-full hover:bg-slate-100"
+            >
+              <X className="w-5 h-5" />
+            </button>
+
+            <div className="flex items-center gap-3 mb-5">
+              <div className="w-10 h-10 rounded-2xl bg-purple-50 border border-purple-100 text-purple-600 flex items-center justify-center">
+                <Award className="w-5 h-5" />
+              </div>
+              <div>
+                <h3 className="text-lg font-black text-slate-900">Avaliar & Feedback do Candidato</h3>
+                <p className="text-xs text-slate-500 font-medium">
+                  Candidato: <span className="font-bold text-slate-700">{candidate.name}</span>
+                </p>
+              </div>
+            </div>
+
+            <form onSubmit={handleSaveEvaluation} className="space-y-4">
+              {/* Star Ratings Grid */}
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 bg-slate-50 p-3.5 rounded-2xl border border-slate-100">
+                <div>
+                  <label className="block text-[11px] font-bold text-slate-600 mb-1">Nota Técnica</label>
+                  <select
+                    value={techScore}
+                    onChange={(e) => setTechScore(Number(e.target.value))}
+                    className="w-full text-xs font-bold px-2 py-1.5 rounded-xl border border-slate-200 bg-white"
+                  >
+                    {[1, 2, 3, 4, 5].map((n) => (
+                      <option key={n} value={n}>{n} ★</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-[11px] font-bold text-slate-600 mb-1">Comunicação</label>
+                  <select
+                    value={commScore}
+                    onChange={(e) => setCommScore(Number(e.target.value))}
+                    className="w-full text-xs font-bold px-2 py-1.5 rounded-xl border border-slate-200 bg-white"
+                  >
+                    {[1, 2, 3, 4, 5].map((n) => (
+                      <option key={n} value={n}>{n} ★</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-[11px] font-bold text-slate-600 mb-1">Postura</label>
+                  <select
+                    value={postureScore}
+                    onChange={(e) => setPostureScore(Number(e.target.value))}
+                    className="w-full text-xs font-bold px-2 py-1.5 rounded-xl border border-slate-200 bg-white"
+                  >
+                    {[1, 2, 3, 4, 5].map((n) => (
+                      <option key={n} value={n}>{n} ★</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-[11px] font-bold text-slate-600 mb-1">Conhecimento</label>
+                  <select
+                    value={knowScore}
+                    onChange={(e) => setKnowScore(Number(e.target.value))}
+                    className="w-full text-xs font-bold px-2 py-1.5 rounded-xl border border-slate-200 bg-white"
+                  >
+                    {[1, 2, 3, 4, 5].map((n) => (
+                      <option key={n} value={n}>{n} ★</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              {/* Parecer RH */}
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">
+                  Parecer do Recrutador / Síntese do RH
+                </label>
+                <textarea
+                  value={parecerRH}
+                  onChange={(e) => setParecerRH(e.target.value)}
+                  rows={2}
+                  placeholder="Síntese da impressão geral durante a entrevista..."
+                  className="w-full text-xs font-semibold p-3 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-purple-500"
+                />
+              </div>
+
+              {/* Observações */}
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">
+                  Observações Internas
+                </label>
+                <textarea
+                  value={evalNotes}
+                  onChange={(e) => setEvalNotes(e.target.value)}
+                  rows={2}
+                  placeholder="Expectativa salarial, disponibilidade de início, pontos específicos..."
+                  className="w-full text-xs font-semibold p-3 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-purple-500"
+                />
+              </div>
+
+              {/* Parecer Final */}
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1 uppercase tracking-wider">
+                  Parecer Final da Avaliação
+                </label>
+                <select
+                  value={finalOpinion}
+                  onChange={(e) => setFinalOpinion(e.target.value as any)}
+                  className="w-full text-xs font-bold p-2.5 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-purple-500 bg-white"
+                >
+                  <option value="Aprovado">Aprovado (Recomendado para Próxima Etapa)</option>
+                  <option value="Em Dúvida">Em Dúvida (Necessita Segunda Opinião)</option>
+                  <option value="Reprovado">Reprovado (Não Aderente ao Perfil)</option>
+                  <option value="Pendente">Pendente (Aguardando Retorno do Gestor)</option>
+                </select>
+              </div>
+
+              <div className="flex items-center justify-end gap-2 pt-4 border-t border-slate-100">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setIsEvaluationModalOpen(false)}
+                  disabled={savingEval}
+                >
+                  Cancelar
+                </Button>
+                <Button
+                  type="submit"
+                  size="sm"
+                  disabled={savingEval}
+                  className="bg-purple-600 hover:bg-purple-700 text-white font-bold"
+                >
+                  {savingEval ? 'Salvando...' : 'Salvar Avaliação'}
+                </Button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Rejection Modal */}
+      {isRejectModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-xs p-4 overflow-y-auto">
+          <div className="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl border border-slate-200 relative animate-in fade-in zoom-in-95 duration-200">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-base font-extrabold text-slate-900">Reprovar Candidatura</h3>
+              <button
+                onClick={() => setIsRejectModalOpen(false)}
+                className="text-slate-400 hover:text-slate-600 p-1 rounded-full hover:bg-slate-100"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <p className="text-xs text-slate-500 mb-4">
+              Informe o motivo para arquivar/reprovar a candidatura de <strong className="text-slate-800">{candidate.name}</strong>.
+            </p>
+
+            <form onSubmit={handleConfirmReject} className="space-y-4">
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">
+                  Motivo da Reprovação *
+                </label>
+                <select
+                  value={motivoReprovacao}
+                  onChange={(e) => setMotivoReprovacao(e.target.value)}
+                  className="w-full text-xs font-semibold px-3 py-2 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-rose-500"
+                  required
+                >
+                  <option value="Requisitos técnicos não atingidos">Requisitos técnicos não atingidos</option>
+                  <option value="Pretensão salarial incompatível">Pretensão salarial incompatível</option>
+                  <option value="Sem aderência à cultura da empresa">Sem aderência à cultura da empresa</option>
+                  <option value="Desistência do candidato">Desistência do candidato</option>
+                  <option value="Perfil desalinhado com a vaga">Perfil desalinhado com a vaga</option>
+                  <option value="Outro motivo">Outro motivo</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">
+                  Observações Internas (Opcional)
+                </label>
+                <textarea
+                  value={observacaoReprovacao}
+                  onChange={(e) => setObservacaoReprovacao(e.target.value)}
+                  rows={3}
+                  placeholder="Detalhes sobre a decisão do RH..."
+                  className="w-full text-xs font-semibold p-3 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-rose-500"
+                />
+              </div>
+
+              <div className="flex items-center gap-2 pt-1">
+                <input
+                  type="checkbox"
+                  id="manterBanco"
+                  checked={manterBancoTalentos}
+                  onChange={(e) => setManterBancoTalentos(e.target.checked)}
+                  className="w-4 h-4 rounded-sm text-indigo-600 focus:ring-indigo-500 border-slate-300"
+                />
+                <label htmlFor="manterBanco" className="text-xs font-bold text-slate-700">
+                  Manter candidato ativo no Banco de Talentos
+                </label>
+              </div>
+
+              <div className="flex items-center justify-end gap-2 pt-4 border-t border-slate-100">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setIsRejectModalOpen(false)}
+                  disabled={isSubmittingReject}
+                >
+                  Cancelar
+                </Button>
+                <Button
+                  type="submit"
+                  size="sm"
+                  disabled={isSubmittingReject}
+                  className="bg-rose-600 hover:bg-rose-700 text-white"
+                >
+                  {isSubmittingReject ? 'Reprovando...' : 'Confirmar Reprovação'}
+                </Button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
