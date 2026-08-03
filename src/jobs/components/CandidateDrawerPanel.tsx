@@ -100,6 +100,7 @@ export const CandidateDrawerPanel: React.FC<CandidateDrawerPanelProps> = ({
   };
 
   const handleHireCandidate = () => {
+    console.log("[HIRE] Botão clicado");
     if (candidate.status === 'Contratado') {
       alert('Candidato já contratado.');
       return;
@@ -130,22 +131,26 @@ export const CandidateDrawerPanel: React.FC<CandidateDrawerPanelProps> = ({
 
   const executeHireProcess = async () => {
     setIsSubmittingHire(true);
+    console.log("[HIRE] Candidate:", candidate);
+    console.log("[HIRE] Chamando JobCandidateService");
     try {
       const res = await JobCandidateService.hireCandidate(candidate, jobTitle, {
         closeOtherCandidates
       });
+      console.log("[HIRE] Processo de contratação concluído com resultado:", res);
       if (res.success) {
         if (res.warnings && res.warnings.length > 0) {
-          alert(`🎉 Candidato(a) ${candidate.name} contratado(a) com pendências:\n${res.warnings.join('\n')}`);
+          alert(`🎉 Candidato(a) ${candidate.name} contratado(a) com avisos:\n${res.warnings.join('\n')}`);
         } else {
-          alert(`🎉 Candidato(a) ${candidate.name} contratado(a) e enviado para a admissão com sucesso!`);
+          alert(`🎉 Candidato(a) ${candidate.name} contratado(a) com sucesso! Registrado na área de Contratações para encaminhamento posterior.`);
         }
         setIsHireModalOpen(false);
         await onRefresh();
       }
     } catch (err: any) {
-      console.error('Erro ao contratar candidato:', err);
-      alert(`Erro ao contratar candidato: ${err?.message || 'Erro desconhecido'}`);
+      console.error("[HIRE] Erro completo no frontend:", err);
+      console.error("[HIRE] Stack trace:", err?.stack);
+      alert(`[HIRE FALHA] Erro ao contratar candidato:\n\nMensagem: ${err?.message || 'Erro desconhecido'}\nCódigo: ${err?.code || 'N/A'}\n\nStack:\n${err?.stack || 'N/A'}`);
     } finally {
       setIsSubmittingHire(false);
     }

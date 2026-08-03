@@ -398,8 +398,8 @@ function MainAppContent() {
 
             {activeTab === 'contratacoes' && (
               <UnifiedContratacoesView
-                origemProcesso="interno"
-                hirings={[]}
+                origemProcesso="recrutamento_interno"
+                companyId={user?.empresaId || user?.companyId || 'emp-001'}
               />
             )}
 

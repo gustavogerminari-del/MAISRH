@@ -4,81 +4,11 @@ service cloud.firestore {
   match /databases/{database}/documents {
 
     // =========================================================================
-    // HELPER FUNCTIONS & AUTHENTICATION
+    // HELPER FUNCTIONS
     // =========================================================================
 
     function signedIn() {
       return request.auth != null;
-    }
-
-    function profileExists() {
-      return signedIn() && (
-        exists(/databases/$(database)/documents/usuarios/$(request.auth.uid)) ||
-        exists(/databases/$(database)/documents/users/$(request.auth.uid))
-      );
-    }
-
-    function profile() {
-      return exists(/databases/$(database)/documents/usuarios/$(request.auth.uid))
-        ? get(/databases/$(database)/documents/usuarios/$(request.auth.uid)).data
-        : get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
-    }
-
-    function isActive() {
-      return profileExists() && (
-        profile().ativo == true ||
-        profile().status == 'Ativo'
-      );
-    }
-
-    function isMaster() {
-      return signedIn() && (
-        (request.auth.token != null && request.auth.token.email != null && (
-          request.auth.token.email in ['gustavo.germinari@gmail.com', 'GustavoGerminari@gmail.com', 'master@maisrh.com.br', 'admin@maisrh.com.br'] ||
-          request.auth.token.email.lower() in ['gustavo.germinari@gmail.com', 'master@maisrh.com.br', 'admin@maisrh.com.br']
-        )) ||
-        (request.auth.token != null && request.auth.token.isMaster == true) ||
-        (request.auth.token != null && request.auth.token.role in ['MASTER', 'master', 'SUPER_ADMIN', 'Super Administrador', 'ADMIN_MASTER']) ||
-        (profileExists() && (
-          profile().role in ['MASTER', 'master', 'SUPER_ADMIN', 'Super Administrador', 'ADMIN_MASTER'] ||
-          profile().tipoUsuario in ['MASTER', 'master'] ||
-          profile().isMaster == true ||
-          (profile().email != null && (
-            profile().email in ['gustavo.germinari@gmail.com', 'GustavoGerminari@gmail.com', 'master@maisrh.com.br', 'admin@maisrh.com.br'] ||
-            profile().email.lower() in ['gustavo.germinari@gmail.com', 'master@maisrh.com.br', 'admin@maisrh.com.br']
-          ))
-        ))
-      );
-    }
-
-    function getUserCompanyId() {
-      return profileExists() && profile().empresaId != null
-        ? profile().empresaId
-        : (profileExists() && profile().companyId != null ? profile().companyId : null);
-    }
-
-    function belongsToCompany(data) {
-      let userComp = getUserCompanyId();
-      return signedIn() && (
-        isMaster() ||
-        userComp == null ||
-        userComp == '' ||
-        data == null ||
-        data.companyId == null ||
-        data.companyId == userComp || 
-        data.empresaId == userComp || 
-        data.tenantId == userComp ||
-        userComp == 'emp-001' ||
-        data.companyId == 'emp-001' ||
-        data.empresaId == 'emp-001'
-      );
-    }
-
-    function isNotModifyingProtectedFields() {
-      return !request.resource.data.diff(resource.data).affectedKeys().hasAny([
-        'role', 'perfil', 'permissions', 'permissoes', 'companyId', 'empresaId',
-        'plano', 'plan', 'modulos', 'módulos', 'modules', 'ativo', 'status', 'createdBy'
-      ]);
     }
 
     // =========================================================================
@@ -94,17 +24,11 @@ service cloud.firestore {
     // =========================================================================
 
     match /usuarios/{userId} {
-      allow read: if signedIn() && (request.auth.uid == userId || isMaster() || belongsToCompany(resource.data));
-      allow create: if isMaster() || (signedIn() && request.auth.uid == userId);
-      allow update: if isMaster() || (signedIn() && request.auth.uid == userId && isNotModifyingProtectedFields());
-      allow delete: if isMaster();
+      allow read, write: if signedIn();
     }
 
     match /users/{userId} {
-      allow read: if signedIn() && (request.auth.uid == userId || isMaster() || belongsToCompany(resource.data));
-      allow create: if isMaster() || (signedIn() && request.auth.uid == userId);
-      allow update: if isMaster() || (signedIn() && request.auth.uid == userId && isNotModifyingProtectedFields());
-      allow delete: if isMaster();
+      allow read, write: if signedIn();
     }
 
     // =========================================================================
@@ -112,58 +36,47 @@ service cloud.firestore {
     // =========================================================================
 
     match /modulos/{moduleId} {
-      allow read: if signedIn();
-      allow create, update, delete: if isMaster();
+      allow read, write: if signedIn();
     }
 
     match /modules/{moduleId} {
-      allow read: if signedIn();
-      allow create, update, delete: if isMaster();
+      allow read, write: if signedIn();
     }
 
     match /planos/{planId} {
-      allow read: if signedIn();
-      allow create, update, delete: if isMaster();
+      allow read, write: if signedIn();
     }
 
     match /plans/{planId} {
-      allow read: if signedIn();
-      allow create, update, delete: if isMaster();
+      allow read, write: if signedIn();
     }
 
     match /empresas/{empresaId} {
-      allow read: if isMaster() || (signedIn() && (getUserCompanyId() == empresaId || belongsToCompany(resource.data)));
-      allow create, update, delete: if isMaster();
+      allow read, write: if signedIn();
     }
 
     match /companies/{companyId} {
-      allow read: if isMaster() || (signedIn() && (getUserCompanyId() == companyId || belongsToCompany(resource.data)));
-      allow create, update, delete: if isMaster();
+      allow read, write: if signedIn();
     }
 
     match /tenants/{tenantId} {
-      allow read: if isMaster() || (signedIn() && (getUserCompanyId() == tenantId || belongsToCompany(resource.data)));
-      allow create, update, delete: if isMaster();
+      allow read, write: if signedIn();
     }
 
     match /empresa_modulos/{empresaId} {
-      allow read: if isMaster() || (signedIn() && (getUserCompanyId() == empresaId || belongsToCompany(resource.data)));
-      allow create, update, delete: if isMaster();
+      allow read, write: if signedIn();
     }
 
     match /companyModules/{docId} {
-      allow read: if isMaster() || signedIn();
-      allow create, update, delete: if isMaster();
+      allow read, write: if signedIn();
     }
 
     match /subscriptions/{subscriptionId} {
-      allow read: if isMaster() || (signedIn() && belongsToCompany(resource.data));
-      allow create, update, delete: if isMaster();
+      allow read, write: if signedIn();
     }
 
     match /assinaturas/{subscriptionId} {
-      allow read: if isMaster() || (signedIn() && belongsToCompany(resource.data));
-      allow create, update, delete: if isMaster();
+      allow read, write: if signedIn();
     }
 
     // =========================================================================
@@ -171,33 +84,36 @@ service cloud.firestore {
     // =========================================================================
 
     match /jobs/{jobId} {
-      allow read: if true; // Public read for public job board
-      allow create, update, delete: if isMaster() || (signedIn() && belongsToCompany(request.resource.data));
+      allow read: if true;
+      allow write: if signedIn();
     }
 
     match /vagas/{jobId} {
       allow read: if true;
-      allow create, update, delete: if isMaster() || (signedIn() && belongsToCompany(request.resource.data));
+      allow write: if signedIn();
     }
 
     match /candidaturas/{candidaturaId} {
-      allow create: if true; // Public application submission
-      allow read, update, delete: if isMaster() || (signedIn() && belongsToCompany(resource.data));
+      allow read: if signedIn();
+      allow create: if true;
+      allow update, delete: if signedIn();
     }
 
     match /applications/{appId} {
+      allow read: if signedIn();
       allow create: if true;
-      allow read, update, delete: if isMaster() || (signedIn() && belongsToCompany(resource.data));
+      allow update, delete: if signedIn();
     }
 
     match /candidate_applications/{appId} {
+      allow read: if signedIn();
       allow create: if true;
-      allow read, update, delete: if isMaster() || (signedIn() && belongsToCompany(resource.data));
+      allow update, delete: if signedIn();
     }
 
     match /company_leads/{leadId} {
       allow create: if true;
-      allow read, update, delete: if isMaster();
+      allow read, update, delete: if signedIn();
     }
 
     // =========================================================================
@@ -205,220 +121,219 @@ service cloud.firestore {
     // =========================================================================
 
     match /candidatos/{candidatoId} {
-      allow read, update, delete: if isMaster() || (signedIn() && belongsToCompany(resource.data));
-      allow create: if isMaster() || (signedIn() && belongsToCompany(request.resource.data));
+      allow read, write: if signedIn();
     }
 
     match /candidates/{candidateId} {
-      allow read, update, delete: if isMaster() || (signedIn() && belongsToCompany(resource.data));
-      allow create: if isMaster() || (signedIn() && belongsToCompany(request.resource.data));
+      allow read, write: if signedIn();
     }
 
     match /entrevistas/{interviewId} {
-      allow read, update, delete: if isMaster() || (signedIn() && belongsToCompany(resource.data));
-      allow create: if isMaster() || (signedIn() && belongsToCompany(request.resource.data));
+      allow read, write: if signedIn();
     }
 
     match /interviews/{interviewId} {
-      allow read, update, delete: if isMaster() || (signedIn() && belongsToCompany(resource.data));
-      allow create: if isMaster() || (signedIn() && belongsToCompany(request.resource.data));
+      allow read, write: if signedIn();
     }
 
     match /agenda/{agendaId} {
-      allow read, update, delete: if isMaster() || (signedIn() && belongsToCompany(resource.data));
-      allow create: if isMaster() || (signedIn() && belongsToCompany(request.resource.data));
+      allow read, write: if signedIn();
     }
 
     match /contratacoes/{contratacaoId} {
-      allow read, update, delete: if isMaster() || (signedIn() && belongsToCompany(resource.data));
-      allow create: if isMaster() || (signedIn() && belongsToCompany(request.resource.data));
+      allow read, write: if signedIn();
     }
 
     match /solicitacoes_admissao/{admId} {
-      allow read, update, delete: if isMaster() || (signedIn() && belongsToCompany(resource.data));
-      allow create: if isMaster() || (signedIn() && belongsToCompany(request.resource.data));
+      allow read, write: if signedIn();
     }
 
     match /colaboradores/{colabId} {
-      allow read, update, delete: if isMaster() || (signedIn() && belongsToCompany(resource.data));
-      allow create: if isMaster() || (signedIn() && belongsToCompany(request.resource.data));
+      allow read, write: if signedIn();
     }
 
     match /historico_colaborador/{histId} {
-      allow read, update, delete: if isMaster() || (signedIn() && belongsToCompany(resource.data));
-      allow create: if isMaster() || (signedIn() && belongsToCompany(request.resource.data));
+      allow read, write: if signedIn();
     }
 
     match /clientes/{clienteId} {
-      allow read, update, delete: if isMaster() || (signedIn() && belongsToCompany(resource.data));
-      allow create: if isMaster() || (signedIn() && belongsToCompany(request.resource.data));
+      allow read, write: if signedIn();
     }
 
     match /clients/{clientId} {
-      allow read, update, delete: if isMaster() || (signedIn() && belongsToCompany(resource.data));
-      allow create: if isMaster() || (signedIn() && belongsToCompany(request.resource.data));
+      allow read, write: if signedIn();
     }
 
     match /funcionarios/{employeeId} {
-      allow read, update, delete: if isMaster() || (signedIn() && belongsToCompany(resource.data));
-      allow create: if isMaster() || (signedIn() && belongsToCompany(request.resource.data));
+      allow read, write: if signedIn();
     }
 
     match /employees/{employeeId} {
-      allow read, update, delete: if isMaster() || (signedIn() && belongsToCompany(resource.data));
-      allow create: if isMaster() || (signedIn() && belongsToCompany(request.resource.data));
+      allow read, write: if signedIn();
     }
 
     match /internal_team/{memberId} {
-      allow read, update, delete: if isMaster() || (signedIn() && belongsToCompany(resource.data));
-      allow create: if isMaster() || (signedIn() && belongsToCompany(request.resource.data));
+      allow read, write: if signedIn();
     }
 
     match /documentos/{docId} {
-      allow read, update, delete: if isMaster() || (signedIn() && belongsToCompany(resource.data));
-      allow create: if isMaster() || (signedIn() && belongsToCompany(request.resource.data));
+      allow read, write: if signedIn();
     }
 
     match /documents/{docId} {
-      allow read, update, delete: if isMaster() || (signedIn() && belongsToCompany(resource.data));
-      allow create: if isMaster() || (signedIn() && belongsToCompany(request.resource.data));
+      allow read, write: if signedIn();
     }
 
     match /assinatura_digital/{docId} {
-      allow read, update, delete: if isMaster() || (signedIn() && belongsToCompany(resource.data));
-      allow create: if isMaster() || (signedIn() && belongsToCompany(request.resource.data));
+      allow read, write: if signedIn();
     }
 
     match /beneficios/{benefitId} {
-      allow read, update, delete: if isMaster() || (signedIn() && belongsToCompany(resource.data));
-      allow create: if isMaster() || (signedIn() && belongsToCompany(request.resource.data));
+      allow read, write: if signedIn();
     }
 
     match /benefits/{benefitId} {
-      allow read, update, delete: if isMaster() || (signedIn() && belongsToCompany(resource.data));
-      allow create: if isMaster() || (signedIn() && belongsToCompany(request.resource.data));
+      allow read, write: if signedIn();
     }
 
     match /solicitacoes_folga/{leaveId} {
-      allow read, update, delete: if isMaster() || (signedIn() && belongsToCompany(resource.data));
-      allow create: if isMaster() || (signedIn() && belongsToCompany(request.resource.data));
+      allow read, write: if signedIn();
     }
 
     match /ponto_registros/{entryId} {
-      allow read, update, delete: if isMaster() || (signedIn() && belongsToCompany(resource.data));
-      allow create: if isMaster() || (signedIn() && belongsToCompany(request.resource.data));
+      allow read, write: if signedIn();
     }
 
     match /timeEntries/{entryId} {
-      allow read, update, delete: if isMaster() || (signedIn() && belongsToCompany(resource.data));
-      allow create: if isMaster() || (signedIn() && belongsToCompany(request.resource.data));
+      allow read, write: if signedIn();
     }
 
     match /escalas_ponto/{escalaId} {
-      allow read, update, delete: if isMaster() || (signedIn() && belongsToCompany(resource.data));
-      allow create: if isMaster() || (signedIn() && belongsToCompany(request.resource.data));
+      allow read, write: if signedIn();
     }
 
     match /banco_horas/{bhId} {
-      allow read, update, delete: if isMaster() || (signedIn() && belongsToCompany(resource.data));
-      allow create: if isMaster() || (signedIn() && belongsToCompany(request.resource.data));
+      allow read, write: if signedIn();
     }
 
     match /configuracoes_ponto/{configId} {
-      allow read, update, delete: if isMaster() || (signedIn() && belongsToCompany(resource.data));
-      allow create: if isMaster() || (signedIn() && belongsToCompany(request.resource.data));
+      allow read, write: if signedIn();
     }
 
     match /settings/{settingId} {
-      allow read: if signedIn();
-      allow write: if isMaster() || (signedIn() && belongsToCompany(resource.data));
+      allow read, write: if signedIn();
     }
 
     match /configuracoes/{settingId} {
-      allow read: if signedIn();
-      allow write: if isMaster() || (signedIn() && belongsToCompany(resource.data));
+      allow read, write: if signedIn();
     }
 
     match /payroll_periods/{periodId} {
-      allow read, update, delete: if isMaster() || (signedIn() && belongsToCompany(resource.data));
-      allow create: if isMaster() || (signedIn() && belongsToCompany(request.resource.data));
+      allow read, write: if signedIn();
     }
 
     match /payroll_stubs/{stubId} {
-      allow read, update, delete: if isMaster() || (signedIn() && belongsToCompany(resource.data));
-      allow create: if isMaster() || (signedIn() && belongsToCompany(request.resource.data));
+      allow read, write: if signedIn();
     }
 
     match /esocial_events/{eventId} {
-      allow read, update, delete: if isMaster() || (signedIn() && belongsToCompany(resource.data));
-      allow create: if isMaster() || (signedIn() && belongsToCompany(request.resource.data));
+      allow read, write: if signedIn();
     }
 
     match /headhunter_clients/{id} {
-      allow read, update, delete: if isMaster() || (signedIn() && belongsToCompany(resource.data));
-      allow create: if isMaster() || (signedIn() && belongsToCompany(request.resource.data));
+      allow read, write: if signedIn();
     }
 
     match /headhunter_jobs/{id} {
-      allow read, update, delete: if isMaster() || (signedIn() && belongsToCompany(resource.data));
-      allow create: if isMaster() || (signedIn() && belongsToCompany(request.resource.data));
+      allow read, write: if signedIn();
     }
 
     match /headhunter_contracts/{id} {
-      allow read, update, delete: if isMaster() || (signedIn() && belongsToCompany(resource.data));
-      allow create: if isMaster() || (signedIn() && belongsToCompany(request.resource.data));
+      allow read, write: if signedIn();
     }
 
     match /headhunter_hirings/{id} {
-      allow read, update, delete: if isMaster() || (signedIn() && belongsToCompany(resource.data));
-      allow create: if isMaster() || (signedIn() && belongsToCompany(request.resource.data));
+      allow read, write: if signedIn();
     }
 
     match /headhunter_proposals/{id} {
-      allow read, update, delete: if isMaster() || (signedIn() && belongsToCompany(resource.data));
-      allow create: if isMaster() || (signedIn() && belongsToCompany(request.resource.data));
+      allow read, write: if signedIn();
     }
 
     match /headhunter_finance/{id} {
-      allow read, update, delete: if isMaster() || (signedIn() && belongsToCompany(resource.data));
-      allow create: if isMaster() || (signedIn() && belongsToCompany(request.resource.data));
+      allow read, write: if signedIn();
+    }
+
+    match /headhunter_placements/{id} {
+      allow read, write: if signedIn();
+    }
+
+    match /headhunter_candidates/{id} {
+      allow read, write: if signedIn();
+    }
+
+    match /headhunter_interviews/{id} {
+      allow read, write: if signedIn();
+    }
+
+    match /notifications/{id} {
+      allow read, write: if signedIn();
+    }
+
+    match /notificacoes/{id} {
+      allow read, write: if signedIn();
     }
 
     match /consultant_clients/{id} {
-      allow read, update, delete: if isMaster() || (signedIn() && belongsToCompany(resource.data));
-      allow create: if isMaster() || (signedIn() && belongsToCompany(request.resource.data));
+      allow read, write: if signedIn();
     }
 
     match /consultant_jobs/{id} {
-      allow read, update, delete: if isMaster() || (signedIn() && belongsToCompany(resource.data));
-      allow create: if isMaster() || (signedIn() && belongsToCompany(request.resource.data));
+      allow read, write: if signedIn();
     }
 
     match /consultant_screenings/{id} {
-      allow read, update, delete: if isMaster() || (signedIn() && belongsToCompany(resource.data));
-      allow create: if isMaster() || (signedIn() && belongsToCompany(request.resource.data));
+      allow read, write: if signedIn();
     }
 
-    // =========================================================================
-    // AUDIT LOGS (Master or Tenant Auditing)
-    // =========================================================================
-
     match /audit_logs/{id} {
-      allow read: if isMaster() || (signedIn() && belongsToCompany(resource.data));
-      allow create: if signedIn();
-      allow update, delete: if isMaster();
+      allow read, write: if signedIn();
     }
 
     match /auditLogs/{id} {
-      allow read: if isMaster() || (signedIn() && belongsToCompany(resource.data));
-      allow create: if signedIn();
-      allow update, delete: if isMaster();
+      allow read, write: if signedIn();
     }
 
     match /payroll_audit_logs/{id} {
-      allow read: if isMaster() || (signedIn() && belongsToCompany(resource.data));
-      allow create: if signedIn();
-      allow update, delete: if isMaster();
+      allow read, write: if signedIn();
+    }
+
+    match /systemAlerts/{id} {
+      allow read, write: if signedIn();
+    }
+
+    match /goals/{id} {
+      allow read, write: if signedIn();
+    }
+
+    match /systemBackups/{id} {
+      allow read, write: if signedIn();
+    }
+
+    match /timeClock/{id} {
+      allow read, write: if signedIn();
+    }
+
+    match /payroll/{id} {
+      allow read, write: if signedIn();
+    }
+
+    match /conversations/{id} {
+      allow read, write: if signedIn();
+    }
+
+    match /messages/{id} {
+      allow read, write: if signedIn();
     }
 
     // =========================================================================

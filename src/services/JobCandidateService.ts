@@ -428,231 +428,354 @@ export class JobCandidateService {
     othersClosedCount?: number;
     warnings: string[];
   }> {
-    if (!candidate || !candidate.id) throw new Error('ID real da candidatura não informado.');
-    if (!candidate.companyId) throw new Error('Empresa da candidatura não identificada.');
-    if (!candidate.jobId) throw new Error('Vaga da candidatura não identificada.');
-    if (!candidate.name) throw new Error('Nome do candidato não informado.');
+    console.log("[HIRE] Iniciando contratação");
+    console.log("[HIRE] Dados do candidato recebidos:", {
+      id: candidate?.id,
+      candidateId: candidate?.candidateId,
+      companyId: candidate?.companyId,
+      jobId: candidate?.jobId,
+      name: candidate?.name,
+      status: candidate?.status,
+      authenticatedUid: auth.currentUser?.uid
+    });
+
+    if (!candidate || !candidate.id) {
+      const err = new Error('ID real da candidatura não informado.');
+      console.error("[HIRE] Falha de validação prévia:", err);
+      throw err;
+    }
+    if (!candidate.companyId) {
+      const err = new Error('Empresa da candidatura não identificada.');
+      console.error("[HIRE] Falha de validação prévia:", err);
+      throw err;
+    }
+    if (!candidate.jobId) {
+      const err = new Error('Vaga da candidatura não identificada.');
+      console.error("[HIRE] Falha de validação prévia:", err);
+      throw err;
+    }
+    if (!candidate.name) {
+      const err = new Error('Nome do candidato não informado.');
+      console.error("[HIRE] Falha de validação prévia:", err);
+      throw err;
+    }
 
     if (candidate.status === 'Contratado') {
-      throw new Error('Candidato já contratado.');
+      const err = new Error('Candidato já contratado.');
+      console.error("[HIRE] Falha de validação prévia:", err);
+      throw err;
     }
+
+    try {
+      const now = new Date().toISOString();
+      const titleToUse = jobTitle || candidate.role || 'Vaga Corporativa';
+
+      // 1. Prepare timeline
+      const updatedTimeline = [
+        ...(candidate.timeline || []),
+        {
+          id: `evt-${Date.now()}`,
+          title: 'Candidato Contratado',
+          description: `Candidato(a) aprovado(a) e contratado(a) para a vaga ${titleToUse}. Encaminhado para a fila de admissão DP.`,
+          date: now.replace('T', ' ').substring(0, 16),
+          by: auth.currentUser?.displayName || 'Recrutador RH'
+        }
+      ];
+
+      // Primary document updates
+      const appUpdateDoc = sanitizeFirestoreData({
+        status: 'Contratado',
+        etapa: 'Contratado',
+        timeline: updatedTimeline,
+        contratadoEm: now,
+        updatedAt: now
+      });
+
+      const origProc = (candidate as any).origemProcesso || (candidate as any).origem || 'recrutamento_interno';
+      const destContr = origProc === 'headhunter' ? 'headhunter' : 'departamento_pessoal';
+
+      const contratacaoId = `${candidate.jobId}_${candidate.candidateId || candidate.id}`;
+      const contratacaoDoc = sanitizeFirestoreData({
+        id: contratacaoId,
+        companyId: candidate.companyId,
+        empresaId: candidate.companyId,
+        applicationId: candidate.id,
+        candidaturaId: candidate.id,
+        candidateId: candidate.candidateId || candidate.id,
+        candidatoId: candidate.candidateId || candidate.id,
+        candidateName: candidate.name,
+        candidatoNome: candidate.name,
+        jobId: candidate.jobId,
+        vagaId: candidate.jobId,
+        jobTitle: titleToUse,
+        vagaTitulo: titleToUse,
+        origemProcesso: origProc,
+        destinoContratacao: destContr,
+        status: 'Contratado',
+        statusEncaminhamento: 'Pendente',
+        contratadoEm: now,
+        createdAt: now,
+        updatedAt: now,
+        email: candidate.email || '',
+        phone: candidate.phone || '',
+        cpf: candidate.cpf || '',
+        department: (candidate as any).department || 'Não informado',
+        city: candidate.city || '',
+        state: candidate.state || '',
+        salaryExpectation: candidate.salaryExpectation || 0,
+        salarioContratado: candidate.salaryExpectation || 0,
+        salarioFinal: candidate.salaryExpectation || 0,
+        responsavelNome: auth.currentUser?.displayName || 'Recrutador RH',
+        clienteId: (candidate as any).clienteId || null,
+        clienteNome: (candidate as any).clienteNome || null,
+        consultorResponsavel: (candidate as any).consultorResponsavel || auth.currentUser?.displayName || 'Recrutador RH',
+        observacoes: (candidate as any).observacoes || ''
+      });
+
+      // 1. Etapa 1: Atualizar candidate_applications e Criar contratacoes
+      console.log("[HIRE] Etapa 1: Atualizar candidate_applications e criar contratacoes");
+      console.log("[HIRE] Operação Batch - candidate_applications:", candidate.id);
+      console.log("[HIRE] Operação Batch - contratacoes:", contratacaoId);
+
+      const batch = writeBatch(db);
+      batch.set(doc(db, COLLECTION_NAME, candidate.id), appUpdateDoc, { merge: true });
+      batch.set(doc(db, 'contratacoes', contratacaoId), contratacaoDoc, { merge: true });
+
+      await batch.commit();
+      console.log("[HIRE] Etapa 1 CONCLUÍDA com sucesso!");
+
+      let profileUpdated = false;
+      let admissionSent = false;
+      let othersClosedCount = 0;
+      const warnings: string[] = [];
+
+      // 2. Etapa 2: Encerrar outros candidatos da vaga
+      if (options.closeOtherCandidates !== false) {
+        console.log("[HIRE] Etapa 2: Encerrar outros candidatos da vaga");
+        try {
+          const qOther = query(
+            collection(db, COLLECTION_NAME),
+            where('companyId', '==', candidate.companyId),
+            where('jobId', '==', candidate.jobId)
+          );
+          const snapOther = await getDocs(qOther);
+
+          const closeBatch = writeBatch(db);
+          let pendingCloseOps = 0;
+
+          for (const docItem of snapOther.docs) {
+            if (docItem.id === candidate.id) continue;
+            const data = docItem.data() as JobCandidateApplication;
+
+            if (
+              data.status === 'Contratado' ||
+              data.status === 'Encerrado' ||
+              data.status === 'Reprovado' ||
+              (data.status as string) === 'Vaga Preenchida'
+            ) {
+              continue;
+            }
+
+            const closeTimeline = [
+              ...(data.timeline || []),
+              {
+                id: `evt-${Date.now()}-${docItem.id}`,
+                title: 'Processo encerrado',
+                description: 'A vaga foi preenchida por outro candidato. Perfil mantido no Banco de Talentos.',
+                date: now.replace('T', ' ').substring(0, 16),
+                by: auth.currentUser?.displayName || 'Recrutador RH'
+              }
+            ];
+
+            const closePayload = sanitizeFirestoreData({
+              status: 'Encerrado',
+              etapa: 'Vaga Preenchida',
+              motivoEncerramento: 'Outro candidato contratado',
+              manterBancoTalentos: true,
+              encerradoEm: now,
+              updatedAt: now,
+              timeline: closeTimeline
+            });
+
+            closeBatch.set(doc(db, COLLECTION_NAME, docItem.id), closePayload, { merge: true });
+            pendingCloseOps++;
+            othersClosedCount++;
+
+            if (data.candidateId) {
+              try {
+                await CandidateService.update(data.candidateId, {
+                  status: 'Ativo',
+                  notes: `Participou da vaga ${candidate.jobId} (Vaga Preenchida por outro candidato). Perfil mantido no Banco de Talentos.`
+                });
+              } catch (pErr) {
+                console.warn(`[HIRE] Aviso ao atualizar Banco de Talentos do candidato ${data.candidateId}:`, pErr);
+              }
+            }
+          }
+
+          if (pendingCloseOps > 0) {
+            await closeBatch.commit();
+          }
+          console.log(`[HIRE] Etapa 2 CONCLUÍDA! (${othersClosedCount} outros candidatos encerrados)`);
+        } catch (closeErr: any) {
+          console.error('[HIRE] Erro na Etapa 2 ao encerrar outros candidatos:', closeErr);
+          warnings.push(`Candidato contratado, mas alguns participantes da vaga ainda precisam ser encerrados: ${closeErr?.message || 'Erro de sincronização'}`);
+        }
+      }
+
+      // 3. Etapa 3: Atualizar status da vaga
+      console.log("[HIRE] Etapa 3: Atualizar status da vaga no JobService");
+      try {
+        const job = await JobService.getById(candidate.jobId);
+        if (job) {
+          const jobOpenings = Number(job.openings || (job as any).vagasCount || (job as any).totalVagas || 1);
+          
+          const qHired = query(
+            collection(db, COLLECTION_NAME),
+            where('companyId', '==', candidate.companyId),
+            where('jobId', '==', candidate.jobId),
+            where('status', '==', 'Contratado')
+          );
+          const snapHired = await getDocs(qHired);
+          const totalHired = snapHired.size;
+
+          if (totalHired >= jobOpenings || options.closeOtherCandidates) {
+            await JobService.update(candidate.jobId, {
+              status: 'Preenchida',
+              statusVaga: 'Preenchida',
+              preenchidaEm: now
+            });
+            console.log("[HIRE] Etapa 3 CONCLUÍDA! Vaga marcada como Preenchida.");
+          } else {
+            console.log(`[HIRE] Etapa 3 CONCLUÍDA! Vaga mantida em aberto (${totalHired}/${jobOpenings} contratados).`);
+          }
+        }
+      } catch (jobErr: any) {
+        console.warn('[HIRE] Aviso ao verificar/atualizar status da vaga:', jobErr);
+      }
+
+      // 4. Etapa 4: Atualizar perfil do candidato no Banco de Talentos
+      if (candidate.candidateId) {
+        console.log("[HIRE] Etapa 4: Atualizar perfil do candidato no Banco de Talentos");
+        try {
+          await CandidateService.update(candidate.candidateId, {
+            status: 'Contratado',
+            currentJobId: candidate.jobId,
+            currentStageId: 'contratado'
+          });
+          profileUpdated = true;
+          console.log("[HIRE] Etapa 4 CONCLUÍDA com sucesso!");
+        } catch (e: any) {
+          console.warn('[HIRE] Aviso ao atualizar perfil no Banco de Talentos:', e);
+          warnings.push('Perfil do candidato no Banco de Talentos não pôde ser sincronizado.');
+        }
+      }
+
+      // 5. Etapa 5: Log de Auditoria
+      console.log("[HIRE] Etapa 5: Registrar log de auditoria no AuditService");
+      try {
+        await AuditService.log({
+          action: 'UPDATE',
+          description: `Candidato ${candidate.name} contratado para a vaga ${titleToUse}`,
+          moduleName: 'Recrutamento',
+          targetEntity: 'Contratação',
+          companyId: candidate.companyId
+        });
+        console.log("[HIRE] Etapa 5 CONCLUÍDA com sucesso!");
+      } catch (e: any) {
+        console.warn('[HIRE] Aviso ao registrar auditoria:', e);
+      }
+
+      console.log("[HIRE] Processo de contratação finalizado com sucesso!");
+
+      return {
+        success: true,
+        admissionSent: false,
+        profileUpdated,
+        othersClosedCount,
+        warnings
+      };
+    } catch (error: any) {
+      console.error("[HIRE] Erro completo:", error);
+      console.error("[HIRE] Stack trace completo:", error?.stack);
+      throw error;
+    }
+  }
+
+  /**
+   * Forward a hiring record to DP or Headhunter after hiring
+   */
+  static async forwardHiring(
+    hiring: any,
+    targetDestination: 'departamento_pessoal' | 'headhunter'
+  ): Promise<{ success: boolean; message: string }> {
+    if (!hiring || !hiring.id) throw new Error('ID da contratação inválido.');
 
     const now = new Date().toISOString();
-    const titleToUse = jobTitle || candidate.role || 'Vaga Corporativa';
+    const contratacaoId = hiring.id;
 
-    // 1. Prepare timeline
-    const updatedTimeline = [
-      ...(candidate.timeline || []),
-      {
-        id: `evt-${Date.now()}`,
-        title: 'Candidato Contratado',
-        description: `Candidato(a) aprovado(a) e contratado(a) para a vaga ${titleToUse}. Encaminhado para a fila de admissão DP.`,
-        date: now.replace('T', ' ').substring(0, 16),
-        by: auth.currentUser?.displayName || 'Recrutador RH'
-      }
-    ];
-
-    // Primary document updates
-    const appUpdateDoc = sanitizeFirestoreData({
-      status: 'Contratado',
-      etapa: 'Contratado',
-      timeline: updatedTimeline,
-      contratadoEm: now,
-      updatedAt: now
-    });
-
-    const contratacaoId = `${candidate.jobId}_${candidate.candidateId || candidate.id}`;
-    const contratacaoDoc = sanitizeFirestoreData({
-      id: contratacaoId,
-      companyId: candidate.companyId,
-      empresaId: candidate.companyId,
-      jobId: candidate.jobId,
-      vagaId: candidate.jobId,
-      candidateId: candidate.candidateId || candidate.id,
-      candidatoId: candidate.candidateId || candidate.id,
-      candidaturaId: candidate.id,
-      candidateName: candidate.name,
-      candidatoNome: candidate.name,
-      jobTitle: titleToUse,
-      vagaTitulo: titleToUse,
-      status: 'Concluído',
-      createdAt: now,
-      updatedAt: now
-    });
-
-    // 2. Primary Mandatory Step: Write Batch
-    const batch = writeBatch(db);
-    batch.set(doc(db, COLLECTION_NAME, candidate.id), appUpdateDoc, { merge: true });
-    batch.set(doc(db, 'contratacoes', contratacaoId), contratacaoDoc, { merge: true });
-
-    await batch.commit();
-
-    let profileUpdated = false;
-    let admissionSent = false;
-    let othersClosedCount = 0;
-    const warnings: string[] = [];
-
-    // 3. Close other active candidates for the same job if option is true
-    if (options.closeOtherCandidates !== false) {
-      try {
-        const qOther = query(
-          collection(db, COLLECTION_NAME),
-          where('companyId', '==', candidate.companyId),
-          where('jobId', '==', candidate.jobId)
-        );
-        const snapOther = await getDocs(qOther);
-
-        const closeBatch = writeBatch(db);
-        let pendingCloseOps = 0;
-
-        for (const docItem of snapOther.docs) {
-          if (docItem.id === candidate.id) continue;
-          const data = docItem.data() as JobCandidateApplication;
-
-          // Skip already hired, closed, or rejected candidates
-          if (
-            data.status === 'Contratado' ||
-            data.status === 'Encerrado' ||
-            data.status === 'Reprovado' ||
-            (data.status as string) === 'Vaga Preenchida'
-          ) {
-            continue;
-          }
-
-          const closeTimeline = [
-            ...(data.timeline || []),
-            {
-              id: `evt-${Date.now()}-${docItem.id}`,
-              title: 'Processo encerrado',
-              description: 'A vaga foi preenchida por outro candidato. Perfil mantido no Banco de Talentos.',
-              date: now.replace('T', ' ').substring(0, 16),
-              by: auth.currentUser?.displayName || 'Recrutador RH'
-            }
-          ];
-
-          const closePayload = sanitizeFirestoreData({
-            status: 'Encerrado',
-            etapa: 'Vaga Preenchida',
-            motivoEncerramento: 'Outro candidato contratado',
-            manterBancoTalentos: true,
-            encerradoEm: now,
-            updatedAt: now,
-            timeline: closeTimeline
-          });
-
-          closeBatch.set(doc(db, COLLECTION_NAME, docItem.id), closePayload, { merge: true });
-          pendingCloseOps++;
-          othersClosedCount++;
-
-          // Maintain candidate profile in Talent Bank (candidatos)
-          if (data.candidateId) {
-            try {
-              await CandidateService.update(data.candidateId, {
-                status: 'Ativo',
-                notes: `Participou da vaga ${candidate.jobId} (Vaga Preenchida por outro candidato). Perfil mantido no Banco de Talentos.`
-              });
-            } catch (pErr) {
-              console.warn(`Aviso ao atualizar Banco de Talentos do candidato ${data.candidateId}:`, pErr);
-            }
-          }
-        }
-
-        if (pendingCloseOps > 0) {
-          await closeBatch.commit();
-        }
-      } catch (closeErr: any) {
-        console.error('Erro ao encerrar outros candidatos da vaga:', closeErr);
-        warnings.push(`Candidato contratado, mas alguns participantes da vaga ainda precisam ser encerrados: ${closeErr?.message || 'Erro de sincronização'}`);
-      }
-    }
-
-    // 4. Update Job Status based on position capacity
     try {
-      const job = await JobService.getById(candidate.jobId);
-      if (job) {
-        const jobOpenings = Number(job.openings || (job as any).vagasCount || (job as any).totalVagas || 1);
-        
-        // Count total hires for this job
-        const qHired = query(
-          collection(db, COLLECTION_NAME),
-          where('companyId', '==', candidate.companyId),
-          where('jobId', '==', candidate.jobId),
-          where('status', '==', 'Contratado')
-        );
-        const snapHired = await getDocs(qHired);
-        const totalHired = snapHired.size;
-
-        if (totalHired >= jobOpenings || options.closeOtherCandidates) {
-          await JobService.update(candidate.jobId, {
-            status: 'Preenchida',
-            statusVaga: 'Preenchida',
-            preenchidaEm: now
-          });
-        }
-      }
-    } catch (jobErr: any) {
-      console.warn('Aviso ao verificar/atualizar status da vaga no JobService:', jobErr);
-    }
-
-    // 5. Secondary Step A: Profile Sync
-    if (candidate.candidateId) {
-      try {
-        await CandidateService.update(candidate.candidateId, {
-          status: 'Contratado',
-          currentJobId: candidate.jobId,
-          currentStageId: 'contratado'
+      if (targetDestination === 'departamento_pessoal') {
+        await enviarCandidatoParaAdmissaoDP({
+          id: hiring.candidaturaId || hiring.applicationId || hiring.id,
+          candidateId: hiring.candidateId || hiring.candidatoId,
+          jobId: hiring.jobId || hiring.vagaId,
+          companyId: hiring.companyId || hiring.empresaId,
+          name: hiring.candidateName || hiring.candidatoNome,
+          email: hiring.email || '',
+          phone: hiring.phone || '',
+          cpf: hiring.cpf || '',
+          role: hiring.jobTitle || hiring.vagaTitulo || 'Cargo não informado',
+          vagaTitulo: hiring.jobTitle || hiring.vagaTitulo || 'Cargo não informado',
+          department: hiring.department || 'Não informado',
+          salaryExpectation: hiring.salarioContratado || hiring.salaryExpectation || 0,
+          city: hiring.city || '',
+          state: hiring.state || ''
         });
-        profileUpdated = true;
-      } catch (e: any) {
-        console.warn('Aviso ao atualizar perfil no Banco de Talentos:', e);
-        warnings.push('Perfil do candidato no Banco de Talentos não pôde ser sincronizado.');
+      } else if (targetDestination === 'headhunter') {
+        const placementId = `placement-${hiring.id}`;
+        await setDoc(doc(db, 'headhunter_placements', placementId), sanitizeFirestoreData({
+          id: placementId,
+          companyId: hiring.companyId || hiring.empresaId,
+          empresaId: hiring.companyId || hiring.empresaId,
+          clienteId: hiring.clienteId || null,
+          clienteNome: hiring.clienteNome || 'Cliente Headhunter',
+          candidateId: hiring.candidateId || hiring.candidatoId,
+          candidatoNome: hiring.candidateName || hiring.candidatoNome,
+          jobId: hiring.jobId || hiring.vagaId,
+          vagaTitulo: hiring.jobTitle || hiring.vagaTitulo,
+          salarioContratado: hiring.salarioContratado || hiring.salarioFinal || 0,
+          dataPlacement: now,
+          status: 'Confirmado',
+          createdAt: now,
+          updatedAt: now
+        }), { merge: true });
       }
-    }
 
-    // 6. Secondary Step B: DP Admission Queue
-    try {
-      await enviarCandidatoParaAdmissaoDP({
-        id: candidate.id,
-        candidateId: candidate.candidateId || candidate.id,
-        jobId: candidate.jobId,
-        companyId: candidate.companyId,
-        name: candidate.name,
-        email: candidate.email,
-        phone: candidate.phone,
-        cpf: candidate.cpf,
-        role: titleToUse,
-        vagaTitulo: titleToUse,
-        department: (candidate as any).department,
-        salaryExpectation: candidate.salaryExpectation,
-        city: candidate.city,
-        state: candidate.state
-      });
-      admissionSent = true;
-    } catch (e: any) {
-      console.warn('Aviso ao enviar para admissão no DP:', e);
-      warnings.push(`Envio para admissão do DP: ${e?.message || 'Erro ao gravar registro de admissão'}`);
-    }
+      await setDoc(doc(db, 'contratacoes', contratacaoId), sanitizeFirestoreData({
+        statusEncaminhamento: 'Encaminhado',
+        encaminhadoPara: targetDestination,
+        encaminhadoEm: now,
+        updatedAt: now
+      }), { merge: true });
 
-    // 7. Secondary Step C: Audit Log
-    try {
-      await AuditService.log({
-        action: 'UPDATE',
-        description: `Candidato ${candidate.name} contratado para a vaga ${titleToUse}`,
-        moduleName: 'Recrutamento',
-        targetEntity: 'Contratação',
-        companyId: candidate.companyId
-      });
-    } catch (e: any) {
-      console.warn('Aviso ao registrar auditoria:', e);
+      return {
+        success: true,
+        message: `Candidato encaminhado para ${targetDestination === 'departamento_pessoal' ? 'Departamento Pessoal' : 'Headhunter'} com sucesso!`
+      };
+    } catch (err: any) {
+      console.error('Erro ao encaminhar contratação:', err);
+      try {
+        await setDoc(doc(db, 'contratacoes', contratacaoId), sanitizeFirestoreData({
+          statusEncaminhamento: 'Erro no encaminhamento',
+          erroEncaminhamento: err?.message || 'Erro ao processar destino',
+          updatedAt: now
+        }), { merge: true });
+      } catch (updErr) {
+        console.warn('Falha ao gravar status de erro em contratacoes:', updErr);
+      }
+      throw new Error(`Falha no encaminhamento: ${err?.message || 'Erro de permissão ou salvamento no Firestore'}`);
     }
-
-    return {
-      success: true,
-      admissionSent,
-      profileUpdated,
-      othersClosedCount,
-      warnings
-    };
   }
 
   static async rejectCandidate(
