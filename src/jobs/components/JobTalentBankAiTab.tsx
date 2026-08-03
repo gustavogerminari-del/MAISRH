@@ -58,7 +58,7 @@ export interface TalentBankMatchResult {
 }
 
 interface JobTalentBankAiTabProps {
-  job: Job;
+  job?: Job | null;
   onCandidateInvited?: () => void;
 }
 
@@ -102,7 +102,9 @@ export const JobTalentBankAiTab: React.FC<JobTalentBankAiTabProps> = ({
     setLoading(true);
     try {
       const candidatesList = await CandidateService.list(companyId);
-      const applicationsList = await JobCandidateService.listByJob(job.id, companyId);
+      const applicationsList = job?.id
+        ? await JobCandidateService.listByJob(job.id, companyId)
+        : await JobCandidateService.listAll(companyId);
       
       setTalentCandidates(candidatesList);
       setExistingApplications(applicationsList);
@@ -110,8 +112,35 @@ export const JobTalentBankAiTab: React.FC<JobTalentBankAiTabProps> = ({
       const invitedIds = new Set(applicationsList.map((app) => app.candidateId));
       setInvitedCandidateIds(invitedIds);
 
-      // Run AI matching
-      await runAiMatching(candidatesList, job);
+      // Run AI matching if job is available
+      if (job) {
+        await runAiMatching(candidatesList, job);
+      } else {
+        const fallbackMatches: TalentBankMatchResult[] = candidatesList.map(cand => ({
+          candidateId: cand.id,
+          candidateName: cand.name,
+          compatibilityScore: (cand as any).matchScore || 85,
+          compatibilityLevel: 'Compatível',
+          motivos: ['Perfil cadastrado no Banco de Talentos'],
+          pontosFortes: cand.skills || [],
+          pontosAtencao: [],
+          analiseCurriculo: {
+            experienciaProfissional: `${cand.experienceYears || 0} anos de experiência`,
+            empresasAnteriores: [],
+            tempoExperiencia: `${cand.experienceYears || 0} anos`,
+            formacao: (cand as any).education || 'Ensino Superior',
+            cursos: [],
+            habilidadesTecnicas: cand.skills || [],
+            competenciasComportamentais: [],
+            localizacao: cand.location || '',
+            pretensaoSalarial: cand.salaryExpectation || 'A combinar',
+            compatibilidadeComVaga: 'Compatibilidade disponível para vagas ativas'
+          },
+          recomendacao: 'Disponível no Banco de Talentos',
+          candidateRef: cand
+        }));
+        setMatchResults(fallbackMatches);
+      }
     } catch (err) {
       console.error('Erro ao carregar banco de talentos:', err);
     } finally {
@@ -121,7 +150,7 @@ export const JobTalentBankAiTab: React.FC<JobTalentBankAiTabProps> = ({
 
   useEffect(() => {
     loadTalentData();
-  }, [job.id, companyId]);
+  }, [job?.id, companyId]);
 
   // Execute AI Matching call
   const runAiMatching = async (candidates: Candidate[], currentJob: Job) => {

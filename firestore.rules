@@ -234,6 +234,21 @@ service cloud.firestore {
       allow create: if isMaster() || (signedIn() && belongsToCompany(request.resource.data));
     }
 
+    match /solicitacoes_admissao/{admId} {
+      allow read, update, delete: if isMaster() || (signedIn() && belongsToCompany(resource.data));
+      allow create: if isMaster() || (signedIn() && belongsToCompany(request.resource.data));
+    }
+
+    match /colaboradores/{colabId} {
+      allow read, update, delete: if isMaster() || (signedIn() && belongsToCompany(resource.data));
+      allow create: if isMaster() || (signedIn() && belongsToCompany(request.resource.data));
+    }
+
+    match /historico_colaborador/{histId} {
+      allow read, update, delete: if isMaster() || (signedIn() && belongsToCompany(resource.data));
+      allow create: if isMaster() || (signedIn() && belongsToCompany(request.resource.data));
+    }
+
     match /clientes/{clienteId} {
       allow read, update, delete: if isMaster() || (signedIn() && belongsToCompany(resource.data));
       allow create: if isMaster() || (signedIn() && belongsToCompany(request.resource.data));

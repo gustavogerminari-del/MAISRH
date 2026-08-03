@@ -665,6 +665,8 @@ export interface AdmissaoPending {
   empresaId: string;
   candidatoId?: string;
   contratacaoId?: string;
+  jobId?: string;
+  vagaTitulo?: string;
   nomeCompleto: string;
   nomeSocial?: string;
   email: string;

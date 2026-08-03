@@ -181,13 +181,14 @@ export async function getAdmissoesPendenteFirestore(companyId: string): Promise<
 export async function saveAdmissaoFirestore(admissao: AdmissaoPending): Promise<void> {
   try {
     const docRef = doc(db, DP_COLLECTIONS.ADMISSOES, admissao.id);
-    const companyId = admissao.empresaId || 'emp-001';
-    await setDoc(docRef, sanitizeFirestoreData({
+    const companyId = admissao.empresaId || (admissao as any).companyId || 'emp-001';
+    const sanitized = sanitizeFirestoreData({
       ...admissao,
       empresaId: companyId,
       companyId: companyId,
       updatedAt: new Date().toISOString()
-    }), { merge: true });
+    });
+    await setDoc(docRef, sanitized, { merge: true });
 
     await addHistoricoEventoFirestore({
       empresaId: companyId,
@@ -199,6 +200,7 @@ export async function saveAdmissaoFirestore(admissao: AdmissaoPending): Promise<
     });
   } catch (error) {
     console.error('[DP Firestore] Erro ao salvar admissão:', error);
+    throw error;
   }
 }
 
@@ -1611,6 +1613,8 @@ export async function enviarCandidatoParaAdmissaoDP(candidato: {
     empresaId: companyId,
     candidatoId: candId,
     contratacaoId: candidato.id,
+    jobId: candidato.jobId || '',
+    vagaTitulo: candidato.vagaTitulo || cargo,
     nomeCompleto: nome,
     email: email,
     telefone: telefone,

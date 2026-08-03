@@ -81,6 +81,10 @@ export const CandidateDrawerPanel: React.FC<CandidateDrawerPanelProps> = ({
   const [observacaoReprovacao, setObservacaoReprovacao] = useState('');
   const [manterBancoTalentos, setManterBancoTalentos] = useState(true);
   const [isSubmittingReject, setIsSubmittingReject] = useState(false);
+
+  // State for Hire Modal
+  const [isHireModalOpen, setIsHireModalOpen] = useState(false);
+  const [closeOtherCandidates, setCloseOtherCandidates] = useState(true);
   const [isSubmittingHire, setIsSubmittingHire] = useState(false);
 
   const cleanPhone = candidate.phone.replace(/\D/g, '');
@@ -95,13 +99,50 @@ export const CandidateDrawerPanel: React.FC<CandidateDrawerPanelProps> = ({
     setIsEvaluationModalOpen(true);
   };
 
-  const handleHireCandidate = async () => {
-    if (!confirm(`Confirmar a contratação de ${candidate.name} para a vaga "${jobTitle || candidate.role}"?`)) return;
+  const handleHireCandidate = () => {
+    if (candidate.status === 'Contratado') {
+      alert('Candidato já contratado.');
+      return;
+    }
+
+    if (isSubmittingHire) return;
+
+    if (!candidate.id) {
+      alert('Erro: ID real da candidatura não informado.');
+      return;
+    }
+    if (!candidate.companyId) {
+      alert('Erro: Empresa da candidatura não identificada.');
+      return;
+    }
+    if (!candidate.jobId) {
+      alert('Erro: Vaga da candidatura não identificada.');
+      return;
+    }
+    if (!candidate.name) {
+      alert('Erro: Nome do candidato não informado.');
+      return;
+    }
+
+    setCloseOtherCandidates(true);
+    setIsHireModalOpen(true);
+  };
+
+  const executeHireProcess = async () => {
     setIsSubmittingHire(true);
     try {
-      await JobCandidateService.hireCandidate(candidate, jobTitle);
-      alert(`🎉 Candidato(a) ${candidate.name} contratado(a) com sucesso!\nEnviado para a Fila de Admissão do DP.`);
-      await onRefresh();
+      const res = await JobCandidateService.hireCandidate(candidate, jobTitle, {
+        closeOtherCandidates
+      });
+      if (res.success) {
+        if (res.warnings && res.warnings.length > 0) {
+          alert(`🎉 Candidato(a) ${candidate.name} contratado(a) com pendências:\n${res.warnings.join('\n')}`);
+        } else {
+          alert(`🎉 Candidato(a) ${candidate.name} contratado(a) e enviado para a admissão com sucesso!`);
+        }
+        setIsHireModalOpen(false);
+        await onRefresh();
+      }
     } catch (err: any) {
       console.error('Erro ao contratar candidato:', err);
       alert(`Erro ao contratar candidato: ${err?.message || 'Erro desconhecido'}`);
@@ -213,10 +254,10 @@ export const CandidateDrawerPanel: React.FC<CandidateDrawerPanelProps> = ({
 
   return (
     <div className="fixed inset-0 z-50 overflow-hidden bg-slate-900/50 backdrop-blur-2xs flex justify-end">
-      <div className="w-full max-w-4xl bg-white h-full shadow-2xl flex flex-col border-l border-slate-200 animate-in slide-in-from-right duration-300">
+      <div className="w-full max-w-4xl min-w-0 bg-white h-full shadow-2xl flex flex-col border-l border-slate-200 animate-in slide-in-from-right duration-300 overflow-x-hidden">
         
         {/* Drawer Header */}
-        <div className="p-6 border-b border-slate-200 bg-slate-50/80 relative">
+        <div className="px-6 pt-6 pb-4 border-b border-slate-200 bg-slate-50/80 relative">
           <button
             onClick={onClose}
             className="absolute top-5 right-5 text-slate-400 hover:text-slate-600 p-2 rounded-full hover:bg-slate-200/60 transition-colors"
@@ -224,7 +265,7 @@ export const CandidateDrawerPanel: React.FC<CandidateDrawerPanelProps> = ({
             <X className="w-5 h-5" />
           </button>
 
-          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 pr-10">
+          <div className="flex flex-col gap-4 pr-10">
             <div className="flex items-center gap-4">
               {(candidate.photo || candidate.avatar) ? (
                 <img
@@ -261,14 +302,14 @@ export const CandidateDrawerPanel: React.FC<CandidateDrawerPanelProps> = ({
               </div>
             </div>
 
-            {/* Quick Action Buttons in Drawer Header */}
-            <div className="flex items-center gap-2 flex-wrap shrink-0">
+            {/* Quick Action Buttons Grid in Drawer Header */}
+            <div className="grid w-full grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-2">
               {/* 1. WhatsApp */}
               <a
                 href={whatsappUrl}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="px-3 py-1.5 rounded-xl bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border border-emerald-200 text-xs font-bold flex items-center gap-1.5 transition-colors"
+                className="w-full min-w-0 justify-center whitespace-nowrap px-3 py-2 rounded-xl bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border border-emerald-200 text-xs font-bold flex items-center gap-1.5 transition-colors"
               >
                 <MessageCircle className="w-3.5 h-3.5" />
                 WhatsApp
@@ -277,7 +318,7 @@ export const CandidateDrawerPanel: React.FC<CandidateDrawerPanelProps> = ({
               {/* 2. E-mail */}
               <a
                 href={emailUrl}
-                className="px-3 py-1.5 rounded-xl bg-blue-50 text-blue-700 hover:bg-blue-100 border border-blue-200 text-xs font-bold flex items-center gap-1.5 transition-colors"
+                className="w-full min-w-0 justify-center whitespace-nowrap px-3 py-2 rounded-xl bg-blue-50 text-blue-700 hover:bg-blue-100 border border-blue-200 text-xs font-bold flex items-center gap-1.5 transition-colors"
               >
                 <Mail className="w-3.5 h-3.5" />
                 E-mail
@@ -288,7 +329,7 @@ export const CandidateDrawerPanel: React.FC<CandidateDrawerPanelProps> = ({
                 <button
                   type="button"
                   onClick={() => setIsScheduleModalOpen(true)}
-                  className="px-3 py-1.5 rounded-xl bg-indigo-600 text-white hover:bg-indigo-700 text-xs font-bold flex items-center gap-1.5 shadow-2xs transition-colors"
+                  className="w-full min-w-0 justify-center whitespace-nowrap px-3 py-2 rounded-xl bg-indigo-600 text-white hover:bg-indigo-700 text-xs font-bold flex items-center gap-1.5 shadow-2xs transition-colors"
                 >
                   <Calendar className="w-3.5 h-3.5" />
                   Agendar Entrevista
@@ -300,7 +341,7 @@ export const CandidateDrawerPanel: React.FC<CandidateDrawerPanelProps> = ({
                 <button
                   type="button"
                   onClick={() => setIsScheduleModalOpen(true)}
-                  className="px-3 py-1.5 rounded-xl bg-amber-500 text-white hover:bg-amber-600 text-xs font-bold flex items-center gap-1.5 shadow-2xs transition-colors"
+                  className="w-full min-w-0 justify-center whitespace-nowrap px-3 py-2 rounded-xl bg-amber-500 text-white hover:bg-amber-600 text-xs font-bold flex items-center gap-1.5 shadow-2xs transition-colors"
                 >
                   <Calendar className="w-3.5 h-3.5" />
                   Editar Entrevista
@@ -311,7 +352,7 @@ export const CandidateDrawerPanel: React.FC<CandidateDrawerPanelProps> = ({
               <button
                 type="button"
                 onClick={openEvaluationModal}
-                className="px-3 py-1.5 rounded-xl bg-purple-600 text-white hover:bg-purple-700 text-xs font-bold flex items-center gap-1.5 shadow-2xs transition-colors"
+                className="w-full min-w-0 justify-center whitespace-nowrap px-3 py-2 rounded-xl bg-purple-600 text-white hover:bg-purple-700 text-xs font-bold flex items-center gap-1.5 shadow-2xs transition-colors"
               >
                 <Award className="w-3.5 h-3.5" />
                 Avaliar & Feedback
@@ -321,22 +362,22 @@ export const CandidateDrawerPanel: React.FC<CandidateDrawerPanelProps> = ({
               <button
                 type="button"
                 onClick={handleHireCandidate}
-                disabled={isSubmittingHire}
-                className="px-3 py-1.5 rounded-xl bg-teal-600 text-white hover:bg-teal-700 disabled:opacity-50 text-xs font-bold flex items-center gap-1.5 shadow-2xs transition-colors"
+                disabled={isSubmittingHire || candidate.status === 'Contratado'}
+                className="w-full min-w-0 justify-center whitespace-nowrap px-3 py-2 rounded-xl bg-teal-600 text-white hover:bg-teal-700 disabled:opacity-50 text-xs font-bold flex items-center gap-1.5 shadow-2xs transition-colors"
               >
                 <ThumbsUp className="w-3.5 h-3.5" />
-                {isSubmittingHire ? 'Contratando...' : 'Contratar'}
+                {isSubmittingHire ? 'Contratando...' : candidate.status === 'Contratado' ? 'Contratado' : 'Contratar'}
               </button>
 
               {/* 7. Reprovar */}
               <button
                 type="button"
                 onClick={() => setIsRejectModalOpen(true)}
-                disabled={isSubmittingReject}
-                className="px-3 py-1.5 rounded-xl bg-rose-50 text-rose-700 hover:bg-rose-100 border border-rose-200 disabled:opacity-50 text-xs font-bold flex items-center gap-1.5 transition-colors"
+                disabled={isSubmittingReject || candidate.status === 'Reprovado'}
+                className="w-full min-w-0 justify-center whitespace-nowrap px-3 py-2 rounded-xl bg-rose-50 text-rose-700 hover:bg-rose-100 border border-rose-200 disabled:opacity-50 text-xs font-bold flex items-center gap-1.5 transition-colors"
               >
                 <ThumbsDown className="w-3.5 h-3.5" />
-                {isSubmittingReject ? 'Reprovando...' : 'Reprovar'}
+                {isSubmittingReject ? 'Reprovando...' : candidate.status === 'Reprovado' ? 'Reprovado' : 'Reprovar'}
               </button>
             </div>
           </div>
@@ -1224,6 +1265,80 @@ export const CandidateDrawerPanel: React.FC<CandidateDrawerPanelProps> = ({
                 </Button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Hire Confirmation Modal */}
+      {isHireModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-xs p-4 overflow-y-auto">
+          <div className="bg-white rounded-3xl max-w-lg w-full p-6 shadow-2xl border border-slate-200 relative animate-in fade-in zoom-in-95 duration-200">
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center gap-2">
+                <div className="w-9 h-9 rounded-xl bg-teal-100 text-teal-700 flex items-center justify-center font-bold">
+                  <ThumbsUp className="w-5 h-5" />
+                </div>
+                <h3 className="text-base font-extrabold text-slate-900">Confirmar Contratação</h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsHireModalOpen(false)}
+                className="text-slate-400 hover:text-slate-600 p-1 rounded-full hover:bg-slate-100"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="space-y-4">
+              <div className="bg-teal-50/80 border border-teal-200 p-4 rounded-2xl">
+                <p className="text-xs font-bold text-teal-900">
+                  Deseja contratar <span className="underline">{candidate.name}</span> para a vaga <span className="underline">{jobTitle || candidate.role}</span>?
+                </p>
+                <p className="text-[11px] text-teal-700 mt-1">
+                  O candidato receberá status "Contratado" e o registro será encaminhado para a Fila de Admissão do Departamento Pessoal.
+                </p>
+              </div>
+
+              <div className="bg-slate-50 border border-slate-200 p-4 rounded-2xl space-y-2">
+                <p className="text-xs font-semibold text-slate-700">
+                  Ao confirmar, os demais candidatos ativos desta vaga serão movidos para <strong className="text-slate-900">'Vaga Preenchida'</strong> e permanecerão no Banco de Talentos.
+                </p>
+
+                <div className="flex items-center gap-2 pt-2 border-t border-slate-200/60">
+                  <input
+                    type="checkbox"
+                    id="closeOtherCandidatesCheck"
+                    checked={closeOtherCandidates}
+                    onChange={(e) => setCloseOtherCandidates(e.target.checked)}
+                    className="w-4 h-4 rounded text-teal-600 focus:ring-teal-500 border-slate-300"
+                  />
+                  <label htmlFor="closeOtherCandidatesCheck" className="text-xs font-bold text-slate-800 cursor-pointer">
+                    Encerrar os demais candidatos desta vaga
+                  </label>
+                </div>
+              </div>
+
+              <div className="flex items-center justify-end gap-2 pt-4 border-t border-slate-100">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setIsHireModalOpen(false)}
+                  disabled={isSubmittingHire}
+                >
+                  Cancelar
+                </Button>
+                <Button
+                  type="button"
+                  size="sm"
+                  onClick={executeHireProcess}
+                  disabled={isSubmittingHire}
+                  className="bg-teal-600 hover:bg-teal-700 text-white font-bold"
+                >
+                  {isSubmittingHire ? 'Processando Contratação...' : 'Confirmar Contratação'}
+                </Button>
+              </div>
+            </div>
           </div>
         </div>
       )}

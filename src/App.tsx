@@ -23,6 +23,7 @@ import { MaisRhIaView } from './ai/components/MaisRhIaView';
 import { DepartamentoPessoalView, DPSubTab } from './departamento-pessoal/DepartamentoPessoalView';
 import { PortalColaboradorView } from './departamento-pessoal/components/PortalColaboradorView';
 import { UnifiedPipelineView, UnifiedContratacoesView, UnifiedAgendaView } from './recruitment-core';
+import { JobCandidatesManagementView } from './jobs/components/JobCandidatesManagementView';
 
 import { NewJobModal } from './components/NewJobModal';
 import { NewCandidateModal } from './components/NewCandidateModal';
@@ -64,8 +65,9 @@ function MainAppContent() {
   const [interviews, setInterviews] = useState<Interview[]>(INITIAL_INTERVIEWS);
   const [departments] = useState(INITIAL_DEPARTMENTS);
   const [recruiters] = useState(INITIAL_RECRUITERS);
+  const [companyApplicationsCount, setCompanyApplicationsCount] = useState<number>(0);
 
-  // Load company jobs and candidates from Firestore
+  // Load company jobs, candidates and candidatures count from Firestore
   React.useEffect(() => {
     if (!isAuthenticated) return;
 
@@ -99,6 +101,17 @@ function MainAppContent() {
       .catch(err => {
         console.warn('Erro ao carregar candidatos do Firestore:', err);
       });
+
+    const unsubscribeApps = JobCandidateService.subscribeByCompany(
+      userCompanyId || 'emp-001',
+      (apps) => {
+        setCompanyApplicationsCount(apps.length);
+      }
+    );
+
+    return () => {
+      unsubscribeApps();
+    };
   }, [isAuthenticated, user?.empresaId, user?.companyId, user?.tenantId, user?.role, user?.tipoUsuario, user?.isMaster]);
 
   // Modals state
@@ -321,7 +334,7 @@ function MainAppContent() {
             openNewCandidateModal={() => setIsCandidateModalOpen(true)}
             openScheduleInterviewModal={() => setIsInterviewModalOpen(true)}
             jobsCount={jobs.length}
-            candidatesCount={candidates.length}
+            candidatesCount={companyApplicationsCount || candidates.length}
             interviewsCount={interviews.length}
             isOpenMobile={isMobileMenuOpen}
             onCloseMobile={() => setIsMobileMenuOpen(false)}
@@ -339,7 +352,7 @@ function MainAppContent() {
                 interviews={interviews}
                 stages={fontStages}
                 onNavigateToJobs={() => setActiveTab('vagas')}
-                onNavigateToCandidates={() => setActiveTab('banco-talentos')}
+                onNavigateToCandidates={() => setActiveTab('candidatos')}
                 onNavigateToInterviews={() => setActiveTab('entrevistas')}
                 openNewJobModal={() => setIsJobModalOpen(true)}
                 openNewCandidateModal={() => setIsCandidateModalOpen(true)}
@@ -361,7 +374,7 @@ function MainAppContent() {
               />
             )}
 
-            {(activeTab === 'banco-talentos' || activeTab === 'candidatos') && (
+            {activeTab === 'banco-talentos' && (
               <TalentBankView
                 candidates={candidates}
                 jobs={jobs}
@@ -369,6 +382,10 @@ function MainAppContent() {
                 onAssignCandidateToJob={handleAssignCandidateToJob}
                 searchTerm={searchTerm}
               />
+            )}
+
+            {activeTab === 'candidatos' && (
+              <JobCandidatesManagementView />
             )}
 
             {activeTab === 'entrevistas' && (

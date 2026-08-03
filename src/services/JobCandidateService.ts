@@ -7,12 +7,14 @@ import {
   deleteDoc, 
   query, 
   where,
-  onSnapshot 
+  onSnapshot,
+  writeBatch
 } from 'firebase/firestore';
 import { db, auth } from '../lib/firebase';
 import { sanitizeFirestoreData } from '../lib/firestoreUtils';
 import { AuditService } from './AuditService';
 import { CandidateService } from './CandidateService';
+import { JobService } from './JobService';
 import { enviarCandidatoParaAdmissaoDP } from '../departamento-pessoal/services/dpFirestoreService';
 
 export interface InterviewData {
@@ -72,7 +74,9 @@ export type ApplicationStatus =
   | 'Entrevista Realizada' 
   | 'Aprovado' 
   | 'Contratado' 
-  | 'Reprovado';
+  | 'Reprovado'
+  | 'Encerrado'
+  | 'Vaga Preenchida';
 
 export interface JobCandidateApplication {
   id: string;
@@ -90,11 +94,13 @@ export interface JobCandidateApplication {
   appliedDate: string;
   status: ApplicationStatus;
   
-  // Rejection details
+  // Rejection & Closing details
   motivoReprovacao?: string;
   observacaoReprovacao?: string;
+  motivoEncerramento?: string;
   manterBancoTalentos?: boolean;
   reprovadoEm?: string;
+  encerradoEm?: string;
 
   // Filtering fields
   education: string;
@@ -178,6 +184,42 @@ export class JobCandidateService {
     return [];
   }
 
+  static subscribeByCompany(
+    companyId: string | undefined,
+    onUpdate: (apps: JobCandidateApplication[]) => void,
+    onError?: (err: any) => void
+  ): () => void {
+    if (!companyId) {
+      onUpdate([]);
+      return () => {};
+    }
+
+    const q = query(
+      collection(db, COLLECTION_NAME),
+      where('companyId', '==', companyId)
+    );
+
+    return onSnapshot(
+      q,
+      (snapshot) => {
+        const list: JobCandidateApplication[] = [];
+        snapshot.forEach((d) => {
+          const data = d.data() as JobCandidateApplication;
+          list.push({
+            ...data,
+            id: d.id
+          });
+        });
+        onUpdate(list);
+      },
+      (err) => {
+        console.error('Erro na assinatura em tempo real de candidaturas da empresa:', err);
+        if (onError) onError(err);
+        else onUpdate([]);
+      }
+    );
+  }
+
   static subscribeByJob(
     jobId: string,
     companyId: string | undefined,
@@ -236,6 +278,28 @@ export class JobCandidateService {
   static async create(appData: Partial<JobCandidateApplication> & { jobId: string; companyId: string }): Promise<JobCandidateApplication> {
     if (!appData.companyId) {
       throw new Error('companyId é obrigatório para registrar uma candidatura.');
+    }
+
+    // Verificar se já existe candidatura igual para esta mesma vaga
+    if (appData.candidateId && appData.jobId && appData.companyId) {
+      try {
+        const qDup = query(
+          collection(db, COLLECTION_NAME),
+          where('companyId', '==', appData.companyId),
+          where('jobId', '==', appData.jobId),
+          where('candidateId', '==', appData.candidateId)
+        );
+        const snapDup = await getDocs(qDup);
+        if (!snapDup.empty) {
+          const existingDoc = snapDup.docs[0];
+          return {
+            ...(existingDoc.data() as JobCandidateApplication),
+            id: existingDoc.id
+          };
+        }
+      } catch (dupErr) {
+        console.warn('Aviso ao verificar duplicidade de candidatura:', dupErr);
+      }
     }
 
     const id = appData.id || `app-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`;
@@ -353,69 +417,202 @@ export class JobCandidateService {
     }
   }
 
-  static async hireCandidate(candidate: JobCandidateApplication, jobTitle?: string): Promise<void> {
-    if (!candidate || !candidate.id) throw new Error('Dados da candidatura inválidos.');
+  static async hireCandidate(
+    candidate: JobCandidateApplication, 
+    jobTitle?: string,
+    options: { closeOtherCandidates?: boolean } = { closeOtherCandidates: true }
+  ): Promise<{
+    success: boolean;
+    admissionSent: boolean;
+    profileUpdated: boolean;
+    othersClosedCount?: number;
+    warnings: string[];
+  }> {
+    if (!candidate || !candidate.id) throw new Error('ID real da candidatura não informado.');
+    if (!candidate.companyId) throw new Error('Empresa da candidatura não identificada.');
+    if (!candidate.jobId) throw new Error('Vaga da candidatura não identificada.');
+    if (!candidate.name) throw new Error('Nome do candidato não informado.');
 
-    try {
-      const now = new Date().toISOString();
-      const titleToUse = jobTitle || candidate.role || 'Vaga Corporativa';
+    if (candidate.status === 'Contratado') {
+      throw new Error('Candidato já contratado.');
+    }
 
-      // 1. Atualizar candidatura em candidate_applications
-      const updatedTimeline = [
-        ...(candidate.timeline || []),
-        {
-          id: `evt-${Date.now()}`,
-          title: 'Candidato Contratado',
-          description: `Candidato(a) aprovado(a) e contratado(a) para a vaga ${titleToUse}. Encaminhado para a fila de admissão DP.`,
-          date: now.replace('T', ' ').substring(0, 16),
-          by: auth.currentUser?.displayName || 'Recrutador RH'
-        }
-      ];
+    const now = new Date().toISOString();
+    const titleToUse = jobTitle || candidate.role || 'Vaga Corporativa';
 
-      const updatedApp: JobCandidateApplication = {
-        ...candidate,
-        status: 'Contratado',
-        timeline: updatedTimeline,
-        updatedAt: now
-      };
+    // 1. Prepare timeline
+    const updatedTimeline = [
+      ...(candidate.timeline || []),
+      {
+        id: `evt-${Date.now()}`,
+        title: 'Candidato Contratado',
+        description: `Candidato(a) aprovado(a) e contratado(a) para a vaga ${titleToUse}. Encaminhado para a fila de admissão DP.`,
+        date: now.replace('T', ' ').substring(0, 16),
+        by: auth.currentUser?.displayName || 'Recrutador RH'
+      }
+    ];
 
-      await setDoc(doc(db, COLLECTION_NAME, candidate.id), sanitizeFirestoreData(updatedApp), { merge: true });
+    // Primary document updates
+    const appUpdateDoc = sanitizeFirestoreData({
+      status: 'Contratado',
+      etapa: 'Contratado',
+      timeline: updatedTimeline,
+      contratadoEm: now,
+      updatedAt: now
+    });
 
-      // 2. Atualizar perfil em candidatos se existir
-      if (candidate.candidateId) {
-        try {
-          await CandidateService.update(candidate.candidateId, {
-            status: 'Contratado',
-            currentJobId: candidate.jobId,
-            currentStageId: 'contratado'
+    const contratacaoId = `${candidate.jobId}_${candidate.candidateId || candidate.id}`;
+    const contratacaoDoc = sanitizeFirestoreData({
+      id: contratacaoId,
+      companyId: candidate.companyId,
+      empresaId: candidate.companyId,
+      jobId: candidate.jobId,
+      vagaId: candidate.jobId,
+      candidateId: candidate.candidateId || candidate.id,
+      candidatoId: candidate.candidateId || candidate.id,
+      candidaturaId: candidate.id,
+      candidateName: candidate.name,
+      candidatoNome: candidate.name,
+      jobTitle: titleToUse,
+      vagaTitulo: titleToUse,
+      status: 'Concluído',
+      createdAt: now,
+      updatedAt: now
+    });
+
+    // 2. Primary Mandatory Step: Write Batch
+    const batch = writeBatch(db);
+    batch.set(doc(db, COLLECTION_NAME, candidate.id), appUpdateDoc, { merge: true });
+    batch.set(doc(db, 'contratacoes', contratacaoId), contratacaoDoc, { merge: true });
+
+    await batch.commit();
+
+    let profileUpdated = false;
+    let admissionSent = false;
+    let othersClosedCount = 0;
+    const warnings: string[] = [];
+
+    // 3. Close other active candidates for the same job if option is true
+    if (options.closeOtherCandidates !== false) {
+      try {
+        const qOther = query(
+          collection(db, COLLECTION_NAME),
+          where('companyId', '==', candidate.companyId),
+          where('jobId', '==', candidate.jobId)
+        );
+        const snapOther = await getDocs(qOther);
+
+        const closeBatch = writeBatch(db);
+        let pendingCloseOps = 0;
+
+        for (const docItem of snapOther.docs) {
+          if (docItem.id === candidate.id) continue;
+          const data = docItem.data() as JobCandidateApplication;
+
+          // Skip already hired, closed, or rejected candidates
+          if (
+            data.status === 'Contratado' ||
+            data.status === 'Encerrado' ||
+            data.status === 'Reprovado' ||
+            (data.status as string) === 'Vaga Preenchida'
+          ) {
+            continue;
+          }
+
+          const closeTimeline = [
+            ...(data.timeline || []),
+            {
+              id: `evt-${Date.now()}-${docItem.id}`,
+              title: 'Processo encerrado',
+              description: 'A vaga foi preenchida por outro candidato. Perfil mantido no Banco de Talentos.',
+              date: now.replace('T', ' ').substring(0, 16),
+              by: auth.currentUser?.displayName || 'Recrutador RH'
+            }
+          ];
+
+          const closePayload = sanitizeFirestoreData({
+            status: 'Encerrado',
+            etapa: 'Vaga Preenchida',
+            motivoEncerramento: 'Outro candidato contratado',
+            manterBancoTalentos: true,
+            encerradoEm: now,
+            updatedAt: now,
+            timeline: closeTimeline
           });
-        } catch (e) {
-          console.warn('Aviso ao atualizar perfil no Banco de Talentos:', e);
+
+          closeBatch.set(doc(db, COLLECTION_NAME, docItem.id), closePayload, { merge: true });
+          pendingCloseOps++;
+          othersClosedCount++;
+
+          // Maintain candidate profile in Talent Bank (candidatos)
+          if (data.candidateId) {
+            try {
+              await CandidateService.update(data.candidateId, {
+                disponivelBancoTalentos: true,
+                ultimoStatusProcesso: 'Vaga Preenchida',
+                ultimaVagaId: candidate.jobId,
+                updatedAt: now
+              });
+            } catch (pErr) {
+              console.warn(`Aviso ao atualizar Banco de Talentos do candidato ${data.candidateId}:`, pErr);
+            }
+          }
+        }
+
+        if (pendingCloseOps > 0) {
+          await closeBatch.commit();
+        }
+      } catch (closeErr: any) {
+        console.error('Erro ao encerrar outros candidatos da vaga:', closeErr);
+        warnings.push(`Candidato contratado, mas alguns participantes da vaga ainda precisam ser encerrados: ${closeErr?.message || 'Erro de sincronização'}`);
+      }
+    }
+
+    // 4. Update Job Status based on position capacity
+    try {
+      const job = await JobService.getById(candidate.jobId);
+      if (job) {
+        const jobOpenings = Number(job.openings || (job as any).vagasCount || (job as any).totalVagas || 1);
+        
+        // Count total hires for this job
+        const qHired = query(
+          collection(db, COLLECTION_NAME),
+          where('companyId', '==', candidate.companyId),
+          where('jobId', '==', candidate.jobId),
+          where('status', '==', 'Contratado')
+        );
+        const snapHired = await getDocs(qHired);
+        const totalHired = snapHired.size;
+
+        if (totalHired >= jobOpenings || options.closeOtherCandidates) {
+          await JobService.update(candidate.jobId, {
+            status: 'Preenchida',
+            statusVaga: 'Preenchida',
+            preenchidaEm: now
+          });
         }
       }
+    } catch (jobErr: any) {
+      console.warn('Aviso ao verificar/atualizar status da vaga no JobService:', jobErr);
+    }
 
-      // 3. Criar registro em contratacoes
-      const contratacaoId = `${candidate.jobId}_${candidate.candidateId || candidate.id}`;
-      const contratacaoDoc = {
-        id: contratacaoId,
-        companyId: candidate.companyId,
-        empresaId: candidate.companyId,
-        jobId: candidate.jobId,
-        vagaId: candidate.jobId,
-        candidateId: candidate.candidateId || candidate.id,
-        candidatoId: candidate.candidateId || candidate.id,
-        candidaturaId: candidate.id,
-        candidateName: candidate.name,
-        candidatoNome: candidate.name,
-        jobTitle: titleToUse,
-        vagaTitulo: titleToUse,
-        status: 'Concluído',
-        createdAt: now,
-        updatedAt: now
-      };
-      await setDoc(doc(db, 'contratacoes', contratacaoId), sanitizeFirestoreData(contratacaoDoc), { merge: true });
+    // 5. Secondary Step A: Profile Sync
+    if (candidate.candidateId) {
+      try {
+        await CandidateService.update(candidate.candidateId, {
+          status: 'Contratado',
+          currentJobId: candidate.jobId,
+          currentStageId: 'contratado'
+        });
+        profileUpdated = true;
+      } catch (e: any) {
+        console.warn('Aviso ao atualizar perfil no Banco de Talentos:', e);
+        warnings.push('Perfil do candidato no Banco de Talentos não pôde ser sincronizado.');
+      }
+    }
 
-      // 4. Enviar para Admissão DP
+    // 6. Secondary Step B: DP Admission Queue
+    try {
       await enviarCandidatoParaAdmissaoDP({
         id: candidate.id,
         candidateId: candidate.candidateId || candidate.id,
@@ -432,8 +629,14 @@ export class JobCandidateService {
         city: candidate.city,
         state: candidate.state
       });
+      admissionSent = true;
+    } catch (e: any) {
+      console.warn('Aviso ao enviar para admissão no DP:', e);
+      warnings.push(`Envio para admissão do DP: ${e?.message || 'Erro ao gravar registro de admissão'}`);
+    }
 
-      // 5. Log de auditoria
+    // 7. Secondary Step C: Audit Log
+    try {
       await AuditService.log({
         action: 'UPDATE',
         description: `Candidato ${candidate.name} contratado para a vaga ${titleToUse}`,
@@ -441,10 +644,17 @@ export class JobCandidateService {
         targetEntity: 'Contratação',
         companyId: candidate.companyId
       });
-    } catch (err) {
-      console.error('Erro ao processar contratação:', err);
-      throw err;
+    } catch (e: any) {
+      console.warn('Aviso ao registrar auditoria:', e);
     }
+
+    return {
+      success: true,
+      admissionSent,
+      profileUpdated,
+      othersClosedCount,
+      warnings
+    };
   }
 
   static async rejectCandidate(
