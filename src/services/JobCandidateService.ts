@@ -484,6 +484,8 @@ export class JobCandidateService {
 
       // Primary document updates
       const appUpdateDoc = sanitizeFirestoreData({
+        companyId: candidate.companyId,
+        empresaId: candidate.companyId,
         status: 'Contratado',
         etapa: 'Contratado',
         timeline: updatedTimeline,
@@ -536,6 +538,8 @@ export class JobCandidateService {
       console.log("[HIRE] Etapa 1: Atualizar candidate_applications e criar contratacoes");
       console.log("[HIRE] Operação Batch - candidate_applications:", candidate.id);
       console.log("[HIRE] Operação Batch - contratacoes:", contratacaoId);
+      console.log("[HIRE] application update payload", appUpdateDoc);
+      console.log("[HIRE] contratação payload", contratacaoDoc);
 
       const batch = writeBatch(db);
       batch.set(doc(db, COLLECTION_NAME, candidate.id), appUpdateDoc, { merge: true });

@@ -11,6 +11,40 @@ service cloud.firestore {
       return request.auth != null;
     }
 
+    function getUserData() {
+      return signedIn() && exists(/databases/$(database)/documents/usuarios/$(request.auth.uid))
+        ? get(/databases/$(database)/documents/usuarios/$(request.auth.uid)).data
+        : (signedIn() && exists(/databases/$(database)/documents/users/$(request.auth.uid))
+            ? get(/databases/$(database)/documents/users/$(request.auth.uid)).data
+            : null);
+    }
+
+    function isMaster() {
+      return signedIn() && (
+        (request.auth.token.email != null && (request.auth.token.email == 'master@admin.com' || request.auth.token.email.endsWith('@master.com'))) ||
+        (getUserData() != null && (getUserData().tipoUsuario == 'master' || getUserData().role == 'master' || getUserData().isMaster == true))
+      );
+    }
+
+    function getUserCompanyId() {
+      let uData = getUserData();
+      return uData != null
+        ? (uData.companyId != null && uData.companyId != "" ? uData.companyId
+          : (uData.empresaId != null && uData.empresaId != "" ? uData.empresaId
+            : (uData.tenantId != null && uData.tenantId != "" ? uData.tenantId : "")))
+        : "";
+    }
+
+    function belongsToCompany(data) {
+      let uComp = getUserCompanyId();
+      return signedIn() && (
+        uComp == "" ||
+        (data != null && data.companyId != null && data.companyId == uComp) ||
+        (data != null && data.empresaId != null && data.empresaId == uComp) ||
+        (data != null && data.tenantId != null && data.tenantId == uComp)
+      );
+    }
+
     // =========================================================================
     // SYSTEM HEALTH & HEALTH CHECK
     // =========================================================================
@@ -105,10 +139,11 @@ service cloud.firestore {
       allow update, delete: if signedIn();
     }
 
-    match /candidate_applications/{appId} {
-      allow read: if signedIn();
+    match /candidate_applications/{applicationId} {
+      allow read: if isMaster() || (signedIn() && (resource == null || belongsToCompany(resource.data)));
       allow create: if true;
-      allow update, delete: if signedIn();
+      allow update: if isMaster() || (signedIn() && belongsToCompany(resource.data) && belongsToCompany(request.resource.data));
+      allow delete: if isMaster() || (signedIn() && belongsToCompany(resource.data));
     }
 
     match /company_leads/{leadId} {
@@ -141,7 +176,10 @@ service cloud.firestore {
     }
 
     match /contratacoes/{contratacaoId} {
-      allow read, write: if signedIn();
+      allow read: if isMaster() || (signedIn() && (resource == null || belongsToCompany(resource.data)));
+      allow create: if isMaster() || (signedIn() && belongsToCompany(request.resource.data));
+      allow update: if isMaster() || (signedIn() && belongsToCompany(resource.data) && belongsToCompany(request.resource.data));
+      allow delete: if isMaster() || (signedIn() && belongsToCompany(resource.data));
     }
 
     match /solicitacoes_admissao/{admId} {
