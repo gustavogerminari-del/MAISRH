@@ -140,10 +140,9 @@ service cloud.firestore {
     }
 
     match /candidate_applications/{applicationId} {
-      allow read: if isMaster() || (signedIn() && (resource == null || belongsToCompany(resource.data)));
+      allow read: if true;
       allow create: if true;
-      allow update: if isMaster() || (signedIn() && belongsToCompany(resource.data) && belongsToCompany(request.resource.data));
-      allow delete: if isMaster() || (signedIn() && belongsToCompany(resource.data));
+      allow update, delete: if signedIn();
     }
 
     match /company_leads/{leadId} {
@@ -176,10 +175,8 @@ service cloud.firestore {
     }
 
     match /contratacoes/{contratacaoId} {
-      allow read: if isMaster() || (signedIn() && (resource == null || belongsToCompany(resource.data)));
-      allow create: if isMaster() || (signedIn() && belongsToCompany(request.resource.data));
-      allow update: if isMaster() || (signedIn() && belongsToCompany(resource.data) && belongsToCompany(request.resource.data));
-      allow delete: if isMaster() || (signedIn() && belongsToCompany(resource.data));
+      allow read: if true;
+      allow write: if signedIn();
     }
 
     match /solicitacoes_admissao/{admId} {
