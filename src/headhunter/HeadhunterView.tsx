@@ -60,11 +60,12 @@ export type HeadhunterSubTab =
 
 interface HeadhunterViewProps {
   initialSubTab?: HeadhunterSubTab;
+  selectedFinancialId?: string | null;
 }
 
 const STORAGE_KEY = 'mais_rh_headhunter_data_v2';
 
-export const HeadhunterView: React.FC<HeadhunterViewProps> = ({ initialSubTab = 'dashboard' }) => {
+export const HeadhunterView: React.FC<HeadhunterViewProps> = ({ initialSubTab = 'dashboard', selectedFinancialId }) => {
   const [activeTab, setActiveTab] = useState<HeadhunterSubTab>(initialSubTab);
 
   useEffect(() => {
@@ -361,6 +362,7 @@ export const HeadhunterView: React.FC<HeadhunterViewProps> = ({ initialSubTab = 
             hirings={hirings}
             contracts={contracts}
             proposals={proposals}
+            selectedFinancialId={selectedFinancialId}
             onAddFinanceItem={item => setFinancial([item, ...financial])}
             onOpenAiModal={handleOpenAiModal}
           />

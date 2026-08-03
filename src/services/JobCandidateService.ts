@@ -26,7 +26,9 @@ export interface InterviewData {
   location?: string;
   meetingLink?: string;
   notes?: string;
-  status?: 'Agendada' | 'Reagendada' | 'Realizada' | 'Cancelada';
+  status?: 'Agendada' | 'Reagendada' | 'Realizada' | 'Cancelada' | 'Aprovada' | 'Reprovada' | 'Em Análise' | string;
+  parecerFinal?: string;
+  feedback?: any;
 }
 
 export interface EvaluationData {
@@ -76,7 +78,9 @@ export type ApplicationStatus =
   | 'Contratado' 
   | 'Reprovado'
   | 'Encerrado'
-  | 'Vaga Preenchida';
+  | 'Vaga Preenchida'
+  | 'Em Análise'
+  | 'Em Processo';
 
 export interface JobCandidateApplication {
   id: string;
@@ -93,6 +97,8 @@ export interface JobCandidateApplication {
   state: string;
   appliedDate: string;
   status: ApplicationStatus;
+  interviewStatus?: string;
+  etapa?: string;
   
   // Rejection & Closing details
   motivoReprovacao?: string;
@@ -470,15 +476,42 @@ export class JobCandidateService {
       const now = new Date().toISOString();
       const titleToUse = jobTitle || candidate.role || 'Vaga Corporativa';
 
+      let jobData: any = null;
+      try {
+        jobData = await JobService.getById(candidate.jobId);
+      } catch (e) {
+        console.warn('[HIRE] Não foi possível buscar dados da vaga:', e);
+      }
+
+      const isHeadhunter = 
+        (candidate as any).origemProcesso === 'headhunter' ||
+        (candidate as any).origem === 'headhunter' ||
+        jobData?.origemProcesso === 'headhunter' ||
+        jobData?.origem === 'headhunter' ||
+        jobData?.tipoProcesso === 'headhunter' ||
+        jobData?.isHeadhunter === true ||
+        !!(jobData?.clientId || jobData?.clienteId || (candidate as any).clientId || (candidate as any).clienteId);
+
+      const origProc = isHeadhunter ? 'headhunter' : 'recrutamento_interno';
+      const destContr = isHeadhunter ? 'financeiro' : 'departamento_pessoal';
+      const initialStatusForward = isHeadhunter ? 'Aguardando Cobrança' : 'Aguardando Admissão';
+
       // 1. Prepare timeline
       const updatedTimeline = [
         ...(candidate.timeline || []),
         {
           id: `evt-${Date.now()}`,
           title: 'Candidato Contratado',
-          description: `Candidato(a) aprovado(a) e contratado(a) para a vaga ${titleToUse}. Encaminhado para a fila de admissão DP.`,
+          description: `Candidato(a) aprovado(a) e contratado(a) para a vaga ${titleToUse}.`,
           date: now.replace('T', ' ').substring(0, 16),
           by: auth.currentUser?.displayName || 'Recrutador RH'
+        },
+        {
+          id: `evt-${Date.now()}-fwd`,
+          title: isHeadhunter ? 'Encaminhado para Financeiro' : 'Encaminhado para DP',
+          description: isHeadhunter ? 'Encaminhado automaticamente para o módulo Financeiro (Aguardando Cobrança)' : 'Encaminhado automaticamente para o Departamento Pessoal (Aguardando Admissão)',
+          date: now.replace('T', ' ').substring(0, 16),
+          by: 'Sistema ATS'
         }
       ];
 
@@ -492,9 +525,6 @@ export class JobCandidateService {
         contratadoEm: now,
         updatedAt: now
       });
-
-      const origProc = (candidate as any).origemProcesso || (candidate as any).origem || 'recrutamento_interno';
-      const destContr = origProc === 'headhunter' ? 'headhunter' : 'departamento_pessoal';
 
       const contratacaoId = `${candidate.jobId}_${candidate.candidateId || candidate.id}`;
       const contratacaoDoc = sanitizeFirestoreData({
@@ -513,37 +543,132 @@ export class JobCandidateService {
         vagaTitulo: titleToUse,
         origemProcesso: origProc,
         destinoContratacao: destContr,
+        encaminhadoPara: destContr,
+        destino: isHeadhunter ? 'Financeiro' : 'DP',
+        admissaoId: isHeadhunter ? null : `adm_${contratacaoId}`,
+        statusAdmissao: isHeadhunter ? null : 'Aguardando Admissão',
+        encaminhadoAdmissao: !isHeadhunter,
+        encaminhadoAdmissaoEm: isHeadhunter ? null : now,
         status: 'Contratado',
-        statusEncaminhamento: 'Pendente',
+        statusEncaminhamento: initialStatusForward,
         contratadoEm: now,
         createdAt: now,
         updatedAt: now,
         email: candidate.email || '',
         phone: candidate.phone || '',
         cpf: candidate.cpf || '',
-        department: (candidate as any).department || 'Não informado',
+        department: (candidate as any).department || jobData?.department || 'Não informado',
         city: candidate.city || '',
         state: candidate.state || '',
-        salaryExpectation: candidate.salaryExpectation || 0,
-        salarioContratado: candidate.salaryExpectation || 0,
-        salarioFinal: candidate.salaryExpectation || 0,
+        salaryExpectation: candidate.salaryExpectation || jobData?.salary || 0,
+        salarioContratado: candidate.salaryExpectation || jobData?.salary || 0,
+        salarioFinal: candidate.salaryExpectation || jobData?.salary || 0,
         responsavelNome: auth.currentUser?.displayName || 'Recrutador RH',
-        clienteId: (candidate as any).clienteId || null,
-        clienteNome: (candidate as any).clienteNome || null,
+        clienteId: (candidate as any).clienteId || (candidate as any).clientId || jobData?.clientId || jobData?.clienteId || null,
+        clienteNome: (candidate as any).clienteNome || jobData?.clienteNome || null,
         consultorResponsavel: (candidate as any).consultorResponsavel || auth.currentUser?.displayName || 'Recrutador RH',
-        observacoes: (candidate as any).observacoes || ''
+        observacoes: (candidate as any).observacoes || '',
+        timeline: updatedTimeline
       });
 
-      // 1. Etapa 1: Atualizar candidate_applications e Criar contratacoes
-      console.log("[HIRE] Etapa 1: Atualizar candidate_applications e criar contratacoes");
-      console.log("[HIRE] Operação Batch - candidate_applications:", candidate.id);
-      console.log("[HIRE] Operação Batch - contratacoes:", contratacaoId);
-      console.log("[HIRE] application update payload", appUpdateDoc);
-      console.log("[HIRE] contratação payload", contratacaoDoc);
+      // 1. Etapa 1: Atualizar candidate_applications, criar contratacoes e criar documento de destino (DP ou Financeiro)
+      console.log("[HIRE] Etapa 1: Atualizar candidate_applications, criar contratacoes e documento de destino");
 
       const batch = writeBatch(db);
       batch.set(doc(db, COLLECTION_NAME, candidate.id), appUpdateDoc, { merge: true });
       batch.set(doc(db, 'contratacoes', contratacaoId), contratacaoDoc, { merge: true });
+
+      if (isHeadhunter) {
+        const cobrancaId = `cob_${contratacaoId}`;
+        const cobrancaDoc = sanitizeFirestoreData({
+          id: cobrancaId,
+          companyId: candidate.companyId || 'emp-001',
+          empresaId: candidate.companyId || 'emp-001',
+          clientId: (candidate as any).clienteId || (candidate as any).clientId || jobData?.clientId || jobData?.clienteId || 'cli-001',
+          clienteId: (candidate as any).clienteId || (candidate as any).clientId || jobData?.clientId || jobData?.clienteId || 'cli-001',
+          clienteNome: (candidate as any).clienteNome || jobData?.clienteNome || 'Cliente Headhunter',
+          candidateId: candidate.candidateId || candidate.id,
+          candidatoId: candidate.candidateId || candidate.id,
+          applicationId: candidate.id,
+          candidaturaId: candidate.id,
+          jobId: candidate.jobId,
+          vagaId: candidate.jobId,
+          vagaTitulo: titleToUse,
+          candidatoNome: candidate.name,
+          contratacaoId: contratacaoId,
+          valor: candidate.salaryExpectation || jobData?.salary || 0,
+          percentual: jobData?.feePercentual || 15,
+          comissao: (candidate.salaryExpectation || jobData?.salary || 0) * ((jobData?.feePercentual || 15) / 100),
+          dataContratacao: now,
+          vencimento: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+          status: 'Aguardando Cobrança',
+          historicoStatus: [
+            {
+              id: `hist-${Date.now()}`,
+              dataHora: now,
+              statusAnterior: 'Contratado',
+              novoStatus: 'Aguardando Cobrança',
+              origem: 'Headhunter',
+              destino: 'Financeiro',
+              usuario: auth.currentUser?.displayName || 'Recrutador RH',
+              descricao: 'Encaminhado automaticamente para o módulo Financeiro (Aguardando Cobrança)'
+            }
+          ],
+          createdAt: now,
+          updatedAt: now
+        });
+        batch.set(doc(db, 'financeiro_cobrancas', cobrancaId), cobrancaDoc, { merge: true });
+      } else {
+        const admissaoId = `adm_${contratacaoId}`;
+        const admissaoDoc = sanitizeFirestoreData({
+          id: admissaoId,
+          companyId: candidate.companyId || 'emp-001',
+          empresaId: candidate.companyId || 'emp-001',
+          candidateId: candidate.candidateId || candidate.id,
+          candidatoId: candidate.candidateId || candidate.id,
+          applicationId: candidate.id,
+          candidaturaId: candidate.id,
+          jobId: candidate.jobId,
+          vagaId: candidate.jobId,
+          vagaTitulo: titleToUse,
+          contratacaoId: contratacaoId,
+          nome: candidate.name,
+          nomeCompleto: candidate.name,
+          email: candidate.email || '',
+          telefone: candidate.phone || '',
+          cpf: candidate.cpf || '',
+          cargo: titleToUse,
+          departamento: (candidate as any).department || jobData?.department || 'Operações',
+          tipoContrato: jobData?.tipoContrato || 'CLT',
+          salario: candidate.salaryExpectation || jobData?.salary || 0,
+          salarioCombinado: candidate.salaryExpectation || jobData?.salary || 0,
+          beneficios: jobData?.beneficios || 'Nenhum informado',
+          empresa: (candidate as any).companyName || 'Empresa',
+          status: 'Aguardando Admissão',
+          checklist: [
+            { item: 'RG', obrigatorio: true, concluido: !!(candidate as any).rg },
+            { item: 'CPF', obrigatorio: true, concluido: !!candidate.cpf },
+            { item: 'Carteira de Trabalho (CTPS)', obrigatorio: true, concluido: false },
+            { item: 'Comprovante de Residência', obrigatorio: true, concluido: false },
+            { item: 'Exame Admissional (ASO)', obrigatorio: true, concluido: false }
+          ],
+          historicoEtapas: [
+            {
+              dataHora: now,
+              usuario: auth.currentUser?.displayName || 'Recrutador RH',
+              acao: 'Solicitação de Admissão Criada',
+              descricao: 'Encaminhado automaticamente para o Departamento Pessoal (Aguardando Admissão)',
+              origem: 'RH Interno',
+              destino: 'Departamento Pessoal',
+              statusAnterior: 'Contratado',
+              novoStatus: 'Aguardando Admissão'
+            }
+          ],
+          createdAt: now,
+          updatedAt: now
+        });
+        batch.set(doc(db, 'solicitacoes_admissao', admissaoId), admissaoDoc, { merge: true });
+      }
 
       await batch.commit();
       console.log("[HIRE] Etapa 1 CONCLUÍDA com sucesso!");
@@ -707,11 +832,11 @@ export class JobCandidateService {
   }
 
   /**
-   * Forward a hiring record to DP or Headhunter after hiring
+   * Forward a hiring record to DP admission after hiring
    */
   static async forwardHiring(
     hiring: any,
-    targetDestination: 'departamento_pessoal' | 'headhunter'
+    targetDestination: 'departamento_pessoal' | 'headhunter' = 'departamento_pessoal'
   ): Promise<{ success: boolean; message: string }> {
     if (!hiring || !hiring.id) throw new Error('ID da contratação inválido.');
 
@@ -719,7 +844,63 @@ export class JobCandidateService {
     const contratacaoId = hiring.id;
 
     try {
-      if (targetDestination === 'departamento_pessoal') {
+      const isHeadhunter = targetDestination === 'headhunter' || hiring.origemProcesso === 'headhunter' || hiring.destinoContratacao === 'headhunter';
+
+      if (isHeadhunter) {
+        const cobrancaId = `cob_${contratacaoId}`;
+        const cobrancaDoc = sanitizeFirestoreData({
+          id: cobrancaId,
+          companyId: hiring.companyId || hiring.empresaId || 'emp-001',
+          empresaId: hiring.companyId || hiring.empresaId || 'emp-001',
+          clientId: hiring.clienteId || hiring.clientId || 'cli-001',
+          clienteId: hiring.clienteId || hiring.clientId || 'cli-001',
+          clienteNome: hiring.clienteNome || 'Cliente Headhunter',
+          candidateId: hiring.candidateId || hiring.candidatoId,
+          candidatoId: hiring.candidateId || hiring.candidatoId,
+          applicationId: hiring.applicationId || hiring.candidaturaId || hiring.id,
+          candidaturaId: hiring.applicationId || hiring.candidaturaId || hiring.id,
+          jobId: hiring.jobId || hiring.vagaId,
+          vagaId: hiring.jobId || hiring.vagaId,
+          vagaTitulo: hiring.jobTitle || hiring.vagaTitulo || 'Cargo não informado',
+          candidatoNome: hiring.candidateName || hiring.candidatoNome,
+          contratacaoId: contratacaoId,
+          valor: hiring.salarioContratado || hiring.salaryExpectation || 0,
+          percentual: hiring.feePercentual || 15,
+          comissao: (hiring.salarioContratado || hiring.salaryExpectation || 0) * ((hiring.feePercentual || 15) / 100),
+          dataContratacao: hiring.contratadoEm || now,
+          vencimento: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+          status: 'Aguardando Cobrança',
+          historicoStatus: [
+            {
+              id: `hist-${Date.now()}`,
+              dataHora: now,
+              statusAnterior: hiring.statusEncaminhamento || 'Contratado',
+              novoStatus: 'Aguardando Cobrança',
+              origem: 'Headhunter',
+              destino: 'Financeiro',
+              usuario: auth.currentUser?.displayName || 'Recrutador RH',
+              descricao: 'Processo encaminhado para o módulo Financeiro (Aguardando Cobrança)'
+            }
+          ],
+          createdAt: now,
+          updatedAt: now
+        });
+
+        await setDoc(doc(db, 'financeiro_cobrancas', cobrancaId), cobrancaDoc, { merge: true });
+
+        await setDoc(doc(db, 'contratacoes', contratacaoId), sanitizeFirestoreData({
+          statusEncaminhamento: 'Aguardando Cobrança',
+          encaminhadoPara: 'financeiro',
+          destinoContratacao: 'financeiro',
+          encaminhadoEm: now,
+          updatedAt: now
+        }), { merge: true });
+
+        return {
+          success: true,
+          message: 'Processo encaminhado para o módulo Financeiro com sucesso!'
+        };
+      } else {
         await enviarCandidatoParaAdmissaoDP({
           id: hiring.candidaturaId || hiring.applicationId || hiring.id,
           candidateId: hiring.candidateId || hiring.candidatoId,
@@ -736,49 +917,28 @@ export class JobCandidateService {
           city: hiring.city || '',
           state: hiring.state || ''
         });
-      } else if (targetDestination === 'headhunter') {
-        const placementId = `placement-${hiring.id}`;
-        await setDoc(doc(db, 'headhunter_placements', placementId), sanitizeFirestoreData({
-          id: placementId,
-          companyId: hiring.companyId || hiring.empresaId,
-          empresaId: hiring.companyId || hiring.empresaId,
-          clienteId: hiring.clienteId || null,
-          clienteNome: hiring.clienteNome || 'Cliente Headhunter',
-          candidateId: hiring.candidateId || hiring.candidatoId,
-          candidatoNome: hiring.candidateName || hiring.candidatoNome,
-          jobId: hiring.jobId || hiring.vagaId,
-          vagaTitulo: hiring.jobTitle || hiring.vagaTitulo,
-          salarioContratado: hiring.salarioContratado || hiring.salarioFinal || 0,
-          dataPlacement: now,
-          status: 'Confirmado',
-          createdAt: now,
-          updatedAt: now
-        }), { merge: true });
-      }
 
-      await setDoc(doc(db, 'contratacoes', contratacaoId), sanitizeFirestoreData({
-        statusEncaminhamento: 'Encaminhado',
-        encaminhadoPara: targetDestination,
-        encaminhadoEm: now,
-        updatedAt: now
-      }), { merge: true });
-
-      return {
-        success: true,
-        message: `Candidato encaminhado para ${targetDestination === 'departamento_pessoal' ? 'Departamento Pessoal' : 'Headhunter'} com sucesso!`
-      };
-    } catch (err: any) {
-      console.error('Erro ao encaminhar contratação:', err);
-      try {
         await setDoc(doc(db, 'contratacoes', contratacaoId), sanitizeFirestoreData({
-          statusEncaminhamento: 'Erro no encaminhamento',
-          erroEncaminhamento: err?.message || 'Erro ao processar destino',
+          statusEncaminhamento: 'Aguardando Admissão',
+          encaminhadoPara: 'departamento_pessoal',
+          destinoContratacao: 'departamento_pessoal',
+          destino: 'DP',
+          admissaoId: `adm_${contratacaoId}`,
+          statusAdmissao: 'Aguardando Admissão',
+          encaminhadoAdmissao: true,
+          encaminhadoAdmissaoEm: now,
+          encaminhadoEm: now,
           updatedAt: now
         }), { merge: true });
-      } catch (updErr) {
-        console.warn('Falha ao gravar status de erro em contratacoes:', updErr);
+
+        return {
+          success: true,
+          message: 'Candidato enviado para Admissão no Departamento Pessoal com sucesso!'
+        };
       }
-      throw new Error(`Falha no encaminhamento: ${err?.message || 'Erro de permissão ou salvamento no Firestore'}`);
+    } catch (err: any) {
+      console.error('Erro ao encaminhar processo:', err);
+      throw new Error(`Falha ao encaminhar processo: ${err?.message || 'Erro de salvamento no Firestore'}`);
     }
   }
 
@@ -1012,6 +1172,199 @@ export class JobCandidateService {
     return this.updateInterview(id, interview, jobTitle);
   }
 
+  static async saveInterviewFeedback(
+    interviewId: string,
+    feedback: {
+      rating: number;
+      strengths: string;
+      weaknesses?: string;
+      recommendation: string;
+      evaluatedBy?: string;
+      evaluatedAt?: string;
+      internalNotes?: string;
+    },
+    statusOverride?: string
+  ): Promise<{ status: string; candidateStatus: string; candidateStage: string }> {
+    try {
+      const now = new Date().toISOString();
+      const user = auth.currentUser;
+      const evaluator = feedback.evaluatedBy || user?.displayName || 'Recrutador RH';
+      const evalDate = feedback.evaluatedAt || now.replace('T', ' ').substring(0, 16);
+
+      const rec = (feedback.recommendation || statusOverride || '').trim().toLowerCase();
+      const st = (statusOverride || '').trim().toLowerCase();
+
+      let normalizedStatus: 'Agendada' | 'Realizada' | 'Aprovada' | 'Reprovada' | 'Em Análise' | 'Cancelada' = 'Agendada';
+      let appStatus: ApplicationStatus = 'Em Processo';
+      let appEtapa = 'Etapa de Entrevista';
+      let timelineTipo = 'entrevista';
+      let timelineTitle = 'Entrevista';
+      let timelineDesc = '';
+
+      if (st.includes('aprovad') || rec.includes('aprov') || rec.includes('avançar') || rec.includes('avancar')) {
+        normalizedStatus = 'Aprovada';
+        appStatus = 'Aprovado';
+        appEtapa = 'Aprovado na Entrevista';
+        timelineTipo = 'entrevista_aprovada';
+        timelineTitle = 'Entrevista aprovada';
+        timelineDesc = `Candidato aprovado na etapa de entrevista. Recomendação: ${feedback.recommendation || 'Aprovar'}.`;
+      } else if (st.includes('reprovad') || rec.includes('reprov')) {
+        normalizedStatus = 'Reprovada';
+        appStatus = 'Reprovado';
+        appEtapa = 'Reprovado na Entrevista';
+        timelineTipo = 'entrevista_reprovada';
+        timelineTitle = 'Entrevista reprovada';
+        timelineDesc = `Candidato reprovado na etapa de entrevista. Motivo: ${feedback.strengths || feedback.weaknesses || 'Avaliador recomendou reprovação'}.`;
+      } else if (st.includes('análise') || st.includes('analise') || rec.includes('dúvida') || rec.includes('duvida') || rec.includes('pendente') || rec.includes('manter')) {
+        normalizedStatus = 'Em Análise';
+        appStatus = 'Em Análise';
+        appEtapa = 'Avaliação de Entrevista';
+        timelineTipo = 'entrevista_em_analise';
+        timelineTitle = 'Entrevista em análise';
+        timelineDesc = 'Avaliação de entrevista pendente de parecer final.';
+      } else if (st.includes('realizad') || st.includes('concluíd') || st.includes('concluid')) {
+        normalizedStatus = 'Realizada';
+        appStatus = 'Em Análise';
+        appEtapa = 'Aguardando Avaliação';
+        timelineTipo = 'entrevista_realizada';
+        timelineTitle = 'Entrevista realizada';
+        timelineDesc = 'Entrevista realizada. Aguardando avaliação do entrevistador.';
+      } else {
+        normalizedStatus = 'Aprovada';
+        appStatus = 'Aprovado';
+        appEtapa = 'Aprovado na Entrevista';
+        timelineTipo = 'entrevista_aprovada';
+        timelineTitle = 'Entrevista aprovada';
+        timelineDesc = 'Candidato aprovado na etapa de entrevista.';
+      }
+
+      const parecerFinalValue = normalizedStatus === 'Aprovada' ? 'Aprovado' : normalizedStatus === 'Reprovada' ? 'Reprovado' : 'Em Análise';
+
+      const feedbackObj = {
+        rating: feedback.rating || 5,
+        strengths: feedback.strengths || '',
+        weaknesses: feedback.weaknesses || '',
+        recommendation: feedback.recommendation || (normalizedStatus === 'Aprovada' ? 'Aprovar' : 'Reprovar'),
+        evaluatedBy: evaluator,
+        evaluatedAt: evalDate,
+        internalNotes: feedback.internalNotes || ''
+      };
+
+      // Find Application
+      let targetAppId = interviewId.startsWith('int-app-') ? interviewId.replace('int-app-', '') : interviewId;
+      let existingApp: JobCandidateApplication | null = await this.getById(targetAppId);
+
+      if (!existingApp) {
+        const q = query(collection(db, COLLECTION_NAME), where('interview.id', '==', interviewId));
+        const snap = await getDocs(q);
+        if (!snap.empty) {
+          targetAppId = snap.docs[0].id;
+          existingApp = { id: snap.docs[0].id, ...snap.docs[0].data() } as JobCandidateApplication;
+        }
+      }
+
+      if (existingApp) {
+        const updatedTimeline = [
+          ...(existingApp.timeline || []),
+          {
+            id: `evt-${Date.now()}`,
+            tipo: timelineTipo,
+            title: timelineTitle,
+            description: timelineDesc,
+            date: evalDate,
+            by: evaluator
+          }
+        ];
+
+        const updatedApp = {
+          ...existingApp,
+          status: appStatus,
+          etapa: appEtapa,
+          interviewStatus: normalizedStatus,
+          interview: {
+            ...(existingApp.interview || {
+              type: 'Online',
+              date: now.split('T')[0],
+              time: '10:00',
+              interviewer: evaluator
+            }),
+            status: normalizedStatus,
+            parecerFinal: parecerFinalValue,
+            feedback: feedbackObj
+          },
+          timeline: updatedTimeline,
+          updatedAt: now
+        };
+
+        await setDoc(doc(db, COLLECTION_NAME, targetAppId), sanitizeFirestoreData(updatedApp), { merge: true });
+
+        if (existingApp.candidateId) {
+          try {
+            await CandidateService.update(existingApp.candidateId, {
+              status: appStatus === 'Aprovado' ? 'Ativo' : appStatus === 'Reprovado' ? 'Indisponível' : 'Em Processo',
+              currentStageId: normalizedStatus === 'Aprovada' ? 'entrevista_gestor' : 'entrevista_rh'
+            });
+          } catch (e) {
+            console.warn('Aviso ao atualizar perfil no Banco de Talentos:', e);
+          }
+        }
+      }
+
+      // Find and update document in 'entrevistas'
+      let intDocId = interviewId;
+      let intSnap = await getDoc(doc(db, 'entrevistas', intDocId));
+      if (!intSnap.exists() && existingApp) {
+        const qInt = query(collection(db, 'entrevistas'), where('applicationId', '==', targetAppId));
+        const snapInt = await getDocs(qInt);
+        if (!snapInt.empty) {
+          intDocId = snapInt.docs[0].id;
+          intSnap = snapInt.docs[0];
+        }
+      }
+
+      const intData = {
+        id: intDocId,
+        status: normalizedStatus,
+        parecerFinal: parecerFinalValue,
+        feedback: feedbackObj,
+        realizadaEm: now,
+        avaliadaEm: now,
+        updatedAt: now
+      };
+
+      await setDoc(doc(db, 'entrevistas', intDocId), sanitizeFirestoreData(intData), { merge: true });
+
+      // Update agenda
+      if (existingApp) {
+        try {
+          const qAge = query(collection(db, 'agenda'), where('applicationId', '==', targetAppId));
+          const snapAge = await getDocs(qAge);
+          if (!snapAge.empty) {
+            await setDoc(doc(db, 'agenda', snapAge.docs[0].id), sanitizeFirestoreData({
+              status: normalizedStatus,
+              updatedAt: now
+            }), { merge: true });
+          }
+        } catch (e) {
+          console.warn('Aviso ao atualizar agenda:', e);
+        }
+      }
+
+      await AuditService.log({
+        action: 'UPDATE',
+        description: `Feedback de entrevista registrado (${normalizedStatus}) para ${interviewId}`,
+        moduleName: 'Recrutamento',
+        targetEntity: 'Entrevista',
+        companyId: existingApp?.companyId || 'emp-001'
+      });
+
+      return { status: normalizedStatus, candidateStatus: appStatus, candidateStage: appEtapa };
+    } catch (err) {
+      console.error('Erro ao salvar feedback da entrevista:', err);
+      throw err;
+    }
+  }
+
   static async addEvaluation(id: string, evaluation: Omit<EvaluationData, 'id' | 'evaluatedAt' | 'evaluatedBy'>): Promise<void> {
     try {
       const existing = await this.getById(id);
@@ -1026,20 +1379,63 @@ export class JobCandidateService {
         evaluatedAt: now.replace('T', ' ').substring(0, 16)
       };
 
+      const finalOp = evaluation.finalOpinion || 'Aprovado';
+      let appStatus: ApplicationStatus = 'Em Processo';
+      let appEtapa = 'Avaliação de Entrevista';
+      let normStatus: 'Aprovada' | 'Reprovada' | 'Em Análise' = 'Em Análise';
+
+      if (finalOp === 'Aprovado') {
+        appStatus = 'Aprovado';
+        appEtapa = 'Aprovado na Entrevista';
+        normStatus = 'Aprovada';
+      } else if (finalOp === 'Reprovado') {
+        appStatus = 'Reprovado';
+        appEtapa = 'Reprovado na Entrevista';
+        normStatus = 'Reprovada';
+      } else {
+        appStatus = 'Em Análise';
+        appEtapa = 'Avaliação de Entrevista';
+        normStatus = 'Em Análise';
+      }
+
       const updatedEvaluations = [...(existing.evaluations || []), evalObj];
       const updatedTimeline = [
         ...(existing.timeline || []),
         {
           id: `evt-${Date.now()}`,
-          title: 'Avaliação Registrada',
+          tipo: normStatus === 'Aprovada' ? 'entrevista_aprovada' : normStatus === 'Reprovada' ? 'entrevista_reprovada' : 'entrevista_em_analise',
+          title: `Entrevista ${normStatus.toLowerCase()}`,
           description: `Parecer final: ${evaluation.finalOpinion}. Obs: ${evaluation.notes || 'Sem observações'}.`,
           date: now.replace('T', ' ').substring(0, 16),
           by: user?.displayName || 'Avaliador RH'
         }
       ];
 
+      const feedbackObj = {
+        rating: evaluation.overallScore || 5,
+        strengths: evaluation.parecerRH || '',
+        weaknesses: evaluation.notes || '',
+        recommendation: finalOp === 'Aprovado' ? 'Aprovar' : finalOp === 'Reprovado' ? 'Reprovar' : 'Em Dúvida',
+        evaluatedBy: user?.displayName || 'Avaliador RH',
+        evaluatedAt: now.replace('T', ' ').substring(0, 16)
+      };
+
       const updatedApp: JobCandidateApplication = {
         ...existing,
+        status: appStatus,
+        etapa: appEtapa,
+        interviewStatus: normStatus,
+        interview: {
+          ...(existing.interview || {
+            type: 'Online',
+            date: now.split('T')[0],
+            time: '10:00',
+            interviewer: user?.displayName || 'Avaliador RH'
+          }),
+          status: normStatus,
+          parecerFinal: finalOp,
+          feedback: feedbackObj
+        },
         evaluations: updatedEvaluations,
         timeline: updatedTimeline,
         updatedAt: now
@@ -1047,9 +1443,26 @@ export class JobCandidateService {
 
       await setDoc(doc(db, COLLECTION_NAME, id), sanitizeFirestoreData(updatedApp), { merge: true });
 
+      // Update 'entrevistas' collection
+      try {
+        const qInt = query(collection(db, 'entrevistas'), where('applicationId', '==', id));
+        const snapInt = await getDocs(qInt);
+        if (!snapInt.empty) {
+          await setDoc(doc(db, 'entrevistas', snapInt.docs[0].id), sanitizeFirestoreData({
+            status: normStatus,
+            parecerFinal: finalOp,
+            feedback: feedbackObj,
+            avaliadaEm: now,
+            updatedAt: now
+          }), { merge: true });
+        }
+      } catch (e) {
+        console.warn('Erro ao atualizar entrevistas no addEvaluation:', e);
+      }
+
       await AuditService.log({
         action: 'UPDATE',
-        description: `Nova avaliação adicionada para a candidatura ${id}`,
+        description: `Nova avaliação registrada para a candidatura ${id}`,
         moduleName: 'Recrutamento',
         targetEntity: 'Avaliação',
         companyId: existing.companyId

@@ -213,7 +213,17 @@ export const InterviewFeedbackModal: React.FC<InterviewFeedbackModalProps> = ({
               label="Recomendação do Entrevistador"
               disabled={!canUserEvaluate}
               value={recommendation}
-              onChange={(e) => setRecommendation(e.target.value as InterviewRecommendation)}
+              onChange={(e) => {
+                const rec = e.target.value as InterviewRecommendation;
+                setRecommendation(rec);
+                if (rec === 'Aprovar' || rec === 'Avançar para Próxima Etapa') {
+                  setNewStatus('Aprovada');
+                } else if (rec === 'Reprovar') {
+                  setNewStatus('Reprovada');
+                } else if (rec === 'Manter no Banco') {
+                  setNewStatus('Em Análise');
+                }
+              }}
               options={INTERVIEW_RECOMMENDATION_OPTIONS.map((r) => ({ value: r, label: r }))}
             />
 

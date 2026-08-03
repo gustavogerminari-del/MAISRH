@@ -51,6 +51,40 @@ function MainAppContent() {
     return user?.role === 'Super Administrador' ? 'acesso-master' : 'dashboard';
   });
   const [searchTerm, setSearchTerm] = useState<string>('');
+  const [selectedAdmissionId, setSelectedAdmissionId] = useState<string | null>(() => {
+    try {
+      const urlParams = new URLSearchParams(window.location.search);
+      return urlParams.get('selectedAdmissionId') || localStorage.getItem('selectedAdmissionId') || null;
+    } catch {
+      return null;
+    }
+  });
+  const [selectedFinancialId, setSelectedFinancialId] = useState<string | null>(() => {
+    try {
+      const urlParams = new URLSearchParams(window.location.search);
+      return urlParams.get('selectedFinancialId') || urlParams.get('selectedBillingId') || localStorage.getItem('selectedFinancialId') || localStorage.getItem('selectedBillingId') || null;
+    } catch {
+      return null;
+    }
+  });
+
+  const handleNavigateTab = (tab: string, entityId?: string) => {
+    if (entityId) {
+      if (tab === 'admissoes' || tab === 'colaboradores' || tab === 'equipe-interna' || tab === 'departamento-pessoal') {
+        setSelectedAdmissionId(entityId);
+        localStorage.setItem('selectedAdmissionId', entityId);
+      } else if (tab === 'headhunter-financeiro' || tab === 'financeiro' || tab.includes('financeiro')) {
+        setSelectedFinancialId(entityId);
+        localStorage.setItem('selectedFinancialId', entityId);
+        localStorage.setItem('selectedBillingId', entityId);
+      }
+    }
+    if (tab === 'admissoes' || tab === 'colaboradores' || tab === 'equipe-interna' || tab === 'departamento-pessoal') {
+      setActiveTab('admissoes' as MainTab);
+    } else {
+      setActiveTab(tab as MainTab);
+    }
+  };
 
   // Auto-switch to Master Panel when Super Admin logs in or switches profile
   React.useEffect(() => {
@@ -385,7 +419,7 @@ function MainAppContent() {
             )}
 
             {activeTab === 'candidatos' && (
-              <JobCandidatesManagementView />
+              <JobCandidatesManagementView openNewJobModal={() => setIsJobModalOpen(true)} />
             )}
 
             {activeTab === 'entrevistas' && (
@@ -400,6 +434,7 @@ function MainAppContent() {
               <UnifiedContratacoesView
                 origemProcesso="recrutamento_interno"
                 companyId={user?.empresaId || user?.companyId || 'emp-001'}
+                onNavigateToTab={handleNavigateTab}
               />
             )}
 
@@ -417,7 +452,7 @@ function MainAppContent() {
             )}
 
             {activeTab === 'equipe-interna' && (
-              <DepartamentoPessoalView initialSubTab="colaboradores" />
+              <DepartamentoPessoalView initialSubTab="colaboradores" selectedAdmissionId={selectedAdmissionId} />
             )}
 
             {activeTab === 'site-vagas' && (
@@ -435,12 +470,16 @@ function MainAppContent() {
                     ? 'dashboard' 
                     : (activeTab.replace('headhunter-', '') as any)
                 } 
+                selectedFinancialId={selectedFinancialId}
               />
             )}
 
             {/* Departamento Pessoal Master Submenu Routing */}
-            {['departamento-pessoal', 'colaboradores', 'ponto-digital', 'jornada', 'beneficios', 'ferias', 'rescisao', 'documentos', 'afastamentos', 'sst', 'relatorios-dp', 'configuracoes-trabalhistas'].includes(activeTab) && (
-              <DepartamentoPessoalView initialSubTab={activeTab === 'jornada' ? 'ponto-digital' : (activeTab as DPSubTab)} />
+            {['departamento-pessoal', 'colaboradores', 'admissoes', 'ponto-digital', 'jornada', 'beneficios', 'ferias', 'rescisao', 'documentos', 'afastamentos', 'sst', 'relatorios-dp', 'configuracoes-trabalhistas'].includes(activeTab) && (
+              <DepartamentoPessoalView 
+                initialSubTab={activeTab === 'jornada' ? 'ponto-digital' : (activeTab as DPSubTab)} 
+                selectedAdmissionId={selectedAdmissionId}
+              />
             )}
 
             {activeTab === 'folha-pagamento' && (

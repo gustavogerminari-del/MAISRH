@@ -1,4 +1,6 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import { doc, getDoc, getDocs, query, collection, where } from 'firebase/firestore';
+import { db } from '../../lib/firebase';
 import { 
   UserPlus, 
   CheckCircle2, 
@@ -43,6 +45,7 @@ interface GestaoAdmissoesProps {
   onSalvarAdmissao?: (admissao: AdmissaoPending) => Promise<void>;
   onDeletarAdmissao?: (admissaoId: string) => Promise<void>;
   companyId: string;
+  selectedAdmissionId?: string | null;
 }
 
 const DEFAULT_CHECKLIST_ITEMS: ItemChecklistAdmissao[] = [
@@ -64,13 +67,59 @@ export const GestaoAdmissoes: React.FC<GestaoAdmissoesProps> = ({
   onEfetivarAdmissao,
   onSalvarAdmissao,
   onDeletarAdmissao,
-  companyId
+  companyId,
+  selectedAdmissionId
 }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('Todos');
   const [selectedAdmissao, setSelectedAdmissao] = useState<AdmissaoPending | null>(null);
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
   const [drawerTab, setDrawerTab] = useState<'resumo' | 'pessoais' | 'endereco' | 'documentos' | 'profissionais' | 'banco' | 'dependentes' | 'beneficios' | 'exames' | 'contrato' | 'checklist'>('resumo');
+
+  // Auto-open drawer when selectedAdmissionId is provided
+  useEffect(() => {
+    const targetId = selectedAdmissionId || localStorage.getItem('selectedAdmissionId');
+    if (!targetId) return;
+
+    const found = admissoes.find(a => 
+      a.id === targetId || 
+      (a as any).contratacaoId === targetId ||
+      a.id === `adm_${targetId}` ||
+      (a as any).applicationId === targetId ||
+      (a as any).candidatoId === targetId ||
+      (a as any).candidateId === targetId
+    );
+
+    if (found) {
+      setSelectedAdmissao(found);
+      setIsDrawerOpen(true);
+    } else {
+      // Direct Firestore fetch fallback
+      const fetchAdmission = async () => {
+        try {
+          const docRef = doc(db, 'solicitacoes_admissao', targetId);
+          const docSnap = await getDoc(docRef);
+          if (docSnap.exists()) {
+            const data = { id: docSnap.id, ...docSnap.data() } as AdmissaoPending;
+            setSelectedAdmissao(data);
+            setIsDrawerOpen(true);
+          } else {
+            const q = query(collection(db, 'solicitacoes_admissao'), where('contratacaoId', '==', targetId));
+            const querySnap = await getDocs(q);
+            if (!querySnap.empty) {
+              const firstDoc = querySnap.docs[0];
+              const data = { id: firstDoc.id, ...firstDoc.data() } as AdmissaoPending;
+              setSelectedAdmissao(data);
+              setIsDrawerOpen(true);
+            }
+          }
+        } catch (err) {
+          console.warn("[GestaoAdmissoes] Erro ao carregar admissão selecionada:", err);
+        }
+      };
+      fetchAdmission();
+    }
+  }, [selectedAdmissionId, admissoes]);
 
   // Modals
   const [showManualModal, setShowManualModal] = useState(false);

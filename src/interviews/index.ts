@@ -5,6 +5,7 @@
 
 export * from './types/interview';
 export * from './constants/interviewOptions';
+export * from './utils/interviewUtils';
 export * from './data/mockInterviewsData';
 export * from './components/InterviewStatusBadge';
 export * from './components/InterviewCard';

@@ -14,6 +14,7 @@ import {
   ShieldAlert,
 } from 'lucide-react';
 import { Interview, InterviewFilterParams, InterviewStatus } from '../types/interview';
+import { normalizeInterviewStatus } from '../utils/interviewUtils';
 import { InterviewCard } from './InterviewCard';
 import { InterviewScheduleModal } from './InterviewScheduleModal';
 import { InterviewFeedbackModal } from './InterviewFeedbackModal';
@@ -72,22 +73,41 @@ export const InterviewsManagementView: React.FC<InterviewsManagementViewProps> =
         const apps = await JobCandidateService.listAll(userCompanyId);
         const interviewsFromApps: Interview[] = apps
           .filter(a => a.interview && a.interview.date)
-          .map(a => ({
-            id: `int-app-${a.id}`,
-            candidateId: a.candidateId || a.id,
-            candidateName: a.name,
-            candidateRole: a.role,
-            jobId: a.jobId,
-            jobTitle: a.role || 'Vaga Selecionada',
-            interviewerName: a.interview!.interviewer || 'Recrutador RH',
-            date: a.interview!.date,
-            time: a.interview!.time || '10:00',
-            type: (a.interview!.type === 'Presencial' ? 'Presencial' : a.interview!.type === 'Telefone' ? 'Telefone' : 'Online') as any,
-            meetingLink: a.interview!.meetingLink,
-            location: a.interview!.location,
-            status: (a.interview!.status as any) || 'Agendada',
-            notes: a.interview!.notes
-          }));
+          .map(a => {
+            const rawStatus = a.interviewStatus || a.interview!.status || a.status;
+            const normStatus = normalizeInterviewStatus(rawStatus);
+
+            let feedbackObj = a.interview!.feedback;
+            if (!feedbackObj && a.evaluations && a.evaluations.length > 0) {
+              const lastEval = a.evaluations[a.evaluations.length - 1];
+              feedbackObj = {
+                rating: lastEval.overallScore || 5,
+                strengths: lastEval.parecerRH || '',
+                weaknesses: lastEval.notes || '',
+                recommendation: lastEval.finalOpinion === 'Aprovado' ? 'Aprovar' : lastEval.finalOpinion === 'Reprovado' ? 'Reprovar' : 'Em Dúvida',
+                evaluatedBy: lastEval.evaluatedBy,
+                evaluatedAt: lastEval.evaluatedAt,
+              };
+            }
+
+            return {
+              id: `int-app-${a.id}`,
+              candidateId: a.candidateId || a.id,
+              candidateName: a.name,
+              candidateRole: a.role,
+              jobId: a.jobId,
+              jobTitle: a.role || 'Vaga Selecionada',
+              interviewerName: a.interview!.interviewer || 'Recrutador RH',
+              date: a.interview!.date,
+              time: a.interview!.time || '10:00',
+              type: (a.interview!.type === 'Presencial' ? 'Presencial' : a.interview!.type === 'Telefone' ? 'Telefone' : 'Online') as any,
+              meetingLink: a.interview!.meetingLink,
+              location: a.interview!.location,
+              status: normStatus,
+              feedback: feedbackObj,
+              notes: a.interview!.notes
+            };
+          });
 
         const recInterviews = RecruitmentService.getInterviews(userCompanyId);
         const mappedRec: Interview[] = recInterviews.map(r => ({
@@ -102,7 +122,8 @@ export const InterviewsManagementView: React.FC<InterviewsManagementViewProps> =
           time: r.time || (r.dataHora && r.dataHora.includes('T') ? r.dataHora.split('T')[1].substring(0, 5) : '10:00'),
           type: (r.modalidade === 'Presencial' ? 'Presencial' : 'Online') as any,
           meetingLink: r.salaVirtualUrl,
-          status: (r.status as any) || 'Agendada',
+          status: normalizeInterviewStatus(r.status),
+          feedback: r.feedback,
           notes: r.pauta
         }));
 
@@ -163,8 +184,11 @@ export const InterviewsManagementView: React.FC<InterviewsManagementViewProps> =
         item.jobTitle.toLowerCase().includes(term) ||
         item.interviewerName.toLowerCase().includes(term);
 
+      const normItemStatus = normalizeInterviewStatus(item.status);
       const matchesStatus =
-        !filters.status || filters.status === 'Todas' || item.status === filters.status;
+        !filters.status ||
+        filters.status === 'Todas' ||
+        normItemStatus === normalizeInterviewStatus(filters.status);
 
       const matchesType =
         !filters.type || filters.type === 'Todas' || item.type === filters.type;
@@ -185,10 +209,13 @@ export const InterviewsManagementView: React.FC<InterviewsManagementViewProps> =
 
   // Stats Counters
   const totalCount = interviews.length;
-  const scheduledCount = interviews.filter((i) => i.status === 'Agendada').length;
-  const todayCount = interviews.filter((i) => i.date === todayStr && i.status === 'Agendada').length;
-  const inAnalysisCount = interviews.filter((i) => i.status === 'Em Análise').length;
-  const approvedCount = interviews.filter((i) => i.status === 'Aprovada').length;
+  const scheduledCount = interviews.filter((i) => normalizeInterviewStatus(i.status) === 'Agendada').length;
+  const todayCount = interviews.filter((i) => i.date === todayStr && normalizeInterviewStatus(i.status) === 'Agendada').length;
+  const inAnalysisCount = interviews.filter((i) => {
+    const norm = normalizeInterviewStatus(i.status);
+    return norm === 'Em Análise' || (norm === 'Realizada' && !i.feedback);
+  }).length;
+  const approvedCount = interviews.filter((i) => normalizeInterviewStatus(i.status) === 'Aprovada').length;
 
   const handleAddSchedule = (newInterviewData: Omit<Interview, 'id' | 'status'>) => {
     const newInterview: Interview = {
@@ -200,18 +227,41 @@ export const InterviewsManagementView: React.FC<InterviewsManagementViewProps> =
     logger.info(`Entrevista agendada para ${newInterview.candidateName}`, 'Interviews');
   };
 
-  const handleSubmitFeedback = (
+  const handleSubmitFeedback = async (
     interviewId: string,
     feedback: NonNullable<Interview['feedback']>,
     newStatus: InterviewStatus
   ) => {
-    setInterviews((prev) =>
-      prev.map((i) => (i.id === interviewId ? { ...i, status: newStatus, feedback } : i))
+    const normNewStatus = normalizeInterviewStatus(
+      newStatus || (feedback.recommendation === 'Aprovar' ? 'Aprovada' : feedback.recommendation === 'Reprovar' ? 'Reprovada' : 'Em Análise')
     );
-    if (onUpdateFeedbackExternal) {
-      onUpdateFeedbackExternal(interviewId, feedback);
+
+    // Update state immediately for instant real-time UI refresh
+    setInterviews((prev) =>
+      prev.map((i) =>
+        i.id === interviewId
+          ? {
+              ...i,
+              status: normNewStatus,
+              feedback: {
+                ...feedback,
+                recommendation: feedback.recommendation || (normNewStatus === 'Aprovada' ? 'Aprovar' : 'Reprovar')
+              }
+            }
+          : i
+      )
+    );
+
+    try {
+      await JobCandidateService.saveInterviewFeedback(interviewId, feedback, normNewStatus);
+    } catch (err) {
+      console.error('Erro ao salvar feedback da entrevista no Firestore:', err);
     }
-    logger.info(`Feedback salvo para entrevista ${interviewId} (${newStatus})`, 'Interviews');
+
+    if (onUpdateFeedbackExternal) {
+      onUpdateFeedbackExternal(interviewId, feedback, normNewStatus);
+    }
+    logger.info(`Feedback salvo para entrevista ${interviewId} (${normNewStatus})`, 'Interviews');
   };
 
   const handleDeleteInterview = (interviewId: string) => {

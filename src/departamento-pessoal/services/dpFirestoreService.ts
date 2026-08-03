@@ -190,6 +190,20 @@ export async function saveAdmissaoFirestore(admissao: AdmissaoPending): Promise<
     });
     await setDoc(docRef, sanitized, { merge: true });
 
+    // Sync with contratacoes collection
+    const contrId = (admissao as any).contratacaoId || (admissao.jobId && admissao.candidatoId ? `${admissao.jobId}_${admissao.candidatoId}` : null);
+    if (contrId) {
+      try {
+        await setDoc(doc(db, 'contratacoes', contrId), sanitizeFirestoreData({
+          statusEncaminhamento: admissao.status,
+          encaminhadoPara: 'departamento_pessoal',
+          updatedAt: new Date().toISOString()
+        }), { merge: true });
+      } catch (syncErr) {
+        console.warn('[DP Firestore] Erro ao sincronizar com contratacoes:', syncErr);
+      }
+    }
+
     await addHistoricoEventoFirestore({
       empresaId: companyId,
       colaboradorId: admissao.id,

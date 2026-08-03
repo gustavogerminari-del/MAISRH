@@ -15,18 +15,24 @@ import {
   Clock, 
   MoreVertical, 
   FileText, 
-  Phone, 
-  Mail, 
-  MessageCircle, 
-  Download, 
   RefreshCw,
   Plus,
-  Star,
   History,
   Award,
-  Zap,
+  BarChart2,
+  Edit3,
+  Play,
+  Pause,
+  RotateCcw,
+  Eye,
+  X,
+  Send,
+  AlertCircle,
+  ChevronRight,
   ChevronDown,
-  ChevronUp,
+  Phone,
+  Mail,
+  GraduationCap,
   Layers
 } from 'lucide-react';
 import { Job } from '../types/job';
@@ -37,27 +43,29 @@ import {
   ApplicationStatus 
 } from '../../services/JobCandidateService';
 import { CandidateDrawerPanel } from './CandidateDrawerPanel';
-import { JobTalentBankAiTab } from './JobTalentBankAiTab';
-import { Button, Card } from '../../shared';
+import { JobFormModal } from './JobFormModal';
 import { useAuth } from '../../auth';
 import { formatFirestoreDate } from '../../lib/firestoreUtils';
 
-export type JobViewTab = 'inscritos' | 'banco_ia' | 'entrevistas' | 'avaliacoes' | 'historico';
+export type MainCandidatosViewMode = 'por_vaga' | 'todos_candidatos';
+export type JobFilterStatus = 'Todas' | 'Abertas' | 'Em andamento' | 'Pausadas' | 'Preenchidas' | 'Canceladas';
 
 interface JobCandidatesManagementViewProps {
   job?: Job | null;
   onBack?: () => void;
+  openNewJobModal?: () => void;
 }
 
 export const JobCandidatesManagementView: React.FC<JobCandidatesManagementViewProps> = ({
   job,
   onBack,
+  openNewJobModal,
 }) => {
   const { user } = useAuth();
-  const companyId = user?.empresaId || user?.companyId || user?.tenantId;
+  const companyId = user?.empresaId || user?.companyId || user?.tenantId || 'emp-001';
 
-  // Navigation Tabs
-  const [activeTab, setActiveTab] = useState<JobViewTab>('inscritos');
+  // Subtab navigation inside Candidatos module (Por Vaga vs Todos os Candidatos)
+  const [viewMode, setViewMode] = useState<MainCandidatosViewMode>('por_vaga');
 
   const [candidates, setCandidates] = useState<JobCandidateApplication[]>([]);
   const [companyJobs, setCompanyJobs] = useState<Job[]>([]);
@@ -67,35 +75,28 @@ export const JobCandidatesManagementView: React.FC<JobCandidatesManagementViewPr
   const [selectedCandidate, setSelectedCandidate] = useState<JobCandidateApplication | null>(null);
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
 
-  // Search & Filter State
-  const [searchTerm, setSearchTerm] = useState('');
+  // Filter controls for "Por Vaga"
+  const [jobSearchTerm, setJobSearchTerm] = useState('');
+  const [jobStatusFilter, setJobStatusFilter] = useState<JobFilterStatus>('Todas');
+  const [showJobFilters, setShowJobFilters] = useState(false);
+
+  // Filter controls for "Todos os Candidatos"
+  const [candidateSearchTerm, setCandidateSearchTerm] = useState('');
   const [selectedJobFilter, setSelectedJobFilter] = useState<string>('Todas');
   const [statusFilter, setStatusFilter] = useState<string>('Todos');
   const [cityFilter, setCityFilter] = useState<string>('Todas');
   const [educationFilter, setEducationFilter] = useState<string>('Todas');
   const [experienceFilter, setExperienceFilter] = useState<string>('Todas');
-  const [salaryFilter, setSalaryFilter] = useState<string>('Todos');
-  const [pcdFilter, setPcdFilter] = useState<string>('Todos');
   const [iaFilter, setIaFilter] = useState<string>('Todas');
 
-  // Accordion collapsed state per group
-  const [collapsedGroups, setCollapsedGroups] = useState<Record<string, boolean>>({});
+  // Job Editing & Modals
+  const [editingJob, setEditingJob] = useState<Job | null>(null);
+  const [isCreateJobOpen, setIsCreateJobOpen] = useState(false);
+  const [metricsModalJob, setMetricsModalJob] = useState<Job | null>(null);
+  const [historyModalJob, setHistoryModalJob] = useState<Job | null>(null);
+  const [openMoreOptionsJobId, setOpenMoreOptionsJobId] = useState<string | null>(null);
 
-  const toggleGroup = (jobId: string) => {
-    setCollapsedGroups(prev => ({
-      ...prev,
-      [jobId]: !prev[jobId]
-    }));
-  };
-
-  // Load company jobs
-  useEffect(() => {
-    if (!companyId) return;
-    JobService.listByCompany(companyId)
-      .then(list => setCompanyJobs(list))
-      .catch(err => console.warn('Erro ao carregar vagas da empresa:', err));
-  }, [companyId]);
-
+  // Load Company Jobs & Subscribe Candidates
   const handleRefresh = async () => {
     if (!companyId) return;
     setLoading(true);
@@ -110,11 +111,18 @@ export const JobCandidatesManagementView: React.FC<JobCandidatesManagementViewPr
       const jobsList = await JobService.listByCompany(companyId);
       setCompanyJobs(jobsList);
     } catch (err) {
-      console.error('Erro ao recarregar candidatos:', err);
+      console.error('Erro ao recarregar dados do Firestore:', err);
     } finally {
       setLoading(false);
     }
   };
+
+  useEffect(() => {
+    if (!companyId) return;
+    JobService.listByCompany(companyId)
+      .then(list => setCompanyJobs(list))
+      .catch(err => console.warn('Erro ao carregar vagas:', err));
+  }, [companyId]);
 
   useEffect(() => {
     if (!companyId) {
@@ -160,7 +168,7 @@ export const JobCandidatesManagementView: React.FC<JobCandidatesManagementViewPr
     };
   }, [job?.id, companyId]);
 
-  // Sync selectedCandidate when candidates update
+  // Sync selected candidate
   useEffect(() => {
     if (selectedCandidate) {
       const updated = candidates.find(c => c.id === selectedCandidate.id);
@@ -168,495 +176,789 @@ export const JobCandidatesManagementView: React.FC<JobCandidatesManagementViewPr
     }
   }, [candidates]);
 
-  // Metric Indicators Counts
-  const counts = useMemo(() => {
-    const targetCandidates = selectedJobFilter !== 'Todas' 
-      ? candidates.filter(c => c.jobId === selectedJobFilter)
-      : candidates;
+  // Helper for job positions count
+  const getJobPositions = (j: Job): number => {
+    return j.openings || j.quantidadeVagas || (j as any).positions || (j as any).numeroVagas || (j as any).totalPositions || (j as any).quantidadePosicoes || 1;
+  };
+
+  // Helper for job candidates
+  const getJobCandidates = (jobId: string) => {
+    return candidates.filter(c => c.jobId === jobId);
+  };
+
+  // Helper for hired count
+  const getJobHiredCount = (jobId: string) => {
+    return getJobCandidates(jobId).filter(c => c.status === 'Contratado' || c.status === 'Aprovado').length;
+  };
+
+  // Helper to check if job is filled
+  const isJobFilled = (j: Job): boolean => {
+    const hired = getJobHiredCount(j.id);
+    const positions = getJobPositions(j);
+    return hired >= positions || (j.status as string) === 'Preenchida';
+  };
+
+  // Helper to get normalized status display for a job
+  const getJobStatusBadge = (j: Job) => {
+    if (isJobFilled(j)) {
+      return {
+        label: 'Preenchida',
+        colorClass: 'bg-emerald-100 text-emerald-800 border-emerald-300',
+        icon: <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+      };
+    }
+    const st = (j.status as string) || 'Aberta';
+    if (st === 'Aberta' || st === 'ativa') {
+      return {
+        label: 'Aberta',
+        colorClass: 'bg-emerald-100 text-emerald-800 border-emerald-200',
+        icon: <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+      };
+    }
+    if (st === 'Em andamento') {
+      return {
+        label: 'Em andamento',
+        colorClass: 'bg-amber-100 text-amber-800 border-amber-200',
+        icon: <span className="w-2 h-2 rounded-full bg-amber-500" />
+      };
+    }
+    if (st === 'Pausada') {
+      return {
+        label: 'Pausada',
+        colorClass: 'bg-blue-100 text-blue-800 border-blue-200',
+        icon: <Pause className="w-3 h-3 text-blue-600" />
+      };
+    }
+    if (st === 'Cancelada' || st === 'Fechada' || st === 'Encerrada' || st === 'Arquivada') {
+      return {
+        label: st === 'Cancelada' ? 'Cancelada' : 'Fechada',
+        colorClass: 'bg-slate-100 text-slate-700 border-slate-200',
+        icon: <XCircle className="w-3.5 h-3.5 text-slate-500" />
+      };
+    }
+    return {
+      label: st,
+      colorClass: 'bg-slate-100 text-slate-700 border-slate-200',
+      icon: null
+    };
+  };
+
+  // Classify Jobs (Active vs Finished)
+  const { activeJobs, finishedJobs, statusCounts, globalMetrics } = useMemo(() => {
+    let abertas = 0;
+    let emAndamento = 0;
+    let pausadas = 0;
+    let preenchidas = 0;
+    let canceladas = 0;
+
+    const actives: Job[] = [];
+    const finished: Job[] = [];
+
+    companyJobs.forEach(j => {
+      const filled = isJobFilled(j);
+      const st = (j.status as string) || 'Aberta';
+
+      if (filled || st === 'Preenchida') {
+        preenchidas++;
+        finished.push(j);
+      } else if (st === 'Cancelada' || st === 'Fechada' || st === 'Encerrada' || st === 'Arquivada') {
+        canceladas++;
+        finished.push(j);
+      } else {
+        actives.push(j);
+        if (st === 'Aberta' || st === 'ativa') abertas++;
+        else if (st === 'Em andamento') emAndamento++;
+        else if (st === 'Pausada') pausadas++;
+        else abertas++;
+      }
+    });
+
+    const totalHired = candidates.filter(c => c.status === 'Contratado' || c.status === 'Aprovado').length;
 
     return {
-      total: targetCandidates.length,
-      novos: targetCandidates.filter(c => c.status === 'Novos').length,
-      triagemIa: targetCandidates.filter(c => c.status === 'Triagem IA').length,
-      emAnaliseRh: targetCandidates.filter(c => c.status === 'Em Análise RH').length,
-      entrevistas: targetCandidates.filter(c => c.status === 'Entrevista Agendada' || c.status === 'Entrevista Realizada').length,
-      contratados: targetCandidates.filter(c => c.status === 'Contratado' || c.status === 'Aprovado').length,
-      encerrados: targetCandidates.filter(c => c.status === 'Encerrado' || (c.status as string) === 'Vaga Preenchida').length,
-      reprovados: targetCandidates.filter(c => c.status === 'Reprovado').length,
+      activeJobs: actives,
+      finishedJobs: finished,
+      statusCounts: {
+        todas: companyJobs.length,
+        abertas,
+        emAndamento,
+        pausadas,
+        preenchidas,
+        canceladas
+      },
+      globalMetrics: {
+        totalJobs: companyJobs.length,
+        abertas,
+        emAndamento,
+        preenchidas,
+        totalHired
+      }
     };
-  }, [candidates, selectedJobFilter]);
+  }, [companyJobs, candidates]);
 
-  // Unique Cities list for filter dropdown
+  // Filter Jobs based on Search Term and Selected Status Filter
+  const filterJobsList = (jobsList: Job[]) => {
+    return jobsList.filter(j => {
+      // Search term
+      const term = jobSearchTerm.toLowerCase().trim();
+      const code = (j.id || '').toLowerCase();
+      const title = (j.title || j.titulo || '').toLowerCase();
+      const dept = (j.department || '').toLowerCase();
+      const loc = (j.location || `${j.cidade || ''} ${j.estado || ''}`).toLowerCase();
+
+      const matchesSearch = !term || code.includes(term) || title.includes(term) || dept.includes(term) || loc.includes(term);
+
+      if (!matchesSearch) return false;
+
+      // Status Filter
+      if (jobStatusFilter === 'Todas') return true;
+
+      const filled = isJobFilled(j);
+      const st = (j.status as string) || 'Aberta';
+
+      if (jobStatusFilter === 'Abertas') return (st === 'Aberta' || st === 'ativa') && !filled;
+      if (jobStatusFilter === 'Em andamento') return st === 'Em andamento' && !filled;
+      if (jobStatusFilter === 'Pausadas') return st === 'Pausada' && !filled;
+      if (jobStatusFilter === 'Preenchidas') return filled || st === 'Preenchida';
+      if (jobStatusFilter === 'Canceladas') return (st === 'Cancelada' || st === 'Fechada' || st === 'Encerrada' || st === 'Arquivada') && !filled;
+
+      return true;
+    });
+  };
+
+  const filteredActiveJobs = useMemo(() => filterJobsList(activeJobs), [activeJobs, jobSearchTerm, jobStatusFilter, candidates]);
+  const filteredFinishedJobs = useMemo(() => filterJobsList(finishedJobs), [finishedJobs, jobSearchTerm, jobStatusFilter, candidates]);
+
+  // Handlers for Job Actions
+  const handleOpenJobCandidates = (jobId: string) => {
+    setSelectedJobFilter(jobId);
+    setViewMode('todos_candidatos');
+  };
+
+  const handleOpenHiredCandidate = (jobId: string) => {
+    const hired = candidates.find(c => c.jobId === jobId && (c.status === 'Contratado' || c.status === 'Aprovado'));
+    if (hired) {
+      setSelectedCandidate(hired);
+      setIsDrawerOpen(true);
+    } else {
+      alert('Nenhum candidato com status "Contratado" encontrado para esta vaga.');
+    }
+  };
+
+  const handleReopenJob = async (j: Job) => {
+    if (!window.confirm(`Tem certeza que deseja reabrir a vaga "${j.title || j.titulo}"?`)) return;
+    try {
+      await JobService.update(j.id, { status: 'Aberta' });
+      await handleRefresh();
+      alert('Vaga reaberta com sucesso!');
+    } catch (err: any) {
+      alert(`Erro ao reabrir vaga: ${err?.message || 'Falha no Firestore'}`);
+    }
+  };
+
+  const handleSaveJobData = async (jobData: Omit<Job, 'id' | 'applicantsCount' | 'createdAt'>, existingId?: string) => {
+    try {
+      if (existingId) {
+        await JobService.update(existingId, jobData);
+      } else {
+        await JobService.create({
+          ...jobData,
+          companyId,
+          empresaId: companyId
+        });
+      }
+      await handleRefresh();
+      setEditingJob(null);
+      setIsCreateJobOpen(false);
+    } catch (err: any) {
+      alert(`Erro ao salvar vaga: ${err?.message || 'Falha na operação'}`);
+    }
+  };
+
+  // Filtered Candidates List for "Todos os Candidatos"
   const uniqueCities = useMemo(() => {
     const set = new Set<string>();
-    candidates.forEach(c => {
-      if (c.city) set.add(c.city);
-    });
+    candidates.forEach(c => { if (c.city) set.add(c.city); });
     return Array.from(set);
   }, [candidates]);
 
-  // Filtered Candidate List
   const filteredCandidates = useMemo(() => {
     return candidates.filter(c => {
-      // Job filter
-      if (selectedJobFilter !== 'Todas' && c.jobId !== selectedJobFilter) {
-        return false;
-      }
+      if (selectedJobFilter !== 'Todas' && c.jobId !== selectedJobFilter) return false;
 
-      // Search term
-      const term = searchTerm.toLowerCase().trim();
+      const term = candidateSearchTerm.toLowerCase().trim();
       const matchesSearch = !term || 
         c.name.toLowerCase().includes(term) ||
         (c.cpf && c.cpf.includes(term)) ||
         c.city.toLowerCase().includes(term) ||
         c.phone.includes(term) ||
         c.email.toLowerCase().includes(term) ||
-        c.education.toLowerCase().includes(term) ||
-        (c.course && c.course.toLowerCase().includes(term)) ||
-        (c.resumeKeywords && c.resumeKeywords.some(k => k.toLowerCase().includes(term)));
+        c.education.toLowerCase().includes(term);
 
-      // Status filter
       const matchesStatus = statusFilter === 'Todos' || c.status === statusFilter || 
         (statusFilter === 'Entrevistas' && (c.status === 'Entrevista Agendada' || c.status === 'Entrevista Realizada')) ||
-        (statusFilter === 'Contratados' && (c.status === 'Contratado' || c.status === 'Aprovado')) ||
-        (statusFilter === 'Encerrados' && (c.status === 'Encerrado' || (c.status as string) === 'Vaga Preenchida'));
+        (statusFilter === 'Contratados' && (c.status === 'Contratado' || c.status === 'Aprovado'));
 
-      // City filter
       const matchesCity = cityFilter === 'Todas' || c.city === cityFilter;
-
-      // Education filter
       const matchesEducation = educationFilter === 'Todas' || c.education === educationFilter;
 
-      // Experience filter
-      const matchesExp = experienceFilter === 'Todas' || 
-        (experienceFilter === '1+' && c.experienceYears >= 1) ||
-        (experienceFilter === '3+' && c.experienceYears >= 3) ||
-        (experienceFilter === '5+' && c.experienceYears >= 5);
-
-      // PCD filter
-      const matchesPcd = pcdFilter === 'Todos' || 
-        (pcdFilter === 'Sim' && c.isPCD) || 
-        (pcdFilter === 'Não' && !c.isPCD);
-
-      // IA Compatibility filter
       const matchesIa = iaFilter === 'Todas' ||
         (iaFilter === 'Muito' && c.compatibilityScore >= 85) ||
         (iaFilter === 'Compativel' && c.compatibilityScore >= 65 && c.compatibilityScore < 85) ||
         (iaFilter === 'Baixa' && c.compatibilityScore < 65);
 
-      return matchesSearch && matchesStatus && matchesCity && matchesEducation && matchesExp && matchesPcd && matchesIa;
+      return matchesSearch && matchesStatus && matchesCity && matchesEducation && matchesIa;
     });
-  }, [candidates, selectedJobFilter, searchTerm, statusFilter, cityFilter, educationFilter, experienceFilter, pcdFilter, iaFilter]);
-
-  // Group candidates by Job
-  const groupedJobs = useMemo(() => {
-    const map = new Map<string, JobCandidateApplication[]>();
-
-    filteredCandidates.forEach(cand => {
-      const jId = cand.jobId || 'sem_vaga';
-      if (!map.has(jId)) {
-        map.set(jId, []);
-      }
-      map.get(jId)!.push(cand);
-    });
-
-    const groups: {
-      jobId: string;
-      jobData: Job | null;
-      jobTitle: string;
-      jobCode: string;
-      jobStatus: string;
-      location: string;
-      contractType: string;
-      candidates: JobCandidateApplication[];
-      counts: {
-        total: number;
-        novos: number;
-        emAnalise: number;
-        entrevistas: number;
-        contratados: number;
-        encerradosReprovados: number;
-      };
-    }[] = [];
-
-    map.forEach((cands, jId) => {
-      const matchedJob = companyJobs.find(j => j.id === jId) || null;
-      const firstCand = cands[0];
-
-      const title = matchedJob?.title || (matchedJob as any)?.titulo || firstCand?.role || 'Vaga Sem Título';
-      const code = jId;
-      const status = matchedJob?.status || (matchedJob as any)?.statusVaga || 'Aberta';
-      const loc = matchedJob?.location || (firstCand ? `${firstCand.city}, ${firstCand.state}` : 'Não informado');
-      const cType = matchedJob?.type || (matchedJob as any)?.tipoContrato || 'CLT';
-
-      const groupCounts = {
-        total: cands.length,
-        novos: cands.filter(c => c.status === 'Novos').length,
-        emAnalise: cands.filter(c => c.status === 'Em Análise RH' || c.status === 'Triagem IA').length,
-        entrevistas: cands.filter(c => c.status === 'Entrevista Agendada' || c.status === 'Entrevista Realizada').length,
-        contratados: cands.filter(c => c.status === 'Contratado' || c.status === 'Aprovado').length,
-        encerradosReprovados: cands.filter(c => c.status === 'Encerrado' || (c.status as string) === 'Vaga Preenchida' || c.status === 'Reprovado').length,
-      };
-
-      groups.push({
-        jobId: jId,
-        jobData: matchedJob,
-        jobTitle: title,
-        jobCode: code,
-        jobStatus: status,
-        location: loc,
-        contractType: cType,
-        candidates: cands,
-        counts: groupCounts
-      });
-    });
-
-    return groups;
-  }, [filteredCandidates, companyJobs]);
-
-  const handleOpenCandidate = (candidate: JobCandidateApplication) => {
-    setSelectedCandidate(candidate);
-    setIsDrawerOpen(true);
-  };
-
-  const getStatusBadgeColor = (status: ApplicationStatus) => {
-    switch (status) {
-      case 'Novos': return 'bg-blue-100 text-blue-800 border-blue-200';
-      case 'Triagem IA': return 'bg-purple-100 text-purple-800 border-purple-200';
-      case 'Em Análise RH': return 'bg-amber-100 text-amber-800 border-amber-200';
-      case 'Entrevista Agendada': return 'bg-indigo-100 text-indigo-800 border-indigo-200';
-      case 'Entrevista Realizada': return 'bg-cyan-100 text-cyan-800 border-cyan-200';
-      case 'Aprovado': return 'bg-emerald-100 text-emerald-800 border-emerald-200';
-      case 'Contratado': return 'bg-teal-100 text-teal-800 border-teal-200';
-      case 'Reprovado': return 'bg-rose-100 text-rose-800 border-rose-200';
-      default: return 'bg-slate-100 text-slate-700 border-slate-200';
-    }
-  };
-
-  const getScoreColor = (score: number) => {
-    if (score >= 85) return 'text-emerald-600 bg-emerald-50 border-emerald-200 bar-emerald';
-    if (score >= 65) return 'text-indigo-600 bg-indigo-50 border-indigo-200 bar-indigo';
-    return 'text-amber-600 bg-amber-50 border-amber-200 bar-amber';
-  };
+  }, [candidates, selectedJobFilter, candidateSearchTerm, statusFilter, cityFilter, educationFilter, iaFilter]);
 
   return (
     <div className="space-y-6 animate-in fade-in duration-200">
-      
-      {/* 1. TOPO DA TELA (Header da Vaga ou Central de Candidatos) */}
-      <div className="bg-white rounded-3xl p-6 border border-slate-200 shadow-2xs space-y-4">
-        <div className="flex items-center justify-between gap-4">
-          {onBack ? (
-            <button
-              type="button"
-              onClick={onBack}
-              className="inline-flex items-center gap-2 text-xs font-bold text-slate-600 hover:text-indigo-600 bg-slate-100 hover:bg-indigo-50 px-3.5 py-2 rounded-xl transition-colors border border-slate-200"
-            >
-              <ArrowLeft className="w-4 h-4" />
-              Voltar para Lista de Vagas
-            </button>
-          ) : (
-            <div className="flex items-center gap-2">
-              <Users className="w-5 h-5 text-indigo-600" />
-              <span className="text-xs font-extrabold text-slate-700">Central de Candidatos — Empresa</span>
-            </div>
-          )}
 
-          <div className="flex items-center gap-2">
-            <span className={`text-xs font-black px-3 py-1 rounded-full border ${
-              job?.status === 'Aberta'
-                ? 'bg-emerald-100 text-emerald-800 border-emerald-200'
-                : (job?.status === 'Arquivada' || (job as any)?.archived || (job as any)?.isArchived)
-                ? 'bg-rose-100 text-rose-800 border-rose-200'
-                : 'bg-indigo-100 text-indigo-800 border-indigo-200'
-            }`}>
-              {job ? ((job.status === 'Arquivada' || (job as any).archived || (job as any).isArchived) ? 'Arquivada (Consulta)' : job.status) : 'Todas as Vagas'}
-            </span>
+      {/* TOP NAVIGATION HEADER & SUBTAB TOGGLE (Section 14: Menu Candidatos) */}
+      <div className="bg-white rounded-3xl p-6 border border-slate-200 shadow-2xs space-y-4">
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+          <div>
+            <div className="flex items-center gap-2">
+              {onBack && (
+                <button
+                  type="button"
+                  onClick={onBack}
+                  className="p-1.5 text-slate-500 hover:text-slate-900 rounded-lg hover:bg-slate-100 mr-1"
+                >
+                  <ArrowLeft className="w-5 h-5" />
+                </button>
+              )}
+              <h1 className="text-xl sm:text-2xl font-black text-slate-900 tracking-tight">
+                {viewMode === 'por_vaga' ? 'Candidatos por Vaga' : 'Todos os Candidatos'}
+              </h1>
+            </div>
+            <p className="text-xs text-slate-500 font-medium mt-1">
+              Gerencie todos os candidatos das suas vagas de forma centralizada e organizada
+            </p>
+          </div>
+
+          <div className="flex items-center gap-2 flex-wrap sm:flex-nowrap">
+            {/* SUBTAB SWITCHER: Por Vaga vs Todos os Candidatos */}
+            <div className="bg-slate-100 p-1 rounded-2xl flex items-center border border-slate-200">
+              <button
+                type="button"
+                onClick={() => setViewMode('por_vaga')}
+                className={`px-3.5 py-1.5 rounded-xl text-xs font-black transition-all flex items-center gap-1.5 cursor-pointer ${
+                  viewMode === 'por_vaga'
+                    ? 'bg-white text-indigo-900 shadow-xs'
+                    : 'text-slate-600 hover:text-slate-900'
+                }`}
+              >
+                <Briefcase className="w-3.5 h-3.5 text-indigo-600" />
+                <span>Por Vaga</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setViewMode('todos_candidatos')}
+                className={`px-3.5 py-1.5 rounded-xl text-xs font-black transition-all flex items-center gap-1.5 cursor-pointer ${
+                  viewMode === 'todos_candidatos'
+                    ? 'bg-white text-indigo-900 shadow-xs'
+                    : 'text-slate-600 hover:text-slate-900'
+                }`}
+              >
+                <Users className="w-3.5 h-3.5 text-indigo-600" />
+                <span>Todos os Candidatos</span>
+              </button>
+            </div>
+
             <button
               type="button"
               onClick={handleRefresh}
-              className="p-2 text-slate-400 hover:text-indigo-600 hover:bg-slate-100 rounded-xl transition-colors cursor-pointer"
+              className="p-2 text-slate-500 hover:text-indigo-600 hover:bg-slate-100 rounded-xl transition-colors cursor-pointer"
               title="Atualizar dados do Firestore"
             >
               <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin text-indigo-600' : ''}`} />
             </button>
+
+            <button
+              type="button"
+              onClick={() => {
+                if (openNewJobModal) openNewJobModal();
+                else setIsCreateJobOpen(true);
+              }}
+              className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-extrabold rounded-xl transition-all flex items-center gap-2 cursor-pointer shadow-md"
+            >
+              <Plus className="w-4 h-4" />
+              <span>+ Nova Vaga</span>
+            </button>
           </div>
         </div>
 
-        {/* Job Details Row */}
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-t border-slate-100 pt-4">
-          <div className="space-y-1">
-            <div className="flex items-center gap-2">
-              <h1 className="text-xl sm:text-2xl font-black text-slate-900 tracking-tight">
-                {job ? job.title : 'Central de Candidatos e Candidaturas'}
-              </h1>
-              <span className="text-xs font-bold text-slate-400 bg-slate-100 px-2.5 py-0.5 rounded-lg border border-slate-200">
-                {job ? `#${job.id}` : 'Geral'}
-              </span>
+        {/* SECTION 2 & 3: CONTROLES DE BUSCA E FILTROS DE STATUS DE VAGA */}
+        {viewMode === 'por_vaga' && (
+          <div className="border-t border-slate-100 pt-4 space-y-4">
+            {/* Search and Filters Bar */}
+            <div className="flex flex-col sm:flex-row items-center justify-between gap-3">
+              <div className="relative w-full sm:w-80">
+                <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-3" />
+                <input
+                  type="text"
+                  value={jobSearchTerm}
+                  onChange={(e) => setJobSearchTerm(e.target.value)}
+                  placeholder="Buscar vaga por título, código ou área..."
+                  className="w-full text-xs font-semibold pl-10 pr-4 py-2.5 rounded-xl border border-slate-200 bg-slate-50 focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-all"
+                />
+              </div>
+
+              <div className="flex items-center gap-2 w-full sm:w-auto justify-end">
+                <button
+                  type="button"
+                  onClick={() => setShowJobFilters(!showJobFilters)}
+                  className={`px-3 py-2 rounded-xl text-xs font-bold border transition-all flex items-center gap-1.5 cursor-pointer ${
+                    showJobFilters ? 'border-indigo-600 bg-indigo-50 text-indigo-900' : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50'
+                  }`}
+                >
+                  <Filter className="w-3.5 h-3.5" />
+                  <span>Filtros</span>
+                </button>
+              </div>
             </div>
 
-            <div className="flex items-center gap-3 text-xs font-medium text-slate-500 flex-wrap">
-              <span className="flex items-center gap-1 font-bold text-slate-700">
-                <Building2 className="w-3.5 h-3.5 text-indigo-600" />
-                {job ? job.department : 'Todas as Áreas'}
-              </span>
-              <span>•</span>
-              <span className="flex items-center gap-1">
-                <MapPin className="w-3.5 h-3.5 text-slate-400" />
-                {job ? job.location : 'Todos os Locais'}
-              </span>
-              <span>•</span>
-              <span className="bg-indigo-50 text-indigo-700 text-[10px] font-extrabold px-2 py-0.5 rounded-md border border-indigo-100">
-                {job ? job.type : 'Candidaturas Ativas'}
-              </span>
-              {job && (
-                <>
-                  <span>•</span>
-                  <span>Abertura: {formatFirestoreDate(job.createdAt || (job as any).dataCriacao)}</span>
-                </>
+            {/* STATUS FILTER BUTTONS (Section 3) */}
+            <div className="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-none">
+              {(
+                [
+                  { id: 'Todas', label: 'Todas', count: statusCounts.todas, color: 'indigo' },
+                  { id: 'Abertas', label: 'Abertas', count: statusCounts.abertas, color: 'emerald' },
+                  { id: 'Em andamento', label: 'Em andamento', count: statusCounts.emAndamento, color: 'amber' },
+                  { id: 'Pausadas', label: 'Pausadas', count: statusCounts.pausadas, color: 'blue' },
+                  { id: 'Preenchidas', label: 'Preenchidas', count: statusCounts.preenchidas, color: 'emerald' },
+                  { id: 'Canceladas', label: 'Canceladas', count: statusCounts.canceladas, color: 'rose' },
+                ] as const
+              ).map((f) => {
+                const isActive = jobStatusFilter === f.id;
+                return (
+                  <button
+                    key={f.id}
+                    type="button"
+                    onClick={() => setJobStatusFilter(f.id)}
+                    className={`px-3.5 py-2 rounded-xl text-xs font-extrabold transition-all flex items-center gap-2 cursor-pointer shrink-0 border ${
+                      isActive
+                        ? 'bg-slate-900 text-white border-slate-900 shadow-xs'
+                        : 'bg-white text-slate-700 border-slate-200 hover:border-slate-300 hover:bg-slate-50'
+                    }`}
+                  >
+                    <span>{f.label}</span>
+                    <span className={`text-[10px] px-2 py-0.5 rounded-full font-black ${
+                      isActive ? 'bg-slate-800 text-white' : 'bg-slate-100 text-slate-600'
+                    }`}>
+                      {f.count}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* SECTION 4: INDICADORES GERAIS (KPI CARDS) */}
+      {viewMode === 'por_vaga' && (
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
+          <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-2xs space-y-1">
+            <span className="text-[10px] font-extrabold text-slate-400 uppercase tracking-wider block">Total de Vagas</span>
+            <p className="text-2xl font-black text-slate-900">{globalMetrics.totalJobs}</p>
+            <span className="text-[10px] text-slate-400 font-medium">Cadastradas no sistema</span>
+          </div>
+
+          <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-2xs space-y-1">
+            <span className="text-[10px] font-extrabold text-emerald-600 uppercase tracking-wider block">Abertas</span>
+            <p className="text-2xl font-black text-emerald-600">{globalMetrics.abertas}</p>
+            <span className="text-[10px] text-emerald-700 font-medium">Recebendo candidaturas</span>
+          </div>
+
+          <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-2xs space-y-1">
+            <span className="text-[10px] font-extrabold text-amber-600 uppercase tracking-wider block">Em andamento</span>
+            <p className="text-2xl font-black text-amber-600">{globalMetrics.emAndamento}</p>
+            <span className="text-[10px] text-amber-700 font-medium">Fase de seleção</span>
+          </div>
+
+          <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-2xs space-y-1">
+            <span className="text-[10px] font-extrabold text-teal-600 uppercase tracking-wider block">Preenchidas</span>
+            <p className="text-2xl font-black text-teal-600">{globalMetrics.preenchidas}</p>
+            <span className="text-[10px] text-teal-700 font-medium">Posições concluídas</span>
+          </div>
+
+          <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-2xs space-y-1 col-span-2 sm:col-span-1">
+            <span className="text-[10px] font-extrabold text-indigo-600 uppercase tracking-wider block">Total de Contratados</span>
+            <p className="text-2xl font-black text-indigo-600">{globalMetrics.totalHired}</p>
+            <span className="text-[10px] text-indigo-700 font-medium">Candidatos aprovados</span>
+          </div>
+        </div>
+      )}
+
+      {/* VIEW MODE 1: CANDIDATOS POR VAGA */}
+      {viewMode === 'por_vaga' && (
+        <div className="space-y-8">
+          
+          {/* SECTION 5: VAGAS ATIVAS */}
+          {jobStatusFilter !== 'Preenchidas' && jobStatusFilter !== 'Canceladas' && (
+            <div className="space-y-4">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <span className="w-2.5 h-2.5 rounded-full bg-emerald-500" />
+                  <h2 className="text-base font-black text-slate-900 uppercase tracking-wide">
+                    Vagas Ativas
+                  </h2>
+                  <span className="bg-emerald-100 text-emerald-800 text-xs font-extrabold px-2.5 py-0.5 rounded-full border border-emerald-200">
+                    {filteredActiveJobs.length}
+                  </span>
+                </div>
+              </div>
+
+              {filteredActiveJobs.length === 0 ? (
+                <div className="bg-white rounded-2xl p-8 text-center border border-slate-200 space-y-3">
+                  <Briefcase className="w-10 h-10 text-slate-300 mx-auto" />
+                  <p className="text-sm font-bold text-slate-600">Nenhuma vaga ativa encontrada com os filtros selecionados.</p>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {filteredActiveJobs.map((j) => {
+                    const cands = getJobCandidates(j.id);
+                    const hiredCount = getJobHiredCount(j.id);
+                    const positions = getJobPositions(j);
+                    const percentage = Math.min(100, Math.round((hiredCount / positions) * 100));
+                    const statusInfo = getJobStatusBadge(j);
+
+                    const novosCount = cands.filter(c => c.status === 'Novos' || c.status === 'Novo').length;
+                    const triagemCount = cands.filter(c => ['Triagem IA', 'Em Análise', 'Em Análise RH', 'Triagem', 'Análise'].includes(c.status)).length;
+                    const entrevistaCount = cands.filter(c => ['Entrevista', 'Entrevista Agendada', 'Entrevista Realizada', 'Entrevistas'].includes(c.status)).length;
+
+                    return (
+                      <div key={j.id} className="bg-white rounded-2xl border border-slate-200 shadow-2xs hover:border-slate-300 transition-all p-5 space-y-4">
+                        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+                          
+                          {/* Coluna VAGA */}
+                          <div className="space-y-1.5 flex-1">
+                            <div className="flex items-center gap-2.5 flex-wrap">
+                              <h3 className="text-base font-black text-slate-900">{j.title || j.titulo}</h3>
+                              <span className="text-[10px] font-extrabold text-slate-500 bg-slate-100 px-2 py-0.5 rounded-md border border-slate-200">
+                                #{j.id}
+                              </span>
+                              <span className={`text-[10px] font-extrabold px-2.5 py-0.5 rounded-full border flex items-center gap-1 ${statusInfo.colorClass}`}>
+                                {statusInfo.icon}
+                                {statusInfo.label}
+                              </span>
+                            </div>
+
+                            <div className="flex items-center gap-3 text-xs font-medium text-slate-500 flex-wrap">
+                              <span className="flex items-center gap-1 text-slate-700 font-bold">
+                                <Building2 className="w-3.5 h-3.5 text-indigo-600" />
+                                {j.department || 'Geral'}
+                              </span>
+                              <span>•</span>
+                              <span className="flex items-center gap-1">
+                                <MapPin className="w-3.5 h-3.5 text-slate-400" />
+                                {j.location || `${j.cidade || 'São Paulo'} - ${j.estado || 'SP'}`}
+                              </span>
+                              <span>•</span>
+                              <span className="bg-slate-100 text-slate-700 text-[10px] font-extrabold px-2 py-0.5 rounded-md">
+                                {j.type || j.tipoContrato || 'CLT'}
+                              </span>
+                            </div>
+                          </div>
+
+                          {/* Coluna PROGRESSO DE CONTRATAÇÃO */}
+                          <div className="bg-slate-50 p-3 rounded-xl border border-slate-200 shrink-0 w-full lg:w-56 space-y-1.5">
+                            <div className="flex items-center justify-between text-xs font-bold">
+                              <span className="text-slate-500">Contratações:</span>
+                              <span className="text-slate-900 font-black">{hiredCount} / {positions}</span>
+                            </div>
+                            <div className="w-full h-2 bg-slate-200 rounded-full overflow-hidden">
+                              <div
+                                className="h-full bg-emerald-500 transition-all duration-300"
+                                style={{ width: `${percentage}%` }}
+                              />
+                            </div>
+                            <span className="text-[10px] font-bold text-emerald-700 block text-right">
+                              {percentage}% preenchido
+                            </span>
+                          </div>
+
+                          {/* Coluna ETAPAS DOS CANDIDATOS */}
+                          <div className="grid grid-cols-4 gap-1.5 shrink-0 bg-slate-50 p-2.5 rounded-xl border border-slate-200 text-center">
+                            <div className="px-2 py-1 bg-white rounded-lg border border-slate-100">
+                              <span className="text-[9px] font-extrabold text-blue-600 uppercase block">Novos</span>
+                              <span className="text-xs font-black text-slate-900">{novosCount}</span>
+                            </div>
+
+                            <div className="px-2 py-1 bg-white rounded-lg border border-slate-100">
+                              <span className="text-[9px] font-extrabold text-purple-600 uppercase block">Triagem</span>
+                              <span className="text-xs font-black text-slate-900">{triagemCount}</span>
+                            </div>
+
+                            <div className="px-2 py-1 bg-white rounded-lg border border-slate-100">
+                              <span className="text-[9px] font-extrabold text-indigo-600 uppercase block">Entrevistas</span>
+                              <span className="text-xs font-black text-slate-900">{entrevistaCount}</span>
+                            </div>
+
+                            <div className="px-2 py-1 bg-white rounded-lg border border-slate-100">
+                              <span className="text-[9px] font-extrabold text-emerald-600 uppercase block">Contratados</span>
+                              <span className="text-xs font-black text-slate-900">{hiredCount}</span>
+                            </div>
+                          </div>
+
+                          {/* Coluna AÇÕES RÁPIDAS */}
+                          <div className="flex items-center gap-2 flex-wrap lg:flex-nowrap justify-end border-t lg:border-t-0 pt-3 lg:pt-0 border-slate-100">
+                            <button
+                              type="button"
+                              onClick={() => handleOpenJobCandidates(j.id)}
+                              className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-extrabold rounded-xl transition-all cursor-pointer flex items-center gap-1"
+                            >
+                              <Users className="w-3.5 h-3.5" />
+                              <span>Ver candidatos ({cands.length})</span>
+                            </button>
+
+                            <button
+                              type="button"
+                              onClick={() => setMetricsModalJob(j)}
+                              className="px-2.5 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold rounded-xl transition-all cursor-pointer flex items-center gap-1"
+                              title="Ver indicadores"
+                            >
+                              <BarChart2 className="w-3.5 h-3.5" />
+                            </button>
+
+                            <button
+                              type="button"
+                              onClick={() => setEditingJob(j)}
+                              className="px-2.5 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold rounded-xl transition-all cursor-pointer flex items-center gap-1"
+                              title="Editar vaga"
+                            >
+                              <Edit3 className="w-3.5 h-3.5" />
+                            </button>
+
+                            <div className="relative">
+                              <button
+                                type="button"
+                                onClick={() => setOpenMoreOptionsJobId(openMoreOptionsJobId === j.id ? null : j.id)}
+                                className="p-1.5 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-xl transition-all cursor-pointer"
+                              >
+                                <MoreVertical className="w-4 h-4" />
+                              </button>
+
+                              {openMoreOptionsJobId === j.id && (
+                                <div className="absolute right-0 top-8 bg-white border border-slate-200 rounded-xl shadow-xl z-20 w-44 py-1 animate-in fade-in">
+                                  <button
+                                    type="button"
+                                    onClick={async () => {
+                                      const nextStatus = j.status === 'Pausada' ? 'Aberta' : 'Pausada';
+                                      await JobService.update(j.id, { status: nextStatus });
+                                      await handleRefresh();
+                                      setOpenMoreOptionsJobId(null);
+                                    }}
+                                    className="w-full text-left px-3 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50 flex items-center gap-2 cursor-pointer"
+                                  >
+                                    {j.status === 'Pausada' ? <Play className="w-3.5 h-3.5 text-emerald-600" /> : <Pause className="w-3.5 h-3.5 text-amber-600" />}
+                                    <span>{j.status === 'Pausada' ? 'Retomar Vaga' : 'Pausar Vaga'}</span>
+                                  </button>
+
+                                  <button
+                                    type="button"
+                                    onClick={async () => {
+                                      if (confirm('Deseja cancelar esta vaga?')) {
+                                        await JobService.update(j.id, { status: 'Cancelada' });
+                                        await handleRefresh();
+                                      }
+                                      setOpenMoreOptionsJobId(null);
+                                    }}
+                                    className="w-full text-left px-3 py-2 text-xs font-bold text-rose-600 hover:bg-rose-50 flex items-center gap-2 cursor-pointer"
+                                  >
+                                    <XCircle className="w-3.5 h-3.5" />
+                                    <span>Cancelar Vaga</span>
+                                  </button>
+                                </div>
+                              )}
+                            </div>
+                          </div>
+
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
               )}
             </div>
-          </div>
+          )}
 
-          <div className="bg-slate-50 p-3.5 rounded-2xl border border-slate-200 shrink-0 flex items-center gap-4">
-            <div>
-              <span className="text-[10px] font-extrabold text-slate-400 uppercase tracking-wider block">Total Candidatos</span>
-              <span className="text-2xl font-black text-slate-900">{candidates.length}</span>
+          {/* SECTION 8: VAGAS FINALIZADAS */}
+          {jobStatusFilter !== 'Abertas' && jobStatusFilter !== 'Em andamento' && jobStatusFilter !== 'Pausadas' && (
+            <div className="space-y-4 pt-4 border-t border-slate-200">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <span className="w-2.5 h-2.5 rounded-full bg-slate-400" />
+                  <h2 className="text-base font-black text-slate-700 uppercase tracking-wide">
+                    Vagas Finalizadas
+                  </h2>
+                  <span className="bg-slate-200 text-slate-700 text-xs font-extrabold px-2.5 py-0.5 rounded-full">
+                    {filteredFinishedJobs.length}
+                  </span>
+                </div>
+              </div>
+
+              {filteredFinishedJobs.length === 0 ? (
+                <div className="bg-white rounded-2xl p-6 text-center border border-slate-200">
+                  <p className="text-xs font-medium text-slate-400">Nenhuma vaga finalizada encontrada com estes filtros.</p>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {filteredFinishedJobs.map((j) => {
+                    const cands = getJobCandidates(j.id);
+                    const hiredCount = getJobHiredCount(j.id);
+                    const positions = getJobPositions(j);
+                    const percentage = Math.min(100, Math.round((hiredCount / positions) * 100));
+                    const statusInfo = getJobStatusBadge(j);
+
+                    return (
+                      <div key={j.id} className="bg-slate-50/80 rounded-2xl border border-slate-200 p-5 space-y-4 hover:bg-white transition-all">
+                        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+                          
+                          {/* Coluna VAGA */}
+                          <div className="space-y-1.5 flex-1">
+                            <div className="flex items-center gap-2.5 flex-wrap">
+                              <h3 className="text-base font-black text-slate-800">{j.title || j.titulo}</h3>
+                              <span className="text-[10px] font-extrabold text-slate-500 bg-slate-200 px-2 py-0.5 rounded-md">
+                                #{j.id}
+                              </span>
+                              <span className={`text-[10px] font-extrabold px-2.5 py-0.5 rounded-full border flex items-center gap-1 ${statusInfo.colorClass}`}>
+                                {statusInfo.icon}
+                                {statusInfo.label}
+                              </span>
+                            </div>
+
+                            <div className="flex items-center gap-3 text-xs font-medium text-slate-500 flex-wrap">
+                              <span className="flex items-center gap-1 text-slate-700 font-bold">
+                                <Building2 className="w-3.5 h-3.5 text-slate-400" />
+                                {j.department || 'Geral'}
+                              </span>
+                              <span>•</span>
+                              <span>{j.location || `${j.cidade || 'São Paulo'} - ${j.estado || 'SP'}`}</span>
+                            </div>
+                          </div>
+
+                          {/* Coluna PROGRESSO DE CONTRATAÇÃO */}
+                          <div className="bg-white p-3 rounded-xl border border-slate-200 shrink-0 w-full lg:w-52 space-y-1">
+                            <div className="flex items-center justify-between text-xs font-bold">
+                              <span className="text-slate-500">Contratações:</span>
+                              <span className="text-slate-900 font-black">{hiredCount} / {positions}</span>
+                            </div>
+                            <div className="w-full h-2 bg-slate-100 rounded-full overflow-hidden">
+                              <div
+                                className="h-full bg-emerald-500"
+                                style={{ width: `${percentage}%` }}
+                              />
+                            </div>
+                            <span className="text-[10px] font-bold text-slate-500 block text-right">
+                              {percentage}% preenchido
+                            </span>
+                          </div>
+
+                          {/* Coluna AÇÕES VAGAS FINALIZADAS (Section 11) */}
+                          <div className="flex items-center gap-2 flex-wrap lg:flex-nowrap justify-end border-t lg:border-t-0 pt-3 lg:pt-0 border-slate-200">
+                            <button
+                              type="button"
+                              onClick={() => handleOpenJobCandidates(j.id)}
+                              className="px-3 py-1.5 bg-slate-200 hover:bg-slate-300 text-slate-800 text-xs font-extrabold rounded-xl transition-all cursor-pointer flex items-center gap-1"
+                            >
+                              <Users className="w-3.5 h-3.5" />
+                              <span>Ver candidatos ({cands.length})</span>
+                            </button>
+
+                            <button
+                              type="button"
+                              onClick={() => handleOpenHiredCandidate(j.id)}
+                              className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-extrabold rounded-xl transition-all cursor-pointer flex items-center gap-1 shadow-xs"
+                            >
+                              <UserCheck className="w-3.5 h-3.5" />
+                              <span>Ver contratado</span>
+                            </button>
+
+                            <button
+                              type="button"
+                              onClick={() => setHistoryModalJob(j)}
+                              className="px-2.5 py-1.5 bg-white border border-slate-200 hover:bg-slate-100 text-slate-700 text-xs font-bold rounded-xl transition-all cursor-pointer"
+                              title="Ver histórico"
+                            >
+                              <History className="w-3.5 h-3.5" />
+                            </button>
+
+                            <button
+                              type="button"
+                              onClick={() => handleReopenJob(j)}
+                              className="px-3 py-1.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 text-xs font-extrabold rounded-xl transition-all cursor-pointer flex items-center gap-1"
+                            >
+                              <RotateCcw className="w-3.5 h-3.5" />
+                              <span>Reabrir vaga</span>
+                            </button>
+                          </div>
+
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
             </div>
-            <div className="w-10 h-10 rounded-2xl bg-indigo-600 text-white flex items-center justify-center font-bold">
-              <Users className="w-5 h-5" />
-            </div>
-          </div>
+          )}
+
         </div>
-      </div>
+      )}
 
-      {/* 5 NAVIGATION TABS */}
-      <div className="bg-white rounded-2xl p-1.5 border border-slate-200 shadow-2xs flex items-center gap-1.5 overflow-x-auto">
-        <button
-          onClick={() => setActiveTab('inscritos')}
-          className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-black transition-all whitespace-nowrap ${
-            activeTab === 'inscritos'
-              ? 'bg-slate-900 text-white shadow-xs'
-              : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
-          }`}
-        >
-          <Users className="w-4 h-4" />
-          Candidatos Inscritos
-          <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold ${
-            activeTab === 'inscritos' ? 'bg-slate-800 text-slate-200' : 'bg-slate-100 text-slate-600'
-          }`}>
-            {candidates.length}
-          </span>
-        </button>
-
-        <button
-          onClick={() => setActiveTab('banco_ia')}
-          className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-black transition-all whitespace-nowrap ${
-            activeTab === 'banco_ia'
-              ? 'bg-indigo-600 text-white shadow-xs'
-              : 'text-indigo-700 bg-indigo-50/80 hover:bg-indigo-100 border border-indigo-200'
-          }`}
-        >
-          <Sparkles className="w-4 h-4 text-amber-300 fill-amber-300" />
-          Banco de Talentos IA
-          <span className="text-[10px] bg-amber-400 text-slate-950 px-2 py-0.5 rounded-full font-black uppercase tracking-wider">
-            Match IA
-          </span>
-        </button>
-
-        <button
-          onClick={() => setActiveTab('entrevistas')}
-          className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-black transition-all whitespace-nowrap ${
-            activeTab === 'entrevistas'
-              ? 'bg-slate-900 text-white shadow-xs'
-              : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
-          }`}
-        >
-          <Calendar className="w-4 h-4" />
-          Entrevistas
-        </button>
-
-        <button
-          onClick={() => setActiveTab('avaliacoes')}
-          className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-black transition-all whitespace-nowrap ${
-            activeTab === 'avaliacoes'
-              ? 'bg-slate-900 text-white shadow-xs'
-              : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
-          }`}
-        >
-          <Award className="w-4 h-4" />
-          Avaliações
-        </button>
-
-        <button
-          onClick={() => setActiveTab('historico')}
-          className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-black transition-all whitespace-nowrap ${
-            activeTab === 'historico'
-              ? 'bg-slate-900 text-white shadow-xs'
-              : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
-          }`}
-        >
-          <History className="w-4 h-4" />
-          Histórico
-        </button>
-      </div>
-
-      {/* TAB CONTENT 1: CANDIDATOS INSCRITOS */}
-      {activeTab === 'inscritos' && (
+      {/* VIEW MODE 2: TODOS OS CANDIDATOS */}
+      {viewMode === 'todos_candidatos' && (
         <div className="space-y-6">
-          {/* INDICADORES RÁPIDOS */}
-          <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-3">
-            <button
-              onClick={() => setStatusFilter('Todos')}
-              className={`p-3 rounded-2xl border text-left transition-all ${
-                statusFilter === 'Todos'
-                  ? 'border-indigo-600 bg-indigo-50/80 shadow-2xs ring-2 ring-indigo-500/20'
-                  : 'border-slate-200 bg-white hover:bg-slate-50'
-              }`}
-            >
-              <div className="flex items-center justify-between mb-1">
-                <span className="text-[10px] uppercase font-bold text-slate-400">Total</span>
-                <Users className="w-4 h-4 text-slate-400" />
-              </div>
-              <span className="text-xl font-black text-slate-900">{counts.total}</span>
-            </button>
-
-            <button
-              onClick={() => setStatusFilter('Novos')}
-              className={`p-3 rounded-2xl border text-left transition-all ${
-                statusFilter === 'Novos'
-                  ? 'border-blue-600 bg-blue-50/80 shadow-2xs ring-2 ring-blue-500/20'
-                  : 'border-slate-200 bg-white hover:bg-slate-50'
-              }`}
-            >
-              <div className="flex items-center justify-between mb-1">
-                <span className="text-[10px] uppercase font-bold text-blue-600">Novos</span>
-                <span className="w-2 h-2 rounded-full bg-blue-500" />
-              </div>
-              <span className="text-xl font-black text-slate-900">{counts.novos}</span>
-            </button>
-
-            <button
-              onClick={() => setStatusFilter('Triagem IA')}
-              className={`p-3 rounded-2xl border text-left transition-all ${
-                statusFilter === 'Triagem IA'
-                  ? 'border-purple-600 bg-purple-50/80 shadow-2xs ring-2 ring-purple-500/20'
-                  : 'border-slate-200 bg-white hover:bg-slate-50'
-              }`}
-            >
-              <div className="flex items-center justify-between mb-1">
-                <span className="text-[10px] uppercase font-bold text-purple-600">Triagem IA</span>
-                <Sparkles className="w-4 h-4 text-purple-600" />
-              </div>
-              <span className="text-xl font-black text-slate-900">{counts.triagemIa}</span>
-            </button>
-
-            <button
-              onClick={() => setStatusFilter('Em Análise RH')}
-              className={`p-3 rounded-2xl border text-left transition-all ${
-                statusFilter === 'Em Análise RH'
-                  ? 'border-amber-600 bg-amber-50/80 shadow-2xs ring-2 ring-amber-500/20'
-                  : 'border-slate-200 bg-white hover:bg-slate-50'
-              }`}
-            >
-              <div className="flex items-center justify-between mb-1">
-                <span className="text-[10px] uppercase font-bold text-amber-600">Análise</span>
-                <UserCheck className="w-4 h-4 text-amber-600" />
-              </div>
-              <span className="text-xl font-black text-slate-900">{counts.emAnaliseRh}</span>
-            </button>
-
-            <button
-              onClick={() => setStatusFilter('Entrevistas')}
-              className={`p-3 rounded-2xl border text-left transition-all ${
-                statusFilter === 'Entrevistas'
-                  ? 'border-indigo-600 bg-indigo-50/80 shadow-2xs ring-2 ring-indigo-500/20'
-                  : 'border-slate-200 bg-white hover:bg-slate-50'
-              }`}
-            >
-              <div className="flex items-center justify-between mb-1">
-                <span className="text-[10px] uppercase font-bold text-indigo-600">Entrevistas</span>
-                <Calendar className="w-4 h-4 text-indigo-600" />
-              </div>
-              <span className="text-xl font-black text-slate-900">{counts.entrevistas}</span>
-            </button>
-
-            <button
-              onClick={() => setStatusFilter('Contratados')}
-              className={`p-3 rounded-2xl border text-left transition-all ${
-                statusFilter === 'Contratados'
-                  ? 'border-teal-600 bg-teal-50/80 shadow-2xs ring-2 ring-teal-500/20'
-                  : 'border-slate-200 bg-white hover:bg-slate-50'
-              }`}
-            >
-              <div className="flex items-center justify-between mb-1">
-                <span className="text-[10px] uppercase font-bold text-teal-600">Contratados</span>
-                <CheckCircle2 className="w-4 h-4 text-teal-600" />
-              </div>
-              <span className="text-xl font-black text-slate-900">{counts.contratados}</span>
-            </button>
-
-            <button
-              onClick={() => setStatusFilter('Encerrados')}
-              className={`p-3 rounded-2xl border text-left transition-all ${
-                statusFilter === 'Encerrados'
-                  ? 'border-slate-600 bg-slate-100 shadow-2xs ring-2 ring-slate-500/20'
-                  : 'border-slate-200 bg-white hover:bg-slate-50'
-              }`}
-            >
-              <div className="flex items-center justify-between mb-1">
-                <span className="text-[10px] uppercase font-bold text-slate-600">Encerrados</span>
-                <Clock className="w-4 h-4 text-slate-600" />
-              </div>
-              <span className="text-xl font-black text-slate-900">{counts.encerrados}</span>
-            </button>
-
-            <button
-              onClick={() => setStatusFilter('Reprovado')}
-              className={`p-3 rounded-2xl border text-left transition-all ${
-                statusFilter === 'Reprovado'
-                  ? 'border-rose-600 bg-rose-50/80 shadow-2xs ring-2 ring-rose-500/20'
-                  : 'border-slate-200 bg-white hover:bg-slate-50'
-              }`}
-            >
-              <div className="flex items-center justify-between mb-1">
-                <span className="text-[10px] uppercase font-bold text-rose-600">Reprovados</span>
-                <XCircle className="w-4 h-4 text-rose-600" />
-              </div>
-              <span className="text-xl font-black text-slate-900">{counts.reprovados}</span>
-            </button>
-          </div>
-
-          {/* PESQUISA E FILTROS */}
+          
+          {/* BARRA DE PESQUISA E FILTROS DE CANDIDATOS */}
           <div className="bg-white rounded-3xl p-5 border border-slate-200 shadow-2xs space-y-4">
             <div className="relative">
               <Search className="w-4 h-4 text-slate-400 absolute left-4 top-3.5" />
               <input
                 type="text"
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                placeholder="Buscar por Nome, CPF, Cidade, Telefone, E-mail, Formação, Curso ou Palavras do currículo..."
-                className="w-full text-xs font-semibold pl-11 pr-4 py-3 rounded-2xl border border-slate-200 bg-slate-50/50 focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-all"
+                value={candidateSearchTerm}
+                onChange={(e) => setCandidateSearchTerm(e.target.value)}
+                placeholder="Buscar candidato por Nome, CPF, Cidade, Telefone, E-mail..."
+                className="w-full text-xs font-semibold pl-11 pr-4 py-3 rounded-2xl border border-slate-200 bg-slate-50 focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-all"
               />
             </div>
 
-            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-7 gap-3 pt-2 border-t border-slate-100">
-              {!job && (
-                <div>
-                  <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Filtrar por Vaga</label>
-                  <select
-                    value={selectedJobFilter}
-                    onChange={(e) => setSelectedJobFilter(e.target.value)}
-                    className="w-full text-xs font-bold p-2.5 rounded-xl border border-slate-200 bg-white"
-                  >
-                    <option value="Todas">Todas as Vagas ({companyJobs.length})</option>
-                    {companyJobs.map(j => (
-                      <option key={j.id} value={j.id}>
-                        {j.title} (#{j.id})
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              )}
+            <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-5 gap-3 pt-2 border-t border-slate-100">
+              <div>
+                <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Filtrar por Vaga</label>
+                <select
+                  value={selectedJobFilter}
+                  onChange={(e) => setSelectedJobFilter(e.target.value)}
+                  className="w-full text-xs font-bold p-2.5 rounded-xl border border-slate-200 bg-white"
+                >
+                  <option value="Todas">Todas as Vagas ({companyJobs.length})</option>
+                  {companyJobs.map(j => (
+                    <option key={j.id} value={j.id}>
+                      {j.title} (#{j.id})
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Status do Candidato</label>
+                <select
+                  value={statusFilter}
+                  onChange={(e) => setStatusFilter(e.target.value)}
+                  className="w-full text-xs font-bold p-2.5 rounded-xl border border-slate-200 bg-white"
+                >
+                  <option value="Todos">Todos os Status</option>
+                  <option value="Novos">Novos</option>
+                  <option value="Triagem IA">Triagem IA</option>
+                  <option value="Em Análise RH">Em Análise RH</option>
+                  <option value="Entrevistas">Entrevistas</option>
+                  <option value="Contratados">Contratados</option>
+                  <option value="Encerrado">Encerrado / Preenchido</option>
+                </select>
+              </div>
 
               <div>
                 <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Cidade</label>
@@ -682,468 +984,213 @@ export const JobCandidatesManagementView: React.FC<JobCandidatesManagementViewPr
                   <option value="Superior Incompleto">Superior Incompleto</option>
                   <option value="Superior Completo">Superior Completo</option>
                   <option value="Pós-Graduação">Pós-Graduação</option>
-                  <option value="Mestrado">Mestrado</option>
                 </select>
               </div>
 
               <div>
-                <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Experiência</label>
-                <select
-                  value={experienceFilter}
-                  onChange={(e) => setExperienceFilter(e.target.value)}
-                  className="w-full text-xs font-bold p-2.5 rounded-xl border border-slate-200 bg-white"
-                >
-                  <option value="Todas">Qualquer</option>
-                  <option value="1+">1+ anos</option>
-                  <option value="3+">3+ anos</option>
-                  <option value="5+">5+ anos</option>
-                </select>
-              </div>
-
-              <div>
-                <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">PCD</label>
-                <select
-                  value={pcdFilter}
-                  onChange={(e) => setPcdFilter(e.target.value)}
-                  className="w-full text-xs font-bold p-2.5 rounded-xl border border-slate-200 bg-white"
-                >
-                  <option value="Todos">Todos</option>
-                  <option value="Sim">Sim (Apenas PCD)</option>
-                  <option value="Não">Não</option>
-                </select>
-              </div>
-
-              <div>
-                <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Match IA</label>
+                <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Compatibilidade IA</label>
                 <select
                   value={iaFilter}
                   onChange={(e) => setIaFilter(e.target.value)}
                   className="w-full text-xs font-bold p-2.5 rounded-xl border border-slate-200 bg-white"
                 >
-                  <option value="Todas">Todas</option>
-                  <option value="Muito">Muito Compatível (&gt;85%)</option>
-                  <option value="Compativel">Compatível (65-84%)</option>
-                  <option value="Baixa">Baixa Compatibilidade (&lt;65%)</option>
+                  <option value="Todas">Qualquer Match</option>
+                  <option value="Muito">Alta (85%+)</option>
+                  <option value="Compativel">Média (65-84%)</option>
+                  <option value="Baixa">Baixa (&lt;65%)</option>
                 </select>
               </div>
-
-              <div>
-                <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Limpar</label>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="w-full text-xs font-bold"
-                  onClick={() => {
-                    setSearchTerm('');
-                    setSelectedJobFilter('Todas');
-                    setStatusFilter('Todos');
-                    setCityFilter('Todas');
-                    setEducationFilter('Todas');
-                    setExperienceFilter('Todas');
-                    setPcdFilter('Todos');
-                    setIaFilter('Todas');
-                  }}
-                >
-                  Limpar Filtros
-                </Button>
-              </div>
             </div>
           </div>
 
-          {/* LISTA DE CANDIDATOS AGRUPADOS POR VAGA */}
-          {groupedJobs.length === 0 ? (
-            <div className="bg-white rounded-3xl p-12 text-center space-y-3 border border-slate-200 shadow-2xs">
-              <Users className="w-10 h-10 text-slate-300 mx-auto" />
-              <h3 className="text-sm font-extrabold text-slate-800">
-                Nenhum candidato encontrado para os filtros selecionados
-              </h3>
-              <p className="text-xs text-slate-500 max-w-sm mx-auto">
-                Tente alterar os termos de busca, selecionar outra vaga ou resetar os filtros.
-              </p>
-            </div>
-          ) : (
-            <div className="space-y-6">
-              {groupedJobs.map((group) => {
-                const isCollapsed = !!collapsedGroups[group.jobId];
-
-                return (
-                  <div key={group.jobId} className="bg-white rounded-3xl border border-slate-200 shadow-2xs overflow-hidden">
-                    {/* CABEÇALHO DA VAGA */}
-                    <div 
-                      onClick={() => toggleGroup(group.jobId)}
-                      className="p-4 bg-slate-50/80 hover:bg-slate-100/80 border-b border-slate-200 transition-colors cursor-pointer flex flex-col md:flex-row md:items-center justify-between gap-4"
-                    >
-                      <div className="flex items-center gap-3">
-                        <div className="w-10 h-10 rounded-2xl bg-indigo-600 text-white flex items-center justify-center font-bold shrink-0 shadow-xs">
-                          <Briefcase className="w-5 h-5" />
-                        </div>
-
-                        <div>
-                          <div className="flex items-center gap-2 flex-wrap">
-                            <h2 className="text-base font-black text-slate-900 tracking-tight">
-                              {group.jobTitle}
-                            </h2>
-                            <span className="text-[11px] font-bold text-slate-400 bg-white px-2 py-0.5 rounded-md border border-slate-200">
-                              #{group.jobCode}
-                            </span>
-                            <span className={`text-[10px] font-extrabold px-2.5 py-0.5 rounded-full border ${
-                              group.jobStatus === 'Preenchida'
-                                ? 'bg-slate-200 text-slate-800 border-slate-300'
-                                : group.jobStatus === 'Aberta'
-                                ? 'bg-emerald-100 text-emerald-800 border-emerald-200'
-                                : 'bg-slate-100 text-slate-700 border-slate-200'
-                            }`}>
-                              {group.jobStatus}
-                            </span>
-                          </div>
-
-                          <div className="flex items-center gap-2.5 text-xs text-slate-500 font-medium mt-0.5 flex-wrap">
-                            <span className="flex items-center gap-1">
-                              <MapPin className="w-3.5 h-3.5 text-slate-400" />
-                              {group.location}
-                            </span>
-                            <span>•</span>
-                            <span className="bg-slate-200/70 text-slate-700 text-[10px] font-bold px-2 py-0.5 rounded-md">
-                              {group.contractType}
-                            </span>
-                          </div>
-                        </div>
-                      </div>
-
-                      {/* CONTADORES DA VAGA E ACOPLAMENTO */}
-                      <div className="flex items-center gap-3 shrink-0 flex-wrap">
-                        <div className="flex items-center gap-1.5 text-[11px] font-bold flex-wrap">
-                          <span className="bg-blue-50 text-blue-700 border border-blue-200 px-2 py-1 rounded-xl">
-                            Novos: {group.counts.novos}
-                          </span>
-                          <span className="bg-amber-50 text-amber-700 border border-amber-200 px-2 py-1 rounded-xl">
-                            Análise: {group.counts.emAnalise}
-                          </span>
-                          <span className="bg-indigo-50 text-indigo-700 border border-indigo-200 px-2 py-1 rounded-xl">
-                            Entrevistas: {group.counts.entrevistas}
-                          </span>
-                          <span className="bg-teal-50 text-teal-700 border border-teal-200 px-2 py-1 rounded-xl">
-                            Contratados: {group.counts.contratados}
-                          </span>
-                          {group.counts.encerradosReprovados > 0 && (
-                            <span className="bg-slate-100 text-slate-600 border border-slate-200 px-2 py-1 rounded-xl">
-                              Encerrados: {group.counts.encerradosReprovados}
-                            </span>
-                          )}
-                        </div>
-
-                        <div className="flex items-center gap-2 pl-2 border-l border-slate-200">
-                          <span className="text-xs font-black text-slate-800 bg-white px-3 py-1 rounded-xl border border-slate-200 shadow-2xs">
-                            {group.candidates.length} candidato(s)
-                          </span>
-                          <button
-                            type="button"
-                            className="p-1.5 text-slate-400 hover:text-slate-700 rounded-lg"
-                          >
-                            {isCollapsed ? <ChevronDown className="w-5 h-5" /> : <ChevronUp className="w-5 h-5" />}
-                          </button>
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* CORPO DO GRUPO DA VAGA */}
-                    {!isCollapsed && (
-                      <div className="overflow-x-auto">
-                        <table className="w-full text-left border-collapse">
-                          <thead>
-                            <tr className="bg-slate-50/50 border-b border-slate-200 text-[11px] font-extrabold uppercase tracking-wider text-slate-500">
-                              <th className="py-3 px-4">Candidato</th>
-                              <th className="py-3 px-4">Local</th>
-                              <th className="py-3 px-4">Data Aplicação</th>
-                              <th className="py-3 px-4">Compatibilidade IA</th>
-                              <th className="py-3 px-4">Situação / Etapa</th>
-                              <th className="py-3 px-4 text-center">Ações Rápidas</th>
-                            </tr>
-                          </thead>
-                          <tbody className="divide-y divide-slate-100 text-xs font-medium">
-                            {group.candidates.map((cand) => {
-                              const candJobTitle = group.jobTitle || cand.role || 'Vaga';
-                              const cleanPhone = cand.phone.replace(/\D/g, '');
-                              const waUrl = `https://wa.me/55${cleanPhone}?text=${encodeURIComponent(`Olá ${cand.name}, vi seu perfil no MAIS RH para a vaga de ${candJobTitle}.`)}`;
-                              const mailUrl = `mailto:${cand.email}?subject=${encodeURIComponent(`Oportunidade - ${candJobTitle} (MAIS RH)`)}`;
-
-                              const isEncerrado = cand.status === 'Encerrado' || (cand.status as string) === 'Vaga Preenchida';
-
-                              return (
-                                <tr 
-                                  key={cand.id} 
-                                  onClick={() => {
-                                    setSelectedCandidate(cand);
-                                    setIsDrawerOpen(true);
-                                  }}
-                                  className="hover:bg-slate-50/80 transition-colors cursor-pointer group"
-                                >
-                                  <td className="py-3.5 px-4">
-                                    <div className="flex items-center gap-3">
-                                      {(cand.photo || cand.avatar) ? (
-                                        <img
-                                          src={cand.photo || cand.avatar}
-                                          alt={cand.name}
-                                          className="w-10 h-10 rounded-xl object-cover border border-slate-200 shrink-0 group-hover:border-indigo-400 transition-colors"
-                                        />
-                                      ) : (
-                                        <div className="w-10 h-10 rounded-xl bg-indigo-100 text-indigo-700 font-bold flex items-center justify-center text-xs border border-slate-200 shrink-0 group-hover:border-indigo-400 transition-colors">
-                                          {cand.name ? cand.name.split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase() : 'C'}
-                                        </div>
-                                      )}
-                                      <div>
-                                        <span className="font-extrabold text-slate-900 group-hover:text-indigo-600 transition-colors block">
-                                          {cand.name}
-                                        </span>
-                                        <span className="text-[11px] text-slate-500">{cand.role}</span>
-                                      </div>
-                                    </div>
-                                  </td>
-
-                                  <td className="py-3.5 px-4 text-slate-700">
-                                    {cand.city}, {cand.state}
-                                  </td>
-
-                                  <td className="py-3.5 px-4 text-slate-500 font-semibold">
-                                    {formatFirestoreDate(cand.appliedDate)}
-                                  </td>
-
-                                  <td className="py-3.5 px-4">
-                                    <div className="space-y-1 max-w-[160px]">
-                                      <div className="flex items-center justify-between text-[11px]">
-                                        <span className="font-black text-slate-900">{cand.compatibilityScore}%</span>
-                                        <span className="text-[10px] font-extrabold text-slate-500">{cand.compatibilityLevel}</span>
-                                      </div>
-                                      <div className="w-full bg-slate-100 h-2 rounded-full overflow-hidden">
-                                        <div 
-                                          className={`h-full rounded-full transition-all duration-300 ${
-                                            cand.compatibilityScore >= 85 ? 'bg-emerald-500' :
-                                            cand.compatibilityScore >= 65 ? 'bg-indigo-600' : 'bg-amber-500'
-                                          }`}
-                                          style={{ width: `${cand.compatibilityScore}%` }}
-                                        />
-                                      </div>
-                                    </div>
-                                  </td>
-
-                                  <td className="py-3.5 px-4">
-                                    <div className="space-y-0.5">
-                                      <span className={`text-[11px] font-black px-2.5 py-1 rounded-full border inline-block ${
-                                        getStatusBadgeColor(cand.status)
-                                      }`}>
-                                        {cand.status}
-                                      </span>
-                                      {isEncerrado && (
-                                        <span className="block text-[10px] text-slate-400 font-semibold pl-1">
-                                          Etapa: Vaga Preenchida
-                                        </span>
-                                      )}
-                                    </div>
-                                  </td>
-
-                                  <td className="py-3.5 px-4" onClick={(e) => e.stopPropagation()}>
-                                    <div className="flex items-center justify-center gap-1.5">
-                                      <a
-                                        href={waUrl}
-                                        target="_blank"
-                                        rel="noopener noreferrer"
-                                        className="p-2 text-emerald-600 hover:bg-emerald-50 rounded-lg transition-colors"
-                                        title="Enviar WhatsApp"
-                                      >
-                                        <MessageCircle className="w-4 h-4" />
-                                      </a>
-
-                                      <a
-                                        href={mailUrl}
-                                        className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
-                                        title="Enviar E-mail"
-                                      >
-                                        <Mail className="w-4 h-4" />
-                                      </a>
-
-                                      <button
-                                        onClick={() => {
-                                          setSelectedCandidate(cand);
-                                          setIsDrawerOpen(true);
-                                        }}
-                                        className="p-2 text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors"
-                                        title="Ver Perfil Completo"
-                                      >
-                                        <FileText className="w-4 h-4" />
-                                      </button>
-                                    </div>
-                                  </td>
-                                </tr>
-                              );
-                            })}
-                          </tbody>
-                        </table>
-                      </div>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* TAB CONTENT 2: BANCO DE TALENTOS IA */}
-      {activeTab === 'banco_ia' && (
-        <JobTalentBankAiTab
-          job={job}
-          onCandidateInvited={handleRefresh}
-        />
-      )}
-
-      {/* TAB CONTENT 3: ENTREVISTAS */}
-      {activeTab === 'entrevistas' && (
-        <div className="bg-white rounded-3xl p-6 border border-slate-200 shadow-2xs space-y-5">
-          <div className="flex items-center justify-between border-b border-slate-100 pb-4">
-            <div>
-              <h3 className="text-base font-black text-slate-900">
-                Entrevistas Agendadas {job ? `para ${job.title}` : '— Todas as Vagas'}
-              </h3>
-              <p className="text-xs text-slate-500">Acompanhe a agenda de entrevistas RH e entrevistas com gestores técnicos.</p>
-            </div>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {candidates.filter(c => c.interview || c.status === 'Entrevista Agendada').length === 0 ? (
-              <div className="col-span-2 p-10 text-center space-y-2 border border-slate-100 rounded-2xl bg-slate-50/50">
-                <Calendar className="w-8 h-8 text-slate-300 mx-auto" />
-                <p className="text-xs font-bold text-slate-600">Nenhuma entrevista agendada ainda para esta seleção.</p>
-                <p className="text-[11px] text-slate-400">Acesse a aba "Candidatos Inscritos" ou "Banco de Talentos IA" para convidar candidatos para entrevista.</p>
-              </div>
-            ) : (
-              candidates.filter(c => c.interview || c.status === 'Entrevista Agendada').map((cand) => (
-                <div key={cand.id} className="p-4 rounded-2xl border border-slate-200 bg-slate-50 space-y-3">
-                  <div className="flex items-center gap-3">
-                    {(cand.photo || cand.avatar) ? (
-                      <img src={cand.photo || cand.avatar} alt={cand.name} className="w-10 h-10 rounded-xl object-cover shrink-0" />
-                    ) : (
-                      <div className="w-10 h-10 rounded-xl bg-indigo-100 text-indigo-700 font-bold flex items-center justify-center text-xs shrink-0">
-                        {cand.name ? cand.name.split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase() : 'C'}
-                      </div>
-                    )}
-                    <div>
-                      <h4 className="font-extrabold text-xs text-slate-900">{cand.name}</h4>
-                      <span className="text-[10px] text-slate-500 font-medium">{cand.role}</span>
-                    </div>
-                  </div>
-                  {cand.interview && (
-                    <div className="text-xs space-y-1 bg-white p-3 rounded-xl border border-slate-200/60">
-                      <div className="font-bold text-slate-800">
-                        {cand.interview.type} • {cand.interview.date} às {cand.interview.time}
-                      </div>
-                      <div className="text-slate-500 text-[11px]">Entrevistador: {cand.interview.interviewer}</div>
-                    </div>
-                  )}
-                </div>
-              ))
-            )}
-          </div>
-        </div>
-      )}
-
-      {/* TAB CONTENT 4: AVALIAÇÕES */}
-      {activeTab === 'avaliacoes' && (
-        <div className="bg-white rounded-3xl p-6 border border-slate-200 shadow-2xs space-y-5">
-          <div className="flex items-center justify-between border-b border-slate-100 pb-4">
-            <div>
-              <h3 className="text-base font-black text-slate-900">
-                Avaliações de Candidatos {job ? `— ${job.title}` : '— Geral'}
-              </h3>
-              <p className="text-xs text-slate-500">Pareceres técnicos, pontuações de competências e recomendações do time de RH.</p>
-            </div>
-          </div>
-
+          {/* CANDIDATES LIST / CARDS */}
           <div className="space-y-3">
-            {candidates.filter(c => c.evaluations && c.evaluations.length > 0).length === 0 ? (
-              <div className="p-10 text-center space-y-2 border border-slate-100 rounded-2xl bg-slate-50/50">
-                <Award className="w-8 h-8 text-slate-300 mx-auto" />
-                <p className="text-xs font-bold text-slate-600">Nenhuma avaliação cadastrada ainda.</p>
-                <p className="text-[11px] text-slate-400">As avaliações técnicas são registradas no perfil de cada candidato.</p>
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-bold text-slate-500">
+                Exibindo <strong className="text-slate-900">{filteredCandidates.length}</strong> candidatos
+              </span>
+            </div>
+
+            {filteredCandidates.length === 0 ? (
+              <div className="bg-white rounded-3xl p-10 text-center border border-slate-200 space-y-3">
+                <Users className="w-10 h-10 text-slate-300 mx-auto" />
+                <p className="text-sm font-bold text-slate-600">Nenhum candidato encontrado com os filtros selecionados.</p>
               </div>
             ) : (
-              candidates.filter(c => c.evaluations && c.evaluations.length > 0).map((cand) => (
-                <div key={cand.id} className="p-4 rounded-2xl border border-slate-200 bg-slate-50 space-y-3">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-3">
-                      {(cand.photo || cand.avatar) ? (
-                        <img src={cand.photo || cand.avatar} alt={cand.name} className="w-10 h-10 rounded-xl object-cover shrink-0" />
-                      ) : (
-                        <div className="w-10 h-10 rounded-xl bg-indigo-100 text-indigo-700 font-bold flex items-center justify-center text-xs shrink-0">
-                          {cand.name ? cand.name.split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase() : 'C'}
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                {filteredCandidates.map(c => {
+                  const matchedJ = companyJobs.find(j => j.id === c.jobId);
+                  return (
+                    <div
+                      key={c.id}
+                      onClick={() => {
+                        setSelectedCandidate(c);
+                        setIsDrawerOpen(true);
+                      }}
+                      className="bg-white rounded-2xl border border-slate-200 p-5 shadow-2xs hover:border-indigo-300 hover:shadow-md transition-all cursor-pointer space-y-3 flex flex-col justify-between"
+                    >
+                      <div className="space-y-2">
+                        <div className="flex items-start justify-between gap-2">
+                          <div>
+                            <h4 className="text-base font-black text-slate-900">{c.name}</h4>
+                            <p className="text-xs text-slate-500 font-medium">
+                              Vaga: <strong className="text-slate-800">{matchedJ?.title || c.role}</strong>
+                            </p>
+                          </div>
+                          <span className={`text-[10px] font-extrabold px-2.5 py-0.5 rounded-full border shrink-0 ${
+                            c.status === 'Contratado' ? 'bg-emerald-100 text-emerald-800 border-emerald-200' : 'bg-slate-100 text-slate-700 border-slate-200'
+                          }`}>
+                            {c.status}
+                          </span>
                         </div>
-                      )}
-                      <div>
-                        <h4 className="font-extrabold text-xs text-slate-900">{cand.name}</h4>
-                        <span className="text-[10px] text-slate-500">{cand.role}</span>
+
+                        <div className="space-y-1 text-xs text-slate-600">
+                          <p className="flex items-center gap-1.5">
+                            <MapPin className="w-3.5 h-3.5 text-slate-400" />
+                            <span>{c.city}, {c.state}</span>
+                          </p>
+                          <p className="flex items-center gap-1.5">
+                            <Phone className="w-3.5 h-3.5 text-slate-400" />
+                            <span>{c.phone}</span>
+                          </p>
+                        </div>
+                      </div>
+
+                      <div className="pt-3 border-t border-slate-100 flex items-center justify-between text-xs font-bold text-indigo-600">
+                        <span>Ver detalhes do candidato</span>
+                        <ChevronRight className="w-4 h-4" />
                       </div>
                     </div>
-                    <span className="bg-emerald-100 text-emerald-800 text-[10px] font-black px-2.5 py-0.5 rounded-full">
-                      Match IA: {cand.compatibilityScore}%
-                    </span>
-                  </div>
-
-                  {cand.evaluations?.map((ev) => (
-                    <div key={ev.id} className="bg-white p-3 rounded-xl border border-slate-200 text-xs space-y-1">
-                      <div className="font-extrabold text-slate-800">
-                        Parecer Final: <span className="text-indigo-600">{ev.finalOpinion}</span> (Avaliador: {ev.evaluatedBy})
-                      </div>
-                      <p className="text-slate-600 text-[11px]">{ev.notes}</p>
-                    </div>
-                  ))}
-                </div>
-              ))
-            )}
-          </div>
-        </div>
-      )}
-
-      {/* TAB CONTENT 5: HISTÓRICO */}
-      {activeTab === 'historico' && (
-        <div className="bg-white rounded-3xl p-6 border border-slate-200 shadow-2xs space-y-5">
-          <div className="border-b border-slate-100 pb-4">
-            <h3 className="text-base font-black text-slate-900">
-              Histórico e Linha do Tempo {job ? `da Vaga (${job.title})` : 'Geral'}
-            </h3>
-            <p className="text-xs text-slate-500">Registro de todas as ações, candidaturas e interações no processo seletivo.</p>
-          </div>
-
-          <div className="relative border-l-2 border-indigo-100 pl-6 space-y-6 ml-2 text-xs">
-            {job && (
-              <div className="relative">
-                <span className="absolute -left-[31px] top-0.5 w-4 h-4 rounded-full bg-indigo-600 border-2 border-white" />
-                <div className="font-extrabold text-slate-900">Vaga Criada e Publicada</div>
-                <p className="text-slate-500">Abertura da requisição para {job.title} no departamento de {job.department}.</p>
-                <span className="text-[10px] text-slate-400 font-semibold">{formatFirestoreDate(job.createdAt)}</span>
+                  );
+                })}
               </div>
             )}
-
-            {candidates.map((cand) => (
-              cand.timeline?.map((evt) => (
-                <div key={evt.id} className="relative">
-                  <span className="absolute -left-[31px] top-0.5 w-4 h-4 rounded-full bg-emerald-500 border-2 border-white" />
-                  <div className="font-extrabold text-slate-900">{evt.title} — {cand.name}</div>
-                  <p className="text-slate-600">{evt.description}</p>
-                  <span className="text-[10px] text-slate-400 font-semibold">{evt.date} {evt.by ? `• Por: ${evt.by}` : ''}</span>
-                </div>
-              ))
-            ))}
           </div>
+
         </div>
       )}
 
-      {/* 6. PAINEL LATERAL (Drawer) */}
+      {/* CANDIDATE DRAWER PANEL */}
       <CandidateDrawerPanel
         candidate={selectedCandidate}
         isOpen={isDrawerOpen}
         onClose={() => setIsDrawerOpen(false)}
         onRefresh={handleRefresh}
-        jobTitle={job?.title || selectedCandidate?.role || 'Vaga'}
+        jobTitle={companyJobs.find(j => j.id === selectedCandidate?.jobId)?.title}
       />
+
+      {/* JOB EDIT / CREATE FORM MODAL */}
+      {(isCreateJobOpen || editingJob) && (
+        <JobFormModal
+          isOpen={isCreateJobOpen || !!editingJob}
+          initialJob={editingJob}
+          onClose={() => {
+            setIsCreateJobOpen(false);
+            setEditingJob(null);
+          }}
+          onSaveJob={handleSaveJobData}
+        />
+      )}
+
+      {/* JOB INDICATORS / METRICS MODAL */}
+      {metricsModalJob && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 z-50 animate-fade-in">
+          <div className="bg-white rounded-3xl max-w-lg w-full p-6 shadow-2xl border border-slate-100 space-y-5">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+              <div>
+                <h3 className="text-lg font-black text-slate-900">{metricsModalJob.title || metricsModalJob.titulo}</h3>
+                <p className="text-xs text-slate-500 font-medium">Indicadores da Vaga #{metricsModalJob.id}</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setMetricsModalJob(null)}
+                className="text-slate-400 hover:text-slate-600 p-1 rounded-lg hover:bg-slate-100 cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <div className="bg-slate-50 p-3.5 rounded-2xl border border-slate-100 space-y-1">
+                <span className="text-[10px] font-bold text-slate-400 uppercase block">Inscritos</span>
+                <span className="text-2xl font-black text-slate-900">{getJobCandidates(metricsModalJob.id).length}</span>
+              </div>
+
+              <div className="bg-slate-50 p-3.5 rounded-2xl border border-slate-100 space-y-1">
+                <span className="text-[10px] font-bold text-emerald-600 uppercase block">Contratados</span>
+                <span className="text-2xl font-black text-emerald-600">{getJobHiredCount(metricsModalJob.id)} / {getJobPositions(metricsModalJob)}</span>
+              </div>
+            </div>
+
+            <div className="bg-indigo-50/50 p-4 rounded-2xl border border-indigo-100 space-y-2 text-xs text-indigo-950">
+              <p><strong>Departamento:</strong> {metricsModalJob.department}</p>
+              <p><strong>Localização:</strong> {metricsModalJob.location}</p>
+              <p><strong>Tipo de Contrato:</strong> {metricsModalJob.type || metricsModalJob.tipoContrato}</p>
+              <p><strong>Salário:</strong> {metricsModalJob.salaryRange || metricsModalJob.salario}</p>
+              <p><strong>Criada em:</strong> {formatFirestoreDate(metricsModalJob.createdAt || metricsModalJob.dataCriacao)}</p>
+            </div>
+
+            <div className="flex justify-end pt-2">
+              <button
+                type="button"
+                onClick={() => setMetricsModalJob(null)}
+                className="px-5 py-2 bg-slate-900 text-white text-xs font-bold rounded-xl hover:bg-slate-800 transition-all cursor-pointer"
+              >
+                Fechar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* JOB HISTORY MODAL */}
+      {historyModalJob && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 z-50 animate-fade-in">
+          <div className="bg-white rounded-3xl max-w-lg w-full p-6 shadow-2xl border border-slate-100 space-y-5">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+              <div className="flex items-center gap-2">
+                <History className="w-5 h-5 text-indigo-600" />
+                <h3 className="text-lg font-black text-slate-900">Histórico da Vaga</h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setHistoryModalJob(null)}
+                className="text-slate-400 hover:text-slate-600 p-1 rounded-lg hover:bg-slate-100 cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="space-y-3 max-h-80 overflow-y-auto text-xs text-slate-700 pr-1">
+              <div className="p-3 bg-slate-50 rounded-xl border border-slate-100 space-y-1">
+                <span className="text-[10px] font-bold text-slate-400">Criada em:</span>
+                <p className="font-bold">{formatFirestoreDate(historyModalJob.createdAt || historyModalJob.dataCriacao)}</p>
+              </div>
+
+              <div className="p-3 bg-slate-50 rounded-xl border border-slate-100 space-y-1">
+                <span className="text-[10px] font-bold text-slate-400">Total de candidaturas recebidas:</span>
+                <p className="font-bold">{getJobCandidates(historyModalJob.id).length} candidatos</p>
+              </div>
+
+              <div className="p-3 bg-slate-50 rounded-xl border border-slate-100 space-y-1">
+                <span className="text-[10px] font-bold text-emerald-600">Total de contratações finalizadas:</span>
+                <p className="font-bold text-emerald-900">{getJobHiredCount(historyModalJob.id)} contratações</p>
+              </div>
+            </div>
+
+            <div className="flex justify-end pt-2">
+              <button
+                type="button"
+                onClick={() => setHistoryModalJob(null)}
+                className="px-5 py-2 bg-slate-900 text-white text-xs font-bold rounded-xl hover:bg-slate-800 transition-all cursor-pointer"
+              >
+                Fechar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
     </div>
   );
 };

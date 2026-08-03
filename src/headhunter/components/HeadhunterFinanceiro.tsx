@@ -56,6 +56,7 @@ interface HeadhunterFinanceiroProps {
   hirings?: any[];
   contracts?: HeadhunterContract[];
   proposals?: HeadhunterProposal[];
+  selectedFinancialId?: string | null;
   onAddFinanceItem?: (item: any) => void;
   onOpenAiModal?: (type: string, data?: any) => void;
 }
@@ -67,6 +68,7 @@ export const HeadhunterFinanceiro: React.FC<HeadhunterFinanceiroProps> = ({
   hirings = [],
   contracts = [],
   proposals = [],
+  selectedFinancialId,
   onOpenAiModal
 }) => {
   const [activeTab, setActiveTab] = useState<
@@ -282,6 +284,8 @@ export const HeadhunterFinanceiro: React.FC<HeadhunterFinanceiroProps> = ({
   const [comData, setComData] = useState(new Date().toISOString().split('T')[0]);
   const [comObs, setComObs] = useState('');
 
+  const [highlightedFinancialId, setHighlightedFinancialId] = useState<string | null>(null);
+
   // Refresh data function
   const reloadData = () => {
     setReceitas(HeadhunterFinanceService.getReceitas());
@@ -293,6 +297,28 @@ export const HeadhunterFinanceiro: React.FC<HeadhunterFinanceiroProps> = ({
   useEffect(() => {
     reloadData();
   }, []);
+
+  // Auto-locate and highlight selected financial record
+  useEffect(() => {
+    const targetId = selectedFinancialId || localStorage.getItem('selectedFinancialId') || localStorage.getItem('selectedBillingId');
+    if (!targetId) return;
+
+    setActiveTab('receitas');
+    setHighlightedFinancialId(targetId);
+
+    const match = receitas.find(r => 
+      r.id === targetId || 
+      r.id === `cob_${targetId}` ||
+      (r as any).contratacaoId === targetId ||
+      (r as any).cobrancaId === targetId ||
+      (r as any).candidateId === targetId ||
+      (r as any).candidatoId === targetId
+    );
+
+    if (match) {
+      setShowHistoricoModal(match);
+    }
+  }, [selectedFinancialId, receitas]);
 
   const resetReceitaForm = () => {
     setRecClienteId('');
@@ -759,8 +785,23 @@ export const HeadhunterFinanceiro: React.FC<HeadhunterFinanceiroProps> = ({
                     const matchesCandidato = !filterCandidato || r.candidatoNome === filterCandidato;
                     return matchesSearch && matchesClient && matchesVaga && matchesCandidato;
                   })
-                  .map(r => (
-                    <tr key={r.id} className="hover:bg-slate-50 transition-colors">
+                  .map(r => {
+                    const isHighlighted = highlightedFinancialId && (
+                      r.id === highlightedFinancialId ||
+                      r.id === `cob_${highlightedFinancialId}` ||
+                      (r as any).contratacaoId === highlightedFinancialId ||
+                      (r as any).cobrancaId === highlightedFinancialId
+                    );
+
+                    return (
+                      <tr 
+                        key={r.id} 
+                        className={`transition-all ${
+                          isHighlighted 
+                            ? 'bg-indigo-50/90 border-l-4 border-indigo-600 shadow-xs ring-1 ring-indigo-300' 
+                            : 'hover:bg-slate-50'
+                        }`}
+                      >
                       <td className="p-3">
                         <div className="flex items-center gap-1.5 mb-1">
                           <strong className="text-slate-900 block font-black">{r.clienteNome}</strong>
@@ -838,7 +879,8 @@ export const HeadhunterFinanceiro: React.FC<HeadhunterFinanceiroProps> = ({
                         </div>
                       </td>
                     </tr>
-                  ))}
+                  );
+                })}
               </tbody>
             </table>
           </div>

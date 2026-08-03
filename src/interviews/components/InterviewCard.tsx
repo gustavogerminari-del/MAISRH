@@ -17,6 +17,7 @@ import {
   ExternalLink,
 } from 'lucide-react';
 import { Interview } from '../types/interview';
+import { normalizeInterviewStatus } from '../utils/interviewUtils';
 import { InterviewStatusBadge, InterviewTypeBadge } from './InterviewStatusBadge';
 import { Card, Button } from '../../shared';
 
@@ -35,6 +36,7 @@ export const InterviewCard: React.FC<InterviewCardProps> = ({
   onDeleteInterview,
   canManageInterview = true,
 }) => {
+  const normStatus = normalizeInterviewStatus(interview.status);
   const isToday =
     new Date().toISOString().split('T')[0] === interview.date;
 
@@ -73,7 +75,7 @@ export const InterviewCard: React.FC<InterviewCardProps> = ({
           </div>
 
           <div className="flex flex-col items-end gap-1 shrink-0">
-            <InterviewStatusBadge status={interview.status} />
+            <InterviewStatusBadge status={normStatus} />
             <InterviewTypeBadge type={interview.type} />
           </div>
         </div>
@@ -159,7 +161,7 @@ export const InterviewCard: React.FC<InterviewCardProps> = ({
             )}
           </div>
         ) : (
-          interview.status === 'Realizada' && (
+          (normStatus === 'Realizada' || normStatus === 'Em Análise') && (
             <div className="bg-amber-50 border border-amber-200 p-2.5 rounded-xl text-xs text-amber-800 font-bold flex items-center gap-2">
               <AlertCircle className="w-4 h-4 text-amber-600 shrink-0" />
               Entrevista realizada. Aguardando registro de feedback do entrevistador.

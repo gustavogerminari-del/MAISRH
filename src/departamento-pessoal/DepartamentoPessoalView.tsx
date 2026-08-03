@@ -99,16 +99,21 @@ export type DPSubTab =
 
 interface DepartamentoPessoalViewProps {
   initialSubTab?: DPSubTab;
+  selectedAdmissionId?: string | null;
 }
 
 export const DepartamentoPessoalView: React.FC<DepartamentoPessoalViewProps> = ({
-  initialSubTab = 'visao-geral'
+  initialSubTab = 'visao-geral',
+  selectedAdmissionId
 }) => {
   const { user, isModuleActive } = useAuth();
   const companyId = user?.companyId || user?.empresaId || user?.tenantId;
   const isMaster = user?.role === 'Super Administrador' || user?.tipoUsuario === 'MASTER';
 
-  const [activeSubTab, setActiveSubTab] = useState<DPSubTab>(initialSubTab);
+  const [activeSubTab, setActiveSubTab] = useState<DPSubTab>(() => {
+    if (selectedAdmissionId) return 'admissoes';
+    return initialSubTab;
+  });
   const [loadingFirestore, setLoadingFirestore] = useState(true);
 
   // Firestore State
@@ -125,10 +130,12 @@ export const DepartamentoPessoalView: React.FC<DepartamentoPessoalViewProps> = (
 
   // Sync state with prop if changed
   useEffect(() => {
-    if (initialSubTab) {
+    if (selectedAdmissionId) {
+      setActiveSubTab('admissoes');
+    } else if (initialSubTab) {
       setActiveSubTab(initialSubTab);
     }
-  }, [initialSubTab]);
+  }, [initialSubTab, selectedAdmissionId]);
 
   // Load all DP Data from Firebase Firestore
   useEffect(() => {
@@ -367,6 +374,7 @@ export const DepartamentoPessoalView: React.FC<DepartamentoPessoalViewProps> = (
             onSalvarAdmissao={handleSalvarAdmissao}
             onDeletarAdmissao={handleDeletarAdmissao}
             companyId={companyId}
+            selectedAdmissionId={selectedAdmissionId}
           />
         )}
 

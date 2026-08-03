@@ -15,45 +15,375 @@ import {
   AlertTriangle,
   Check,
   Loader2,
-  FileText
+  FileText,
+  ExternalLink,
+  History,
+  ShieldCheck,
+  ArrowRight
 } from 'lucide-react';
 import { 
   UnifiedHiring, 
   OrigemProcesso 
 } from '../../types/recruitment';
-import { collection, query, where, onSnapshot } from 'firebase/firestore';
+import { collection, query, where, onSnapshot, doc, getDoc, getDocs, setDoc } from 'firebase/firestore';
 import { db } from '../../../lib/firebase';
 import { useAuth } from '../../../auth';
 import { JobCandidateService } from '../../../services/JobCandidateService';
+import { sanitizeFirestoreData } from '../../../lib/firestoreUtils';
 
-interface UnifiedContratacoesViewProps {
+export interface UnifiedContratacoesViewProps {
   hirings?: UnifiedHiring[];
   origemProcesso?: OrigemProcesso;
   companyId?: string;
   onOpenAiModal?: (type: string, data?: any) => void;
+  onNavigateToTab?: (tab: string, admissionId?: string) => void;
 }
 
 export const UnifiedContratacoesView: React.FC<UnifiedContratacoesViewProps> = ({
   hirings = [],
   origemProcesso = 'recrutamento_interno',
   companyId,
-  onOpenAiModal
+  onOpenAiModal,
+  onNavigateToTab
 }) => {
   const { user } = useAuth();
   const [firestoreHirings, setFirestoreHirings] = useState<any[]>([]);
+  const [admissoesMap, setAdmissoesMap] = useState<Record<string, any>>({});
+  const [cobrancasMap, setCobrancasMap] = useState<Record<string, any>>({});
   const [loading, setLoading] = useState<boolean>(true);
+  const [openingAdmissionId, setOpeningAdmissionId] = useState<string | null>(null);
+  const [openingFinancialId, setOpeningFinancialId] = useState<string | null>(null);
 
   // Modals state
-  const [forwardingItem, setForwardingItem] = useState<any | null>(null);
-  const [targetDestination, setTargetDestination] = useState<'departamento_pessoal' | 'headhunter'>('departamento_pessoal');
-  const [isSubmittingForward, setIsSubmittingForward] = useState<boolean>(false);
-  
   const [detailsItem, setDetailsItem] = useState<any | null>(null);
 
   const activeCompanyId = companyId || user?.empresaId || user?.companyId || user?.tenantId;
   const isMaster = user?.role === 'Super Administrador' || user?.role === 'MASTER' || user?.tipoUsuario === 'MASTER' || user?.isMaster === true;
 
-  // Real-time Firestore subscription to 'contratacoes'
+  const vincularContratacaoEFinanceiro = async (hiring: any, financialId: string, billingData: any) => {
+    try {
+      const now = new Date().toISOString();
+      await setDoc(doc(db, 'contratacoes', hiring.id), sanitizeFirestoreData({
+        destino: 'Headhunter',
+        destinoProcesso: 'Financeiro / Headhunter',
+        statusProcesso: billingData?.status || 'Aguardando Cobrança',
+        cobrancaId: financialId,
+        financeiroId: financialId,
+        encaminhadoFinanceiro: true,
+        encaminhadoFinanceiroEm: now,
+        updatedAt: now
+      }), { merge: true });
+
+      await setDoc(doc(db, 'financeiro_cobrancas', financialId), sanitizeFirestoreData({
+        contratacaoId: hiring.id,
+        applicationId: hiring.applicationId || hiring.candidaturaId || hiring.id,
+        candidateId: hiring.candidateId || hiring.candidatoId,
+        candidatoId: hiring.candidateId || hiring.candidatoId,
+        jobId: hiring.jobId || hiring.vagaId,
+        vagaId: hiring.jobId || hiring.vagaId,
+        clientId: hiring.clientId || hiring.clienteId,
+        companyId: hiring.companyId || hiring.empresaId || activeCompanyId || 'emp-001',
+        empresaId: hiring.companyId || hiring.empresaId || activeCompanyId || 'emp-001',
+        updatedAt: now
+      }), { merge: true });
+    } catch (err) {
+      console.error('[FINANCEIRO] Erro ao salvar vínculo entre contratação e financeiro:', err);
+    }
+  };
+
+  const localizarCobrancaPorContratacao = async (hiring: any): Promise<string | null> => {
+    const contrId = hiring.id;
+    const candId = hiring.candidateId || hiring.candidatoId;
+    const jobId = hiring.jobId || hiring.vagaId;
+
+    // 1. Direct doc lookup cob_${contrId}
+    try {
+      const directRef = doc(db, 'financeiro_cobrancas', `cob_${contrId}`);
+      const directSnap = await getDoc(directRef);
+      if (directSnap.exists()) {
+        const foundId = directSnap.id;
+        const foundData = directSnap.data();
+        await vincularContratacaoEFinanceiro(hiring, foundId, foundData);
+        return foundId;
+      }
+    } catch (e) {
+      console.warn('[FINANCEIRO] Erro na busca direta por cob_ ID:', e);
+    }
+
+    // 2. Query financeiro_cobrancas by contratacaoId
+    try {
+      const q1 = query(collection(db, 'financeiro_cobrancas'), where('contratacaoId', '==', contrId));
+      const snap1 = await getDocs(q1);
+      if (!snap1.empty) {
+        const docFound = snap1.docs[0];
+        const foundId = docFound.id;
+        const foundData = docFound.data();
+        await vincularContratacaoEFinanceiro(hiring, foundId, foundData);
+        return foundId;
+      }
+    } catch (e) {
+      console.warn('[FINANCEIRO] Erro na busca por contratacaoId:', e);
+    }
+
+    // 3. Query receitas collection by contratacaoId
+    try {
+      const q2 = query(collection(db, 'receitas'), where('contratacaoId', '==', contrId));
+      const snap2 = await getDocs(q2);
+      if (!snap2.empty) {
+        const docFound = snap2.docs[0];
+        const foundId = docFound.id;
+        const foundData = docFound.data();
+        await vincularContratacaoEFinanceiro(hiring, foundId, foundData);
+        return foundId;
+      }
+    } catch (e) {
+      console.warn('[FINANCEIRO] Erro na busca em receitas por contratacaoId:', e);
+    }
+
+    // 4. Query financeiro_cobrancas by candidateId + jobId
+    if (candId && jobId) {
+      try {
+        const q3 = query(
+          collection(db, 'financeiro_cobrancas'),
+          where('candidateId', '==', candId),
+          where('jobId', '==', jobId)
+        );
+        const snap3 = await getDocs(q3);
+        if (!snap3.empty) {
+          const docFound = snap3.docs[0];
+          const foundId = docFound.id;
+          const foundData = docFound.data();
+          await vincularContratacaoEFinanceiro(hiring, foundId, foundData);
+          return foundId;
+        }
+      } catch (e) {
+        console.warn('[FINANCEIRO] Erro na busca por candidateId + jobId:', e);
+      }
+    }
+
+    return null;
+  };
+
+  const handleOpenFinancial = async (hiring: any) => {
+    if (openingFinancialId) return;
+    setOpeningFinancialId(hiring.id);
+
+    console.log("[FINANCEIRO] Abrindo cobrança:", {
+      contratacaoId: hiring.id,
+      financeiroId: hiring.financeiroId || hiring.cobrancaId,
+      candidateId: hiring.candidateId || hiring.candidatoId,
+      applicationId: hiring.applicationId || hiring.candidaturaId || hiring.id,
+      jobId: hiring.jobId || hiring.vagaId,
+      companyId: hiring.companyId || hiring.empresaId
+    });
+
+    try {
+      const cobDoc = cobrancasMap[hiring.id] || cobrancasMap[`${hiring.jobId}_${hiring.candidateId}`] || cobrancasMap[`${hiring.jobId}_${hiring.candidatoId}`];
+      
+      let financialId = hiring.financeiroId || hiring.cobrancaId || cobDoc?.id || `cob_${hiring.id}`;
+
+      // Verify if billing doc exists
+      const docRef = doc(db, 'financeiro_cobrancas', financialId);
+      const docSnap = await getDoc(docRef);
+
+      if (!docSnap.exists()) {
+        const recRef = doc(db, 'receitas', financialId);
+        const recSnap = await getDoc(recRef);
+        if (!recSnap.exists()) {
+          const foundId = await localizarCobrancaPorContratacao(hiring);
+          if (foundId) {
+            financialId = foundId;
+          } else {
+            throw new Error("Não foi possível localizar o processo vinculado a esta contratação.");
+          }
+        } else {
+          await vincularContratacaoEFinanceiro(hiring, financialId, recSnap.data());
+        }
+      } else {
+        await vincularContratacaoEFinanceiro(hiring, financialId, docSnap.data());
+      }
+
+      localStorage.setItem('selectedFinancialId', financialId);
+      localStorage.setItem('selectedBillingId', financialId);
+      try {
+        const url = new URL(window.location.href);
+        url.searchParams.set('selectedFinancialId', financialId);
+        window.history.pushState({}, '', url.toString());
+      } catch (err) {
+        console.warn('Could not update window location params:', err);
+      }
+
+      if (onNavigateToTab) {
+        onNavigateToTab('headhunter-financeiro', financialId);
+      } else {
+        window.location.hash = `headhunter-financeiro?id=${financialId}`;
+      }
+    } catch (error) {
+      console.error("[FINANCEIRO] Erro ao abrir:", error);
+      alert(error instanceof Error ? error.message : "Não foi possível localizar o processo vinculado a esta contratação.");
+    } finally {
+      setOpeningFinancialId(null);
+    }
+  };
+
+  const vincularContratacaoEAdmissao = async (hiring: any, admissionId: string, admissionData: any) => {
+    try {
+      const now = new Date().toISOString();
+      await setDoc(doc(db, 'contratacoes', hiring.id), sanitizeFirestoreData({
+        destino: 'DP',
+        admissaoId: admissionId,
+        statusAdmissao: admissionData?.status || 'Aguardando Admissão',
+        encaminhadoAdmissao: true,
+        encaminhadoAdmissaoEm: now,
+        updatedAt: now
+      }), { merge: true });
+
+      await setDoc(doc(db, 'solicitacoes_admissao', admissionId), sanitizeFirestoreData({
+        contratacaoId: hiring.id,
+        applicationId: hiring.applicationId || hiring.candidaturaId || hiring.id,
+        candidateId: hiring.candidateId || hiring.candidatoId,
+        jobId: hiring.jobId || hiring.vagaId,
+        companyId: hiring.companyId || hiring.empresaId || activeCompanyId || 'emp-001',
+        empresaId: hiring.companyId || hiring.empresaId || activeCompanyId || 'emp-001',
+        updatedAt: now
+      }), { merge: true });
+    } catch (err) {
+      console.error('[ADMISSÃO] Erro ao salvar vínculo entre contratação e admissão:', err);
+    }
+  };
+
+  const localizarAdmissaoPorContratacao = async (hiring: any): Promise<string | null> => {
+    const contrId = hiring.id;
+    const candId = hiring.candidateId || hiring.candidatoId;
+    const jobId = hiring.jobId || hiring.vagaId;
+
+    // 1. Direct doc lookup adm_${contrId}
+    try {
+      const directRef = doc(db, 'solicitacoes_admissao', `adm_${contrId}`);
+      const directSnap = await getDoc(directRef);
+      if (directSnap.exists()) {
+        const foundId = directSnap.id;
+        const foundData = directSnap.data();
+        await vincularContratacaoEAdmissao(hiring, foundId, foundData);
+        return foundId;
+      }
+    } catch (e) {
+      console.warn('[ADMISSÃO] Erro na busca direta por ID:', e);
+    }
+
+    // 2. Query solicitacoes_admissao by contratacaoId
+    try {
+      const q1 = query(collection(db, 'solicitacoes_admissao'), where('contratacaoId', '==', contrId));
+      const snap1 = await getDocs(q1);
+      if (!snap1.empty) {
+        const docFound = snap1.docs[0];
+        const foundId = docFound.id;
+        const foundData = docFound.data();
+        await vincularContratacaoEAdmissao(hiring, foundId, foundData);
+        return foundId;
+      }
+    } catch (e) {
+      console.warn('[ADMISSÃO] Erro na busca por contratacaoId:', e);
+    }
+
+    // 3. Query solicitacoes_admissao by candidateId + jobId
+    if (candId && jobId) {
+      try {
+        const q2 = query(
+          collection(db, 'solicitacoes_admissao'),
+          where('candidateId', '==', candId),
+          where('jobId', '==', jobId)
+        );
+        const snap2 = await getDocs(q2);
+        if (!snap2.empty) {
+          const docFound = snap2.docs[0];
+          const foundId = docFound.id;
+          const foundData = docFound.data();
+          await vincularContratacaoEAdmissao(hiring, foundId, foundData);
+          return foundId;
+        }
+      } catch (e) {
+        console.warn('[ADMISSÃO] Erro na busca por candidateId + jobId:', e);
+      }
+
+      try {
+        const q3 = query(
+          collection(db, 'solicitacoes_admissao'),
+          where('candidatoId', '==', candId),
+          where('vagaId', '==', jobId)
+        );
+        const snap3 = await getDocs(q3);
+        if (!snap3.empty) {
+          const docFound = snap3.docs[0];
+          const foundId = docFound.id;
+          const foundData = docFound.data();
+          await vincularContratacaoEAdmissao(hiring, foundId, foundData);
+          return foundId;
+        }
+      } catch (e) {
+        console.warn('[ADMISSÃO] Erro na busca por candidatoId + vagaId:', e);
+      }
+    }
+
+    return null;
+  };
+
+  const handleOpenAdmission = async (hiring: any) => {
+    if (openingAdmissionId) return;
+    setOpeningAdmissionId(hiring.id);
+
+    console.log("[ADMISSÃO] Abrindo processo:", {
+      contratacaoId: hiring.id,
+      admissaoId: hiring.admissaoId,
+      candidateId: hiring.candidateId || hiring.candidatoId,
+      applicationId: hiring.applicationId || hiring.candidaturaId || hiring.id,
+      jobId: hiring.jobId || hiring.vagaId,
+      companyId: hiring.companyId || hiring.empresaId
+    });
+
+    try {
+      const admDoc = admissoesMap[hiring.id] || admissoesMap[`${hiring.jobId}_${hiring.candidateId}`] || admissoesMap[`${hiring.jobId}_${hiring.candidatoId}`];
+      
+      let admissionId = hiring.admissaoId || admDoc?.id || `adm_${hiring.id}`;
+
+      // Verify if admission doc exists, if not run locator
+      const docRef = doc(db, 'solicitacoes_admissao', admissionId);
+      const docSnap = await getDoc(docRef);
+
+      if (!docSnap.exists()) {
+        const foundId = await localizarAdmissaoPorContratacao(hiring);
+        if (foundId) {
+          admissionId = foundId;
+        } else {
+          throw new Error("Não foi possível localizar a solicitação de admissão desta contratação.");
+        }
+      } else {
+        await vincularContratacaoEAdmissao(hiring, admissionId, docSnap.data());
+      }
+
+      localStorage.setItem('selectedAdmissionId', admissionId);
+      try {
+        const url = new URL(window.location.href);
+        url.searchParams.set('selectedAdmissionId', admissionId);
+        window.history.pushState({}, '', url.toString());
+      } catch (err) {
+        console.warn('Could not update window location params:', err);
+      }
+
+      if (onNavigateToTab) {
+        onNavigateToTab('admissoes', admissionId);
+      } else {
+        window.location.hash = `admissoes?id=${admissionId}`;
+      }
+    } catch (error) {
+      console.error("[ADMISSÃO] Erro ao abrir:", error);
+      alert(error instanceof Error ? error.message : "Erro ao abrir a admissão.");
+    } finally {
+      setOpeningAdmissionId(null);
+    }
+  };
+
+  // Real-time Firestore subscription to 'contratacoes', 'solicitacoes_admissao', and 'financeiro_cobrancas'
   useEffect(() => {
     setLoading(true);
     let q;
@@ -63,7 +393,7 @@ export const UnifiedContratacoesView: React.FC<UnifiedContratacoesViewProps> = (
       q = query(collection(db, 'contratacoes'), where('companyId', '==', activeCompanyId));
     }
 
-    const unsubscribe = onSnapshot(
+    const unsubscribeHirings = onSnapshot(
       q,
       (snapshot) => {
         const list = snapshot.docs.map(docSnap => ({
@@ -79,10 +409,51 @@ export const UnifiedContratacoesView: React.FC<UnifiedContratacoesViewProps> = (
       }
     );
 
-    return () => unsubscribe();
+    // Subscribe to solicitacoes_admissao for DP status sync
+    let qAdm;
+    if (isMaster || !activeCompanyId) {
+      qAdm = query(collection(db, 'solicitacoes_admissao'));
+    } else {
+      qAdm = query(collection(db, 'solicitacoes_admissao'), where('companyId', '==', activeCompanyId));
+    }
+    const unsubscribeAdm = onSnapshot(qAdm, (snap) => {
+      const map: Record<string, any> = {};
+      snap.docs.forEach(d => {
+        const data = d.data();
+        if (data.contratacaoId) map[data.contratacaoId] = data;
+        if (data.candidatoId && data.jobId) map[`${data.jobId}_${data.candidatoId}`] = data;
+        if (data.candidateId && data.jobId) map[`${data.jobId}_${data.candidateId}`] = data;
+        map[d.id] = data;
+      });
+      setAdmissoesMap(map);
+    }, err => console.warn('Aviso subscription solicitacoes_admissao:', err));
+
+    // Subscribe to financeiro_cobrancas for Headhunter Financeiro status sync
+    let qCob;
+    if (isMaster || !activeCompanyId) {
+      qCob = query(collection(db, 'financeiro_cobrancas'));
+    } else {
+      qCob = query(collection(db, 'financeiro_cobrancas'), where('companyId', '==', activeCompanyId));
+    }
+    const unsubscribeCob = onSnapshot(qCob, (snap) => {
+      const map: Record<string, any> = {};
+      snap.docs.forEach(d => {
+        const data = d.data();
+        if (data.contratacaoId) map[data.contratacaoId] = data;
+        if (data.candidatoId && data.jobId) map[`${data.jobId}_${data.candidatoId}`] = data;
+        map[d.id] = data;
+      });
+      setCobrancasMap(map);
+    }, err => console.warn('Aviso subscription financeiro_cobrancas:', err));
+
+    return () => {
+      unsubscribeHirings();
+      unsubscribeAdm();
+      unsubscribeCob();
+    };
   }, [activeCompanyId, isMaster]);
 
-  // Combine Firestore list with any prop list as fallback
+  // Combine Firestore list with prop list fallback
   const rawList = firestoreHirings.length > 0 ? firestoreHirings : hirings;
 
   // Format date helper
@@ -99,36 +470,10 @@ export const UnifiedContratacoesView: React.FC<UnifiedContratacoesViewProps> = (
 
   const isHeadhunterView = origemProcesso === 'headhunter';
 
-  const totalReceitaGerada = rawList.reduce((acc, h) => acc + (h.receitaGerada || h.faturamentoFee || 0), 0);
-  const totalComissaoGerada = rawList.reduce((acc, h) => acc + (h.comissaoGerada || 0), 0);
-
-  // Open forwarding modal
-  const handleOpenForwardModal = (item: any) => {
-    setForwardingItem(item);
-    const origin = item.origemProcesso || (item.isHeadhunter ? 'headhunter' : 'recrutamento_interno');
-    if (origin === 'headhunter') {
-      setTargetDestination('headhunter');
-    } else {
-      setTargetDestination('departamento_pessoal');
-    }
-  };
-
-  // Execute forwarding action
-  const handleConfirmForwarding = async () => {
-    if (!forwardingItem) return;
-
-    setIsSubmittingForward(true);
-    try {
-      const res = await JobCandidateService.forwardHiring(forwardingItem, targetDestination);
-      alert(res.message);
-      setForwardingItem(null);
-    } catch (err: any) {
-      console.error('Erro ao executar encaminhamento:', err);
-      alert(err?.message || 'Erro ao encaminhar candidato.');
-    } finally {
-      setIsSubmittingForward(false);
-    }
-  };
+  // Calculate KPIs
+  const totalContratacoes = rawList.length;
+  const rhHirings = rawList.filter(h => h.origemProcesso !== 'headhunter' && h.destinoContratacao !== 'headhunter');
+  const headhunterHirings = rawList.filter(h => h.origemProcesso === 'headhunter' || h.destinoContratacao === 'headhunter');
 
   return (
     <div className="space-y-6">
@@ -137,48 +482,36 @@ export const UnifiedContratacoesView: React.FC<UnifiedContratacoesViewProps> = (
         <div className="space-y-1">
           <div className="flex items-center gap-2">
             <h2 className="text-xl sm:text-2xl font-black text-slate-900 tracking-tight">
-              {isHeadhunterView ? 'Histórico de Contratações & Placements Headhunter' : 'Histórico de Contratações & Admissões'}
+              {isHeadhunterView ? 'Histórico de Contratações & Headhunter' : 'Central Única de Contratações'}
             </h2>
             <span className="bg-emerald-100 text-emerald-800 text-xs font-extrabold px-2.5 py-0.5 rounded-full border border-emerald-200">
-              {rawList.length} {rawList.length === 1 ? 'contratação' : 'contratações'}
+              {totalContratacoes} {totalContratacoes === 1 ? 'contratação' : 'contratações'}
             </span>
           </div>
           <p className="text-xs text-slate-500 font-medium">
-            Registro unificado da área de Contratações. Aloque candidatos aprovados e encaminhe para Headhunter ou Departamento Pessoal.
+            Central única de acompanhamento automático das contratações. Todos os processos são encaminhados e sincronizados em tempo real com o Departamento Pessoal ou Financeiro.
           </p>
         </div>
-
-        {isHeadhunterView && totalReceitaGerada > 0 && (
-          <div className="flex items-center gap-3">
-            <div className="bg-emerald-50 border border-emerald-100 px-4 py-2 rounded-xl text-xs font-bold text-emerald-900">
-              Faturamento Total: <span className="text-emerald-700 font-black text-sm">R$ {totalReceitaGerada.toLocaleString('pt-BR')}</span>
-            </div>
-          </div>
-        )}
       </div>
 
       {/* KPI Cards */}
-      <div className={`grid grid-cols-1 ${isHeadhunterView ? 'sm:grid-cols-3' : 'sm:grid-cols-3'} gap-3`}>
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
         <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-2xs space-y-1">
           <span className="text-[10px] font-extrabold text-slate-500 uppercase tracking-wider block">Total de Contratações</span>
-          <p className="text-2xl font-black text-slate-900">{rawList.length}</p>
-          <span className="text-[10px] text-slate-400 font-medium">Cadastrados na empresa</span>
+          <p className="text-2xl font-black text-slate-900">{totalContratacoes}</p>
+          <span className="text-[10px] text-slate-400 font-medium">Contratações concluídas</span>
         </div>
 
         <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-2xs space-y-1">
-          <span className="text-[10px] font-extrabold text-slate-500 uppercase tracking-wider block">Encaminhados</span>
-          <p className="text-2xl font-black text-emerald-600">
-            {rawList.filter(h => h.statusEncaminhamento === 'Encaminhado').length}
-          </p>
-          <span className="text-[10px] text-emerald-600 font-bold">Enviados para DP/Headhunter</span>
+          <span className="text-[10px] font-extrabold text-slate-500 uppercase tracking-wider block">Encaminhadas para DP</span>
+          <p className="text-2xl font-black text-emerald-600">{rhHirings.length}</p>
+          <span className="text-[10px] text-emerald-600 font-bold">Fluxo RH / Departamento Pessoal</span>
         </div>
 
         <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-2xs space-y-1">
-          <span className="text-[10px] font-extrabold text-slate-500 uppercase tracking-wider block">Encaminhamento Pendente</span>
-          <p className="text-2xl font-black text-amber-600">
-            {rawList.filter(h => h.statusEncaminhamento !== 'Encaminhado').length}
-          </p>
-          <span className="text-[10px] text-amber-600 font-bold">Aguardando ação</span>
+          <span className="text-[10px] font-extrabold text-slate-500 uppercase tracking-wider block">Encaminhadas para Financeiro</span>
+          <p className="text-2xl font-black text-indigo-600">{headhunterHirings.length}</p>
+          <span className="text-[10px] text-indigo-600 font-bold">Fluxo Headhunter / Faturamento</span>
         </div>
       </div>
 
@@ -194,105 +527,137 @@ export const UnifiedContratacoesView: React.FC<UnifiedContratacoesViewProps> = (
       {!loading && (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           {rawList.length === 0 ? (
-            <div className="col-span-full bg-white p-12 rounded-2xl border border-slate-200 text-center text-slate-500 text-xs">
-              Nenhuma contratação registrada.
+            <div className="col-span-full bg-white p-12 rounded-2xl border border-slate-200 text-center text-slate-500 text-xs font-medium">
+              Nenhuma contratação registrada até o momento.
             </div>
           ) : (
             rawList.map(h => {
+              const itemKey = h.id;
+              const isHeadhunter = h.origemProcesso === 'headhunter' || h.destinoContratacao === 'headhunter';
+              
+              // Sincronização automática em tempo real dos status dos módulos DP e Financeiro
+              const admDoc = admissoesMap[h.id] || admissoesMap[`${h.jobId}_${h.candidateId}`] || admissoesMap[`${h.jobId}_${h.candidatoId}`];
+              const cobDoc = cobrancasMap[h.id] || cobrancasMap[`${h.jobId}_${h.candidateId}`] || cobrancasMap[`${h.jobId}_${h.candidatoId}`];
+
               const name = h.candidatoNome || h.candidateName || 'Candidato';
               const job = h.vagaTitulo || h.jobTitle || h.cargo || 'Vaga Corporativa';
               const dateStr = formatDate(h.contratadoEm || h.dataContratacao || h.createdAt);
               const salary = Number(h.salarioContratado || h.salarioFinal || h.salario || 0);
-              const forwardStatus = h.statusEncaminhamento || 'Pendente';
-              const origin = h.origemProcesso || (isHeadhunterView ? 'headhunter' : 'recrutamento_interno');
+
+              const currentStatus = isHeadhunter
+                ? (cobDoc?.status || h.statusEncaminhamento || 'Aguardando Cobrança')
+                : (admDoc?.status || h.statusEncaminhamento || 'Aguardando Admissão');
+
+              const destinationLabel = isHeadhunter ? 'Financeiro' : 'Departamento Pessoal';
 
               return (
-                <div key={h.id} className="bg-white p-5 rounded-2xl border border-slate-200 shadow-2xs space-y-4 hover:border-slate-300 transition-all flex flex-col justify-between">
+                <div key={itemKey} className="bg-white p-5 rounded-2xl border border-slate-200 shadow-2xs space-y-4 hover:border-slate-300 transition-all flex flex-col justify-between">
                   <div className="space-y-3">
-                    <div className="flex items-start justify-between border-b border-slate-100 pb-3 gap-2">
-                      <div>
-                        <div className="flex items-center gap-2">
-                          <UserCheck className="w-5 h-5 text-emerald-600 shrink-0" />
-                          <h3 className="text-base font-black text-slate-900">{name}</h3>
+                    {/* Card Verde: Contratação Concluída */}
+                    <div className="bg-emerald-50 border border-emerald-200 p-3.5 rounded-xl flex items-center justify-between gap-2">
+                      <div className="flex items-center gap-2.5">
+                        <div className="w-8 h-8 rounded-lg bg-emerald-600 text-white flex items-center justify-center font-bold shrink-0">
+                          <CheckCircle2 className="w-4 h-4" />
                         </div>
-                        <p className="text-xs text-slate-500 font-medium mt-0.5">
-                          Admitido para: <strong className="text-slate-800">{job}</strong>
-                          {h.clienteNome && <span> na <strong className="text-slate-800">{h.clienteNome}</strong></span>}
-                        </p>
+                        <div>
+                          <h4 className="text-xs font-black text-emerald-950">Contratação concluída</h4>
+                          <p className="text-[11px] font-medium text-emerald-700">
+                            Data: <strong className="text-emerald-900">{dateStr}</strong>
+                          </p>
+                        </div>
                       </div>
-
-                      <span className="px-2.5 py-1 text-xs font-extrabold rounded-full bg-emerald-100 text-emerald-800 shrink-0">
-                        Contratado {dateStr}
+                      <span className="px-2.5 py-0.5 text-[10px] font-extrabold rounded-full bg-emerald-100 text-emerald-800 border border-emerald-300">
+                        Contratado
                       </span>
                     </div>
 
+                    <div className="space-y-1">
+                      <h3 className="text-base font-black text-slate-900">{name}</h3>
+                      <p className="text-xs text-slate-500 font-medium">
+                        Cargo/Vaga: <strong className="text-slate-800">{job}</strong>
+                        {h.clienteNome && <span> | Cliente: <strong className="text-slate-800">{h.clienteNome}</strong></span>}
+                      </p>
+                    </div>
+
+                    {/* Origem e Destino do Processo */}
                     <div className="grid grid-cols-2 gap-2 bg-slate-50 p-3 rounded-xl text-xs border border-slate-100">
                       <div>
-                        <span className="text-slate-400 font-medium block">Remuneração Final</span>
-                        <strong className="text-slate-800">
+                        <span className="text-slate-400 font-medium block">Destino</span>
+                        <strong className="text-slate-800 font-bold block mt-0.5">
+                          {destinationLabel}
+                        </strong>
+                      </div>
+
+                      <div>
+                        <span className="text-slate-400 font-medium block">Status do Processo</span>
+                        <span className={`inline-block px-2 py-0.5 mt-0.5 text-[10px] font-extrabold rounded-md ${
+                          isHeadhunter 
+                            ? 'bg-indigo-100 text-indigo-800 border border-indigo-200' 
+                            : 'bg-emerald-100 text-emerald-800 border border-emerald-200'
+                        }`}>
+                          {currentStatus}
+                        </span>
+                      </div>
+
+                      <div className="col-span-2 pt-1 border-t border-slate-100/60 flex justify-between items-center text-[11px]">
+                        <span className="text-slate-400">Remuneração:</span>
+                        <strong className="text-slate-800 font-bold">
                           {salary > 0 ? `R$ ${salary.toLocaleString('pt-BR')}` : 'Não informada'}
                         </strong>
                       </div>
-
-                      <div>
-                        <span className="text-slate-400 font-medium block">Origem do Processo</span>
-                        <strong className="text-slate-800 capitalize">
-                          {origin === 'headhunter' ? 'Headhunter' : 'Recrutamento Interno'}
-                        </strong>
-                      </div>
-                    </div>
-
-                    {/* Forwarding Status Badge */}
-                    <div className="flex items-center justify-between text-xs pt-1">
-                      <span className="text-slate-500 font-semibold">Status Encaminhamento:</span>
-                      {forwardStatus === 'Encaminhado' ? (
-                        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold bg-emerald-100 text-emerald-800 border border-emerald-200">
-                          <Check className="w-3.5 h-3.5" />
-                          <span>Encaminhado ({h.encaminhadoPara === 'headhunter' ? 'Headhunter' : 'DP'})</span>
-                        </span>
-                      ) : forwardStatus === 'Erro no encaminhamento' ? (
-                        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold bg-rose-100 text-rose-800 border border-rose-200">
-                          <AlertTriangle className="w-3.5 h-3.5" />
-                          <span>Erro no encaminhamento</span>
-                        </span>
-                      ) : (
-                        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold bg-amber-100 text-amber-800 border border-amber-200">
-                          <Clock className="w-3.5 h-3.5" />
-                          <span>Pendente</span>
-                        </span>
-                      )}
                     </div>
                   </div>
 
                   {/* Actions Bar */}
                   <div className="flex items-center justify-between text-xs pt-3 border-t border-slate-100 gap-2">
                     <button
-                      onClick={() => setDetailsItem(h)}
-                      className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs rounded-xl transition-all flex items-center gap-1.5 cursor-pointer"
+                      onClick={() => setDetailsItem({ ...h, admDoc, cobDoc, currentStatus })}
+                      className="px-3.5 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs rounded-xl transition-all flex items-center gap-1.5 cursor-pointer"
                     >
                       <Eye className="w-3.5 h-3.5" />
                       <span>Ver detalhes</span>
                     </button>
 
-                    <button
-                      onClick={() => handleOpenForwardModal(h)}
-                      className={`px-3.5 py-1.5 font-extrabold text-xs rounded-xl transition-all flex items-center gap-1.5 cursor-pointer shadow-2xs ${
-                        forwardStatus === 'Encaminhado'
-                          ? 'bg-slate-100 hover:bg-slate-200 text-slate-700'
-                          : 'bg-indigo-600 hover:bg-indigo-700 text-white'
-                      }`}
-                    >
-                      <Send className="w-3.5 h-3.5" />
-                      <span>{forwardStatus === 'Encaminhado' ? 'Reencaminhar' : 'Encaminhar'}</span>
-                    </button>
-
-                    {onOpenAiModal && (
+                    {/* Botão de Encaminhamento Direto para o Módulo Correto */}
+                    {isHeadhunter ? (
                       <button
-                        onClick={() => onOpenAiModal('mensagemCandidato', { candidateName: name, jobTitle: job })}
-                        className="px-2.5 py-1.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-extrabold text-xs rounded-xl transition-all flex items-center gap-1 cursor-pointer"
-                        title="Boas-Vindas IA"
+                        type="button"
+                        onClick={() => handleOpenFinancial(h)}
+                        disabled={openingFinancialId === h.id}
+                        className="px-4 py-2 font-extrabold text-xs rounded-xl transition-all flex items-center gap-1.5 cursor-pointer shadow-2xs bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white"
                       >
-                        <Sparkles className="w-3.5 h-3.5 text-amber-500" />
+                        {openingFinancialId === h.id ? (
+                          <>
+                            <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                            <span>Abrindo...</span>
+                          </>
+                        ) : (
+                          <>
+                            <DollarSign className="w-3.5 h-3.5" />
+                            <span>Abrir Financeiro</span>
+                            <ArrowRight className="w-3 h-3 ml-0.5" />
+                          </>
+                        )}
+                      </button>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => handleOpenAdmission(h)}
+                        disabled={openingAdmissionId === h.id}
+                        className="px-4 py-2 font-extrabold text-xs rounded-xl transition-all flex items-center gap-1.5 cursor-pointer shadow-2xs bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white"
+                      >
+                        {openingAdmissionId === h.id ? (
+                          <>
+                            <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                            <span>Abrindo...</span>
+                          </>
+                        ) : (
+                          <>
+                            <UserCheck className="w-3.5 h-3.5" />
+                            <span>Abrir Admissão</span>
+                            <ArrowRight className="w-3 h-3 ml-0.5" />
+                          </>
+                        )}
                       </button>
                     )}
                   </div>
@@ -303,121 +668,17 @@ export const UnifiedContratacoesView: React.FC<UnifiedContratacoesViewProps> = (
         </div>
       )}
 
-      {/* MODAL 1: Encaminhar Contratação */}
-      {forwardingItem && (
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 z-50 animate-fade-in">
-          <div className="bg-white rounded-2xl max-w-lg w-full p-6 shadow-2xl border border-slate-100 space-y-5">
-            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-              <div className="flex items-center gap-2">
-                <Send className="w-5 h-5 text-indigo-600" />
-                <h3 className="text-lg font-black text-slate-900">Encaminhar Contratação</h3>
-              </div>
-              <button 
-                onClick={() => setForwardingItem(null)}
-                className="text-slate-400 hover:text-slate-600 p-1 rounded-lg hover:bg-slate-100 cursor-pointer"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            <div className="bg-slate-50 p-4 rounded-xl space-y-2 border border-slate-100 text-xs text-slate-700">
-              <p><strong>Candidato:</strong> {forwardingItem.candidatoNome || forwardingItem.candidateName}</p>
-              <p><strong>Vaga:</strong> {forwardingItem.vagaTitulo || forwardingItem.jobTitle}</p>
-              <p><strong>Origem:</strong> {forwardingItem.origemProcesso === 'headhunter' ? 'Headhunter' : 'Recrutamento Interno'}</p>
-            </div>
-
-            <div className="space-y-3">
-              <label className="text-xs font-bold text-slate-800 block">
-                Selecione o destino do encaminhamento:
-              </label>
-
-              <div className="grid grid-cols-1 gap-2">
-                <label 
-                  onClick={() => setTargetDestination('departamento_pessoal')}
-                  className={`p-3.5 rounded-xl border-2 flex items-center gap-3 cursor-pointer transition-all ${
-                    targetDestination === 'departamento_pessoal'
-                      ? 'border-indigo-600 bg-indigo-50/50 text-indigo-950 font-bold'
-                      : 'border-slate-200 bg-white hover:border-slate-300 text-slate-700'
-                  }`}
-                >
-                  <input
-                    type="radio"
-                    name="dest"
-                    value="departamento_pessoal"
-                    checked={targetDestination === 'departamento_pessoal'}
-                    onChange={() => setTargetDestination('departamento_pessoal')}
-                    className="accent-indigo-600"
-                  />
-                  <div>
-                    <span className="text-xs font-bold block">Departamento Pessoal (DP)</span>
-                    <span className="text-[11px] text-slate-500 font-normal block">Envia para a fila de admissão interna para coleta de documentos e CLT.</span>
-                  </div>
-                </label>
-
-                <label 
-                  onClick={() => setTargetDestination('headhunter')}
-                  className={`p-3.5 rounded-xl border-2 flex items-center gap-3 cursor-pointer transition-all ${
-                    targetDestination === 'headhunter'
-                      ? 'border-indigo-600 bg-indigo-50/50 text-indigo-950 font-bold'
-                      : 'border-slate-200 bg-white hover:border-slate-300 text-slate-700'
-                  }`}
-                >
-                  <input
-                    type="radio"
-                    name="dest"
-                    value="headhunter"
-                    checked={targetDestination === 'headhunter'}
-                    onChange={() => setTargetDestination('headhunter')}
-                    className="accent-indigo-600"
-                  />
-                  <div>
-                    <span className="text-xs font-bold block">Headhunter / Placement Externo</span>
-                    <span className="text-[11px] text-slate-500 font-normal block">Registra o placement de cliente externo no módulo Headhunter.</span>
-                  </div>
-                </label>
-              </div>
-            </div>
-
-            <div className="flex items-center justify-end gap-3 pt-3 border-t border-slate-100">
-              <button
-                type="button"
-                onClick={() => setForwardingItem(null)}
-                disabled={isSubmittingForward}
-                className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold rounded-xl transition-all cursor-pointer"
-              >
-                Cancelar
-              </button>
-              <button
-                type="button"
-                onClick={handleConfirmForwarding}
-                disabled={isSubmittingForward}
-                className="px-5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-extrabold rounded-xl transition-all flex items-center gap-2 cursor-pointer shadow-md disabled:opacity-50"
-              >
-                {isSubmittingForward ? (
-                  <>
-                    <Loader2 className="w-4 h-4 animate-spin" />
-                    <span>Encaminhando...</span>
-                  </>
-                ) : (
-                  <>
-                    <Send className="w-4 h-4" />
-                    <span>Confirmar Encaminhamento</span>
-                  </>
-                )}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* MODAL 2: Detalhes da Contratação */}
+      {/* MODAL: Detalhes da Contratação & Auditoria Timeline */}
       {detailsItem && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 z-50 animate-fade-in">
-          <div className="bg-white rounded-2xl max-w-xl w-full p-6 shadow-2xl border border-slate-100 space-y-5">
+          <div className="bg-white rounded-2xl max-w-2xl w-full p-6 shadow-2xl border border-slate-100 space-y-5 max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between border-b border-slate-100 pb-3">
               <div className="flex items-center gap-2">
                 <FileText className="w-5 h-5 text-emerald-600" />
-                <h3 className="text-lg font-black text-slate-900">Detalhes da Contratação</h3>
+                <div>
+                  <h3 className="text-lg font-black text-slate-900">Detalhes & Linha do Tempo</h3>
+                  <p className="text-xs text-slate-500 font-medium">Registro unificado de auditoria da contratação</p>
+                </div>
               </div>
               <button 
                 onClick={() => setDetailsItem(null)}
@@ -433,6 +694,7 @@ export const UnifiedContratacoesView: React.FC<UnifiedContratacoesViewProps> = (
                 <strong className="text-slate-900 font-bold text-sm block mt-0.5">
                   {detailsItem.candidatoNome || detailsItem.candidateName}
                 </strong>
+                {detailsItem.cpf && <span className="text-slate-400 text-[10px]">CPF: {detailsItem.cpf}</span>}
               </div>
 
               <div className="bg-slate-50 p-3 rounded-xl border border-slate-100">
@@ -440,10 +702,11 @@ export const UnifiedContratacoesView: React.FC<UnifiedContratacoesViewProps> = (
                 <strong className="text-slate-900 font-bold text-sm block mt-0.5">
                   {detailsItem.vagaTitulo || detailsItem.jobTitle}
                 </strong>
+                {detailsItem.department && <span className="text-slate-400 text-[10px]">Depto: {detailsItem.department}</span>}
               </div>
 
               <div className="bg-slate-50 p-3 rounded-xl border border-slate-100">
-                <span className="text-slate-400 font-medium block">Data de Contratação</span>
+                <span className="text-slate-400 font-medium block">Data da Contratação</span>
                 <strong className="text-slate-900 font-bold block mt-0.5">
                   {formatDate(detailsItem.contratadoEm || detailsItem.dataContratacao || detailsItem.createdAt)}
                 </strong>
@@ -461,25 +724,78 @@ export const UnifiedContratacoesView: React.FC<UnifiedContratacoesViewProps> = (
               <div className="bg-slate-50 p-3 rounded-xl border border-slate-100">
                 <span className="text-slate-400 font-medium block">Origem do Processo</span>
                 <strong className="text-slate-900 font-bold block mt-0.5 capitalize">
-                  {detailsItem.origemProcesso === 'headhunter' ? 'Headhunter (Cliente Externo)' : 'Recrutamento Interno'}
+                  {detailsItem.origemProcesso === 'headhunter' ? 'Headhunter (Cliente Externo)' : 'RH Interno / Empresa'}
                 </strong>
               </div>
 
               <div className="bg-slate-50 p-3 rounded-xl border border-slate-100">
-                <span className="text-slate-400 font-medium block">Status do Encaminhamento</span>
+                <span className="text-slate-400 font-medium block">Destino & Status Atual</span>
                 <strong className="text-indigo-700 font-bold block mt-0.5">
-                  {detailsItem.statusEncaminhamento || 'Pendente'}
-                  {detailsItem.encaminhadoPara && ` (${detailsItem.encaminhadoPara})`}
+                  {detailsItem.currentStatus}
                 </strong>
               </div>
             </div>
 
-            {detailsItem.clienteNome && (
-              <div className="bg-slate-50 p-3 rounded-xl border border-slate-100 text-xs">
-                <span className="text-slate-400 font-medium block">Cliente Headhunter</span>
-                <strong className="text-slate-900 font-bold block mt-0.5">{detailsItem.clienteNome}</strong>
+            {/* Linha do Tempo e Auditoria Sincronizada */}
+            <div className="space-y-3 pt-2">
+              <div className="flex items-center gap-2 border-b border-slate-100 pb-2">
+                <History className="w-4 h-4 text-indigo-600" />
+                <h4 className="text-xs font-black text-slate-900 uppercase tracking-wider">Histórico de Auditoria & Timeline Sincronizada</h4>
               </div>
-            )}
+
+              <div className="space-y-2 max-h-48 overflow-y-auto pr-1">
+                {/* Timeline unificada */}
+                {[
+                  ...(detailsItem.timeline || []),
+                  ...(detailsItem.admDoc?.historicoEtapas || []).map((e: any) => ({
+                    id: e.id || `adm-evt-${e.dataHora}`,
+                    title: e.acao || 'Atualização DP',
+                    description: e.descricao || `Status: ${e.novoStatus || 'Sincronizado'}`,
+                    date: e.dataHora ? e.dataHora.replace('T', ' ').substring(0, 16) : 'Recente',
+                    by: e.usuario || 'Departamento Pessoal'
+                  })),
+                  ...(detailsItem.cobDoc?.historicoStatus || []).map((e: any) => ({
+                    id: e.id || `cob-evt-${e.dataHora}`,
+                    title: 'Atualização Financeiro',
+                    description: e.descricao || `Status: ${e.novoStatus}`,
+                    date: e.dataHora ? e.dataHora.replace('T', ' ').substring(0, 16) : 'Recente',
+                    by: e.usuario || 'Financeiro'
+                  }))
+                ].length === 0 ? (
+                  <p className="text-xs text-slate-400 italic">Sem registros adicionais na linha do tempo.</p>
+                ) : (
+                  [
+                    ...(detailsItem.timeline || []),
+                    ...(detailsItem.admDoc?.historicoEtapas || []).map((e: any) => ({
+                      id: e.id || `adm-evt-${e.dataHora}`,
+                      title: e.acao || 'Atualização DP',
+                      description: e.descricao || `Status: ${e.novoStatus || 'Sincronizado'}`,
+                      date: e.dataHora ? e.dataHora.replace('T', ' ').substring(0, 16) : 'Recente',
+                      by: e.usuario || 'Departamento Pessoal'
+                    })),
+                    ...(detailsItem.cobDoc?.historicoStatus || []).map((e: any) => ({
+                      id: e.id || `cob-evt-${e.dataHora}`,
+                      title: 'Atualização Financeiro',
+                      description: e.descricao || `Status: ${e.novoStatus}`,
+                      date: e.dataHora ? e.dataHora.replace('T', ' ').substring(0, 16) : 'Recente',
+                      by: e.usuario || 'Financeiro'
+                    }))
+                  ].map((evt: any, idx: number) => (
+                    <div key={evt.id || idx} className="flex gap-3 text-xs bg-slate-50 p-3 rounded-xl border border-slate-100 items-start">
+                      <div className="w-2 h-2 rounded-full bg-indigo-600 mt-1.5 shrink-0" />
+                      <div className="space-y-0.5 flex-1">
+                        <div className="flex justify-between items-center">
+                          <strong className="text-slate-900 font-bold">{evt.title}</strong>
+                          <span className="text-[10px] text-slate-400">{evt.date}</span>
+                        </div>
+                        <p className="text-slate-600 text-[11px]">{evt.description}</p>
+                        {evt.by && <span className="text-[10px] text-slate-400 block">Por: {evt.by}</span>}
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
 
             <div className="flex justify-end pt-3 border-t border-slate-100">
               <button

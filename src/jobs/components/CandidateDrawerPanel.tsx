@@ -25,7 +25,9 @@ import {
   Video, 
   Plus,
   ExternalLink,
-  ChevronRight
+  ChevronRight,
+  Send,
+  Loader2
 } from 'lucide-react';
 import { 
   JobCandidateApplication, 
@@ -86,6 +88,51 @@ export const CandidateDrawerPanel: React.FC<CandidateDrawerPanelProps> = ({
   const [isHireModalOpen, setIsHireModalOpen] = useState(false);
   const [closeOtherCandidates, setCloseOtherCandidates] = useState(true);
   const [isSubmittingHire, setIsSubmittingHire] = useState(false);
+
+  // State for Admission Flow
+  const [isSentToAdmission, setIsSentToAdmission] = useState(false);
+  const [isSubmittingAdmission, setIsSubmittingAdmission] = useState(false);
+
+  const formatDate = (isoOrStr?: string) => {
+    if (!isoOrStr) return new Date().toLocaleDateString('pt-BR');
+    try {
+      const date = new Date(isoOrStr);
+      if (isNaN(date.getTime())) return isoOrStr;
+      return date.toLocaleDateString('pt-BR');
+    } catch {
+      return isoOrStr;
+    }
+  };
+
+  const handleSendToAdmission = async () => {
+    if (!candidate) return;
+    setIsSubmittingAdmission(true);
+    try {
+      await enviarCandidatoParaAdmissaoDP({
+        id: candidate.id,
+        candidateId: candidate.candidateId || candidate.id,
+        jobId: candidate.jobId,
+        companyId: candidate.companyId,
+        name: candidate.name,
+        email: candidate.email || '',
+        phone: candidate.phone || '',
+        cpf: candidate.cpf || '',
+        role: jobTitle || candidate.role || 'Cargo não informado',
+        vagaTitulo: jobTitle || candidate.role || 'Cargo não informado',
+        department: (candidate as any).department || 'Não informado',
+        salaryExpectation: candidate.salaryExpectation || 0,
+        city: candidate.city || '',
+        state: candidate.state || ''
+      });
+      setIsSentToAdmission(true);
+      alert('Solicitação de admissão enviada com sucesso para o Departamento Pessoal!');
+    } catch (err: any) {
+      console.error('Erro ao enviar para admissão:', err);
+      alert(`Erro ao enviar para admissão: ${err?.message || 'Falha na operação'}`);
+    } finally {
+      setIsSubmittingAdmission(false);
+    }
+  };
 
   const cleanPhone = candidate.phone.replace(/\D/g, '');
   const whatsappUrl = `https://wa.me/55${cleanPhone}?text=${encodeURIComponent(`Olá ${candidate.name}, vi seu perfil no MAIS RH para a vaga de ${jobTitle || candidate.role}.`)}`;
@@ -306,6 +353,56 @@ export const CandidateDrawerPanel: React.FC<CandidateDrawerPanelProps> = ({
                 </div>
               </div>
             </div>
+
+            {/* Green Card: Contratação Concluída */}
+            {candidate.status === 'Contratado' && (
+              <div className="w-full bg-emerald-50 border border-emerald-200 rounded-2xl p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 shadow-2xs">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-xl bg-emerald-600 text-white flex items-center justify-center shrink-0 font-bold shadow-2xs">
+                    <CheckCircle2 className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm font-black text-emerald-950">Contratação concluída</span>
+                      <span className="bg-emerald-100 text-emerald-800 text-[10px] font-extrabold px-2 py-0.5 rounded-full border border-emerald-300">
+                        Contratado
+                      </span>
+                    </div>
+                    <p className="text-xs text-emerald-700 font-medium mt-0.5">
+                      Data da contratação: <strong className="text-emerald-900">{formatDate(candidate.updatedAt || candidate.createdAt || new Date().toISOString())}</strong>
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-2 w-full sm:w-auto">
+                  {isSentToAdmission ? (
+                    <span className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold bg-emerald-100 text-emerald-800 border border-emerald-300 w-full sm:w-auto justify-center">
+                      <Clock className="w-3.5 h-3.5 text-emerald-700" />
+                      Aguardando admissão
+                    </span>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={handleSendToAdmission}
+                      disabled={isSubmittingAdmission}
+                      className="w-full sm:w-auto px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-extrabold flex items-center justify-center gap-1.5 shadow-md transition-all cursor-pointer disabled:opacity-50"
+                    >
+                      {isSubmittingAdmission ? (
+                        <>
+                          <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                          <span>Enviando...</span>
+                        </>
+                      ) : (
+                        <>
+                          <Send className="w-3.5 h-3.5" />
+                          <span>Enviar para Admissão</span>
+                        </>
+                      )}
+                    </button>
+                  )}
+                </div>
+              </div>
+            )}
 
             {/* Quick Action Buttons Grid in Drawer Header */}
             <div className="grid w-full grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-2">

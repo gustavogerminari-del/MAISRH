@@ -1,9 +1,10 @@
 import React from 'react';
 import { InterviewStatus, InterviewType } from '../types/interview';
 import { Video, MapPin, Phone, Clock } from 'lucide-react';
+import { normalizeInterviewStatus } from '../utils/interviewUtils';
 
 export interface InterviewStatusBadgeProps {
-  status: InterviewStatus;
+  status: InterviewStatus | string;
   size?: 'sm' | 'md';
 }
 
@@ -11,6 +12,8 @@ export const InterviewStatusBadge: React.FC<InterviewStatusBadgeProps> = ({
   status,
   size = 'sm',
 }) => {
+  const normStatus = normalizeInterviewStatus(status);
+
   const stylesMap: Record<InterviewStatus, string> = {
     'Agendada': 'bg-amber-50 text-amber-800 border-amber-200',
     'Realizada': 'bg-blue-50 text-blue-800 border-blue-200',
@@ -27,12 +30,12 @@ export const InterviewStatusBadge: React.FC<InterviewStatusBadgeProps> = ({
 
   return (
     <span
-      className={`border ${stylesMap[status] || 'bg-slate-100 text-slate-700 border-slate-200'} ${
+      className={`border ${stylesMap[normStatus] || 'bg-slate-100 text-slate-700 border-slate-200'} ${
         sizeStyles[size]
       } inline-flex items-center gap-1 shrink-0`}
     >
       <span className="w-1.5 h-1.5 rounded-full bg-current opacity-75" />
-      {status}
+      {normStatus}
     </span>
   );
 };
