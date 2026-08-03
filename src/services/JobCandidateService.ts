@@ -548,10 +548,8 @@ export class JobCandidateService {
           if (data.candidateId) {
             try {
               await CandidateService.update(data.candidateId, {
-                disponivelBancoTalentos: true,
-                ultimoStatusProcesso: 'Vaga Preenchida',
-                ultimaVagaId: candidate.jobId,
-                updatedAt: now
+                status: 'Ativo',
+                notes: `Participou da vaga ${candidate.jobId} (Vaga Preenchida por outro candidato). Perfil mantido no Banco de Talentos.`
               });
             } catch (pErr) {
               console.warn(`Aviso ao atualizar Banco de Talentos do candidato ${data.candidateId}:`, pErr);
