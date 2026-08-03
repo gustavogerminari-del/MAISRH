@@ -697,7 +697,6 @@ export const INITIAL_NAVIGATION_MENUS: NavigationMenuItem[] = [
   { id: 'm-mais-ia', label: 'MAIS RH IA', icon: 'Sparkles', route: 'mais-rh-ia', order: 2, roles: ['TODOS'], hidden: false },
   { id: 'm-vagas', label: 'Gestão de Vagas', icon: 'Briefcase', route: 'vagas', order: 3, roles: ['TODOS'], hidden: false },
   { id: 'm-candidatos', label: 'Banco de Talentos', icon: 'Users', route: 'banco-talentos', order: 4, roles: ['TODOS'], hidden: false },
-  { id: 'm-kanban', label: 'Kanban R&S', icon: 'Kanban', route: 'processos-seletivos', order: 5, roles: ['TODOS'], hidden: false },
   { id: 'm-entrevistas', label: 'Entrevistas & IA', icon: 'Calendar', route: 'entrevistas', order: 6, roles: ['TODOS'], hidden: false },
   { id: 'm-dp', label: 'Departamento Pessoal', icon: 'Building', route: 'departamento-pessoal', order: 7, roles: ['Administrador', 'RH', 'Gestor'], hidden: false },
   { id: 'm-ponto', label: 'Ponto Eletrônico', icon: 'Clock', route: 'ponto-digital', order: 8, roles: ['TODOS'], hidden: false },

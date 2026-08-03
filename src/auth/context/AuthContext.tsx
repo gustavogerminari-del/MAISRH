@@ -397,7 +397,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       vagas: 'vagas',
       candidatos: 'bancoTalentos',
       'banco-talentos': 'bancoTalentos',
-      'processos-seletivos': 'vagas',
       entrevistas: 'entrevistas',
       contratacoes: 'vagas',
       headhunter: 'headhunter',

@@ -371,15 +371,6 @@ function MainAppContent() {
               />
             )}
 
-            {activeTab === 'processos-seletivos' && (
-              <UnifiedPipelineView
-                origemProcesso="interno"
-                job={(jobs[0] as any) || { id: 'vaga-0', titulo: 'Vaga Selecionada', origemProcesso: 'interno' }}
-                candidates={candidates as any}
-                onBack={() => setActiveTab('vagas')}
-              />
-            )}
-
             {activeTab === 'entrevistas' && (
               <InterviewsView
                 interviews={interviews}

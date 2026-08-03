@@ -44,7 +44,6 @@ export type MainTab =
   | 'vagas' 
   | 'candidatos' 
   | 'banco-talentos' 
-  | 'processos-seletivos' 
   | 'entrevistas' 
   | 'contratacoes' 
   | 'headhunter'
@@ -146,7 +145,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
         { id: 'vagas', label: 'Vagas', icon: Briefcase, badge: jobsCount > 0 ? jobsCount : undefined },
         { id: 'candidatos', label: 'Candidatos', icon: Users, badge: candidatesCount > 0 ? candidatesCount : undefined },
         { id: 'banco-talentos', label: 'Banco de Talentos', icon: Contact },
-        { id: 'processos-seletivos', label: 'Processos Seletivos', icon: ListChecks },
         { id: 'entrevistas', label: 'Entrevistas', icon: Video, badge: interviewsCount > 0 ? interviewsCount : undefined },
         { id: 'contratacoes', label: 'Contratações', icon: UserCheck },
       ]
