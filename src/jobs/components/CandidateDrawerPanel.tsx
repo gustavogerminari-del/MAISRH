@@ -39,7 +39,6 @@ import { JobService } from '../../services/JobService';
 import { Button } from '../../shared';
 import { ScheduleInterviewModal } from './ScheduleInterviewModal';
 import { enviarCandidatoParaAdmissaoDP } from '../../departamento-pessoal/services/dpFirestoreService';
-import { HeadhunterFinalizationPanelModal } from '../../headhunter/components/HeadhunterFinalizationPanelModal';
 
 interface CandidateDrawerPanelProps {
   candidate: JobCandidateApplication | null;
@@ -94,9 +93,6 @@ export const CandidateDrawerPanel: React.FC<CandidateDrawerPanelProps> = ({
   // State for Admission Flow
   const [isSentToAdmission, setIsSentToAdmission] = useState(false);
   const [isSubmittingAdmission, setIsSubmittingAdmission] = useState(false);
-
-  // State for Headhunter Finalization Panel Modal
-  const [isHeadhunterPanelOpen, setIsHeadhunterPanelOpen] = useState(false);
 
   const formatDate = (isoOrStr?: string) => {
     if (!isoOrStr) return new Date().toLocaleDateString('pt-BR');
@@ -390,73 +386,54 @@ export const CandidateDrawerPanel: React.FC<CandidateDrawerPanelProps> = ({
             </div>
 
             {/* Green Card: Contratação Concluída */}
-            {candidate.status === 'Contratado' && (() => {
-              const isHeadhunterCandidate = Boolean(
-                candidate.isHeadhunter ||
-                (candidate as any).origemProcesso === 'headhunter' ||
-                (candidate as any).origemProcesso === 'HEADHUNTER' ||
-                (candidate as any).origem === 'headhunter' ||
-                (candidate as any).moduloOrigem === 'headhunter'
-              );
-
-              return (
-                <div className="w-full bg-emerald-50 border border-emerald-200 rounded-2xl p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 shadow-2xs">
-                  <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-xl bg-emerald-600 text-white flex items-center justify-center shrink-0 font-bold shadow-2xs">
-                      <CheckCircle2 className="w-5 h-5" />
-                    </div>
-                    <div>
-                      <div className="flex items-center gap-2">
-                        <span className="text-sm font-black text-emerald-950">Contratação concluída</span>
-                        <span className="bg-emerald-100 text-emerald-800 text-[10px] font-extrabold px-2 py-0.5 rounded-full border border-emerald-300">
-                          {isHeadhunterCandidate ? 'Headhunter' : 'Interno (DP)'}
-                        </span>
-                      </div>
-                      <p className="text-xs text-emerald-700 font-medium mt-0.5">
-                        Data da contratação: <strong className="text-emerald-900">{formatDate(candidate.updatedAt || candidate.createdAt || new Date().toISOString())}</strong>
-                      </p>
-                    </div>
+            {candidate.status === 'Contratado' && (
+              <div className="w-full bg-emerald-50 border border-emerald-200 rounded-2xl p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 shadow-2xs">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-xl bg-emerald-600 text-white flex items-center justify-center shrink-0 font-bold shadow-2xs">
+                    <CheckCircle2 className="w-5 h-5" />
                   </div>
-
-                  <div className="flex items-center gap-2 w-full sm:w-auto">
-                    {isHeadhunterCandidate ? (
-                      <button
-                        type="button"
-                        onClick={() => setIsHeadhunterPanelOpen(true)}
-                        className="w-full sm:w-auto px-4 py-2 rounded-xl bg-amber-500 hover:bg-amber-600 text-slate-950 text-xs font-black flex items-center justify-center gap-1.5 shadow-md transition-all cursor-pointer"
-                      >
-                        <CheckCircle2 className="w-3.5 h-3.5" />
-                        <span>Finalizar Processo</span>
-                      </button>
-                    ) : isSentToAdmission ? (
-                      <span className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold bg-emerald-100 text-emerald-800 border border-emerald-300 w-full sm:w-auto justify-center">
-                        <Clock className="w-3.5 h-3.5 text-emerald-700" />
-                        Aguardando admissão
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm font-black text-emerald-950">Contratação concluída</span>
+                      <span className="bg-emerald-100 text-emerald-800 text-[10px] font-extrabold px-2 py-0.5 rounded-full border border-emerald-300">
+                        Contratado
                       </span>
-                    ) : (
-                      <button
-                        type="button"
-                        onClick={handleSendToAdmission}
-                        disabled={isSubmittingAdmission}
-                        className="w-full sm:w-auto px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-extrabold flex items-center justify-center gap-1.5 shadow-md transition-all cursor-pointer disabled:opacity-50"
-                      >
-                        {isSubmittingAdmission ? (
-                          <>
-                            <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                            <span>Enviando...</span>
-                          </>
-                        ) : (
-                          <>
-                            <Send className="w-3.5 h-3.5" />
-                            <span>Abrir Admissão</span>
-                          </>
-                        )}
-                      </button>
-                    )}
+                    </div>
+                    <p className="text-xs text-emerald-700 font-medium mt-0.5">
+                      Data da contratação: <strong className="text-emerald-900">{formatDate(candidate.updatedAt || candidate.createdAt || new Date().toISOString())}</strong>
+                    </p>
                   </div>
                 </div>
-              );
-            })()}
+
+                <div className="flex items-center gap-2 w-full sm:w-auto">
+                  {isSentToAdmission ? (
+                    <span className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold bg-emerald-100 text-emerald-800 border border-emerald-300 w-full sm:w-auto justify-center">
+                      <Clock className="w-3.5 h-3.5 text-emerald-700" />
+                      Aguardando admissão
+                    </span>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={handleSendToAdmission}
+                      disabled={isSubmittingAdmission}
+                      className="w-full sm:w-auto px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-extrabold flex items-center justify-center gap-1.5 shadow-md transition-all cursor-pointer disabled:opacity-50"
+                    >
+                      {isSubmittingAdmission ? (
+                        <>
+                          <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                          <span>Enviando...</span>
+                        </>
+                      ) : (
+                        <>
+                          <Send className="w-3.5 h-3.5" />
+                          <span>Enviar para Admissão</span>
+                        </>
+                      )}
+                    </button>
+                  )}
+                </div>
+              </div>
+            )}
 
             {/* Quick Action Buttons Grid in Drawer Header */}
             <div className="grid w-full grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-2">
@@ -1497,22 +1474,6 @@ export const CandidateDrawerPanel: React.FC<CandidateDrawerPanelProps> = ({
             </div>
           </div>
         </div>
-      )}
-
-      {/* Headhunter Finalization Panel Modal */}
-      {isHeadhunterPanelOpen && candidate && (
-        <HeadhunterFinalizationPanelModal
-          isOpen={isHeadhunterPanelOpen}
-          onClose={() => setIsHeadhunterPanelOpen(false)}
-          job={{
-            id: candidate.jobId,
-            titulo: jobTitle || candidate.role,
-            clienteNome: (candidate as any).clienteNome,
-            responsavelComercial: (candidate as any).consultorResponsavel
-          }}
-          candidate={candidate}
-          onRefresh={onRefresh}
-        />
       )}
     </div>
   );

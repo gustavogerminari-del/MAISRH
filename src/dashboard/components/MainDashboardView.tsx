@@ -41,10 +41,10 @@ export const MainDashboardView: React.FC<MainDashboardViewProps> = ({
   const { user, hasActionAccess, isModuleActive } = useAuth();
   const isMaster = user?.role === 'Super Administrador' || user?.tipoUsuario === 'MASTER';
 
-  const showVagas = isMaster || isModuleActive('recrutamento');
+  const showVagas = isMaster || isModuleActive('vagas');
   const showTalentos = isMaster || isModuleActive('bancoTalentos');
   const showEntrevistas = isMaster || isModuleActive('entrevistas');
-  const showContratacoes = isMaster || isModuleActive('recrutamento');
+  const showContratacoes = isMaster || isModuleActive('vagas');
   const showIA = isMaster || isModuleActive('iaConsultora') || isModuleActive('relatoriosAvancados');
 
   const [metrics, setMetrics] = useState({

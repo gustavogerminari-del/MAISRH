@@ -34,7 +34,6 @@ import { ProcessStage, UnifiedJob } from '../../types/recruitment';
 import { enviarCandidatoParaAdmissaoDP } from '../../../departamento-pessoal/services/dpFirestoreService';
 import { JobCandidateService } from '../../../services/JobCandidateService';
 import { JobService } from '../../../services/JobService';
-import { HeadhunterFinalizationPanelModal } from '../../../headhunter/components/HeadhunterFinalizationPanelModal';
 
 interface CandidateDrawerProps {
   candidate: CandidateWithProcess;
@@ -73,9 +72,6 @@ export const CandidateDrawer: React.FC<CandidateDrawerProps> = ({
   // Stage Modal state
   const [isStageModalOpen, setIsStageModalOpen] = useState(false);
   const [targetStage, setTargetStage] = useState<ProcessStage>(candidate.etapaAtual);
-
-  // Headhunter Finalization Panel Modal
-  const [isHeadhunterPanelOpen, setIsHeadhunterPanelOpen] = useState(false);
 
   const stagesList: ProcessStage[] = [
     'Inscrito',
@@ -239,28 +235,13 @@ export const CandidateDrawer: React.FC<CandidateDrawerProps> = ({
               <span>E-mail</span>
             </button>
 
-            {Boolean(
-              job.isHeadhunter ||
-              job.origemProcesso === 'headhunter' ||
-              job.origemProcesso === 'HEADHUNTER' ||
-              candidate.isHeadhunter
-            ) ? (
-              <button
-                onClick={() => setIsHeadhunterPanelOpen(true)}
-                className="px-3 py-1.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-black flex items-center gap-1.5 transition cursor-pointer shadow-xs"
-              >
-                <CheckCircle2 className="w-3.5 h-3.5" />
-                <span>Finalizar Processo</span>
-              </button>
-            ) : (
-              <button
-                onClick={handleContratar}
-                className="px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-extrabold flex items-center gap-1.5 transition cursor-pointer shadow-xs"
-              >
-                <Send className="w-3.5 h-3.5" />
-                <span>Abrir Admissão</span>
-              </button>
-            )}
+            <button
+              onClick={handleContratar}
+              className="px-3 py-1.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-black flex items-center gap-1.5 transition"
+            >
+              <CheckCircle2 className="w-3.5 h-3.5" />
+              <span>Contratar</span>
+            </button>
 
             <button
               onClick={handleReprovar}
@@ -732,34 +713,6 @@ export const CandidateDrawer: React.FC<CandidateDrawerProps> = ({
             </div>
           </div>
         </div>
-      )}
-
-      {/* Modal Finalização Headhunter */}
-      {isHeadhunterPanelOpen && (
-        <HeadhunterFinalizationPanelModal
-          isOpen={isHeadhunterPanelOpen}
-          onClose={() => setIsHeadhunterPanelOpen(false)}
-          job={{
-            id: job.id,
-            titulo: job.titulo,
-            clienteNome: (job as any).clienteNome,
-            responsavelComercial: (job as any).responsavelComercial
-          }}
-          candidate={{
-            id: candidate.id,
-            candidateId: candidate.candidatoId || candidate.id,
-            jobId: job.id,
-            name: candidate.nome,
-            role: job.titulo,
-            email: candidate.email || '',
-            phone: candidate.telefone || ''
-          }}
-          onRefresh={async () => {
-            if (onUpdateCandidate) {
-              onUpdateCandidate({ ...candidate, etapaAtual: 'Contratado' });
-            }
-          }}
-        />
       )}
 
     </div>

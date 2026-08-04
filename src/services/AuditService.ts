@@ -27,7 +27,6 @@ export class AuditService {
     targetEntity?: string;
     severity?: AuditSeverity;
     companyId?: string;
-    empresaId?: string;
     createdBy?: string;
   }): Promise<AuditLogEntry> {
     const id = `log-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;

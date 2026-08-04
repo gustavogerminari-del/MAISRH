@@ -13,7 +13,7 @@ import {
   writeBatch
 } from 'firebase/firestore';
 import { db, auth } from '../lib/firebase';
-import { sanitizeFirestoreData, resolveEmpresaId } from '../lib/firestoreUtils';
+import { sanitizeFirestoreData } from '../lib/firestoreUtils';
 import { AuditService } from './AuditService';
 import { CandidateService } from './CandidateService';
 import { JobService } from './JobService';
@@ -489,7 +489,7 @@ export class JobCandidateService {
         console.warn('[HIRE] Não foi possível buscar dados da vaga:', e);
       }
 
-      const companyIdToUse = resolveEmpresaId(candidate.companyId || jobData?.companyId || jobData?.empresaId);
+      const companyIdToUse = candidate.companyId || jobData?.companyId || 'emp-001';
       const capabilities = await getCompanyCapabilitiesFromFirestore(companyIdToUse);
 
       const resolvedOrigin = resolveJobOriginWithCompany(jobData || candidate, capabilities);
@@ -602,11 +602,10 @@ export class JobCandidateService {
 
       if (isHeadhunter) {
         const cobrancaId = `cob_${contratacaoId}`;
-        const resolvedEmpId = resolveEmpresaId(candidate.companyId);
         const cobrancaDoc = sanitizeFirestoreData({
           id: cobrancaId,
-          companyId: resolvedEmpId,
-          empresaId: resolvedEmpId,
+          companyId: candidate.companyId || 'emp-001',
+          empresaId: candidate.companyId || 'emp-001',
           clientId: (candidate as any).clienteId || (candidate as any).clientId || jobData?.clientId || jobData?.clienteId || 'cli-001',
           clienteId: (candidate as any).clienteId || (candidate as any).clientId || jobData?.clientId || jobData?.clienteId || 'cli-001',
           clienteNome: (candidate as any).clienteNome || jobData?.clienteNome || 'Cliente Headhunter',
@@ -643,11 +642,10 @@ export class JobCandidateService {
         batch.set(doc(db, 'financeiro_cobrancas', cobrancaId), cobrancaDoc, { merge: true });
       } else {
         const admissaoId = `adm_${contratacaoId}`;
-        const resolvedEmpId = resolveEmpresaId(candidate.companyId);
         const admissaoDoc = sanitizeFirestoreData({
           id: admissaoId,
-          companyId: resolvedEmpId,
-          empresaId: resolvedEmpId,
+          companyId: candidate.companyId || 'emp-001',
+          empresaId: candidate.companyId || 'emp-001',
           candidateId: candidate.candidateId || candidate.id,
           candidatoId: candidate.candidateId || candidate.id,
           applicationId: candidate.id,

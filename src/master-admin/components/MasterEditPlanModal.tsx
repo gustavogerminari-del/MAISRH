@@ -9,7 +9,7 @@ interface MasterEditPlanModalProps {
 }
 
 const ALL_MODULES_LIST: { key: keyof TenantModulePermissions; label: string }[] = [
-  { key: 'recrutamento', label: 'Módulo de Recrutamento & Seleção (Vagas)' },
+  { key: 'vagas', label: 'Gestão de Vagas & Recrutamento' },
   { key: 'bancoTalentos', label: 'Banco de Talentos' },
   { key: 'entrevistas', label: 'Gestão de Entrevistas & Feedbacks' },
   { key: 'equipeInterna', label: 'Equipe Interna & Permissões' },

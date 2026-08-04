@@ -9,7 +9,7 @@ import {
   where 
 } from 'firebase/firestore';
 import { db, auth } from '../../lib/firebase';
-import { sanitizeFirestoreData, resolveEmpresaId } from '../../lib/firestoreUtils';
+import { sanitizeFirestoreData } from '../../lib/firestoreUtils';
 import { 
   RegistroPontoDoc, 
   EscalaTrabalhoDoc, 
@@ -36,11 +36,14 @@ const COLLECTIONS = {
   FECHAMENTOS: 'fechamentos_ponto'
 } as const;
 
-// Helper to wrap firestore errors gracefully and rethrow
-function handleFirestoreError(error: unknown, op: string, path: string): never {
+// Helper to wrap firestore errors gracefully
+function handleFirestoreError(error: unknown, op: string, path: string) {
   const msg = error instanceof Error ? error.message : String(error);
-  console.error(`[Firestore Ponto - ${op} - ${path}]:`, error);
-  throw new Error(`[Firestore Ponto - ${op} - ${path}]: ${msg}`);
+  if (msg.includes('offline') || msg.includes('unavailable') || msg.includes('permission-denied')) {
+    console.warn(`[Firestore Ponto - ${op} - ${path}]: Client is offline or unreachable. Using local storage fallback.`);
+  } else {
+    console.warn(`[Firestore Ponto - ${op} - ${path}]:`, error);
+  }
 }
 
 // Default configuration template
@@ -61,188 +64,247 @@ export const DEFAULT_CONFIG: ConfiguracoesPonto = {
   validadeBancoHorasMeses: 6
 };
 
+// Local storage key constants
+const STORAGE_KEYS = {
+  REGISTROS: 'mrh_ponto_registros',
+  ESCALAS: 'mrh_ponto_escalas',
+  AJUSTES: 'mrh_ponto_ajustes',
+  BANCO: 'mrh_ponto_banco',
+  FUNCIONARIOS: 'mrh_ponto_funcionarios',
+  CONFIG: 'mrh_ponto_config'
+};
+
 // ----------------------------------------------------------------------------
 // REGISTROS DE PONTO
 // ----------------------------------------------------------------------------
 export async function fetchRegistrosPonto(empresaId: string, dataFiltro?: string): Promise<RegistroPontoDoc[]> {
-  const resolvedId = resolveEmpresaId(empresaId);
   try {
     const q = dataFiltro 
-      ? query(collection(db, COLLECTIONS.REGISTROS), where('empresaId', '==', resolvedId), where('data', '==', dataFiltro))
-      : query(collection(db, COLLECTIONS.REGISTROS), where('empresaId', '==', resolvedId));
+      ? query(collection(db, COLLECTIONS.REGISTROS), where('empresaId', '==', empresaId), where('data', '==', dataFiltro))
+      : query(collection(db, COLLECTIONS.REGISTROS), where('empresaId', '==', empresaId));
       
     const snap = await getDocs(q);
-    const list: RegistroPontoDoc[] = [];
-    snap.forEach(d => list.push(d.data() as RegistroPontoDoc));
-    return list;
+    if (!snap.empty) {
+      const list: RegistroPontoDoc[] = [];
+      snap.forEach(d => list.push(d.data() as RegistroPontoDoc));
+      return list;
+    }
   } catch (err) {
-    console.error('Erro ao buscar registros de ponto do Firestore:', err);
-    throw err;
+    handleFirestoreError(err, 'get', COLLECTIONS.REGISTROS);
   }
+
+  // Local fallback
+  const saved = localStorage.getItem(STORAGE_KEYS.REGISTROS);
+  let list: RegistroPontoDoc[] = saved ? JSON.parse(saved) : [];
+  if (dataFiltro) {
+    list = list.filter(r => r.data === dataFiltro);
+  }
+  return list;
 }
 
 export async function salvarRegistroPonto(registro: RegistroPontoDoc): Promise<void> {
-  const resolvedId = resolveEmpresaId(registro.empresaId);
-  const dataToSave = {
-    ...registro,
-    empresaId: resolvedId,
-    companyId: resolvedId,
-    updatedAt: new Date().toISOString()
-  };
+  try {
+    const docRef = doc(db, COLLECTIONS.REGISTROS, registro.id);
+    await setDoc(docRef, sanitizeFirestoreData(registro), { merge: true });
+  } catch (err) {
+    handleFirestoreError(err, 'write', COLLECTIONS.REGISTROS);
+  }
 
-  const docRef = doc(db, COLLECTIONS.REGISTROS, registro.id);
-  await setDoc(docRef, sanitizeFirestoreData(dataToSave), { merge: true });
+  // Update localStorage
+  const saved = localStorage.getItem(STORAGE_KEYS.REGISTROS);
+  const list: RegistroPontoDoc[] = saved ? JSON.parse(saved) : [];
+  const idx = list.findIndex(r => r.id === registro.id);
+  if (idx >= 0) {
+    list[idx] = registro;
+  } else {
+    list.unshift(registro);
+  }
+  localStorage.setItem(STORAGE_KEYS.REGISTROS, JSON.stringify(list));
 }
 
 // ----------------------------------------------------------------------------
 // ESCALAS DE TRABALHO
 // ----------------------------------------------------------------------------
 export async function fetchEscalasPonto(empresaId: string): Promise<EscalaTrabalhoDoc[]> {
-  const resolvedId = resolveEmpresaId(empresaId);
   try {
-    const q = query(collection(db, COLLECTIONS.ESCALAS), where('empresaId', '==', resolvedId));
+    const q = query(collection(db, COLLECTIONS.ESCALAS), where('empresaId', '==', empresaId));
     const snap = await getDocs(q);
-    const list: EscalaTrabalhoDoc[] = [];
-    snap.forEach(d => list.push(d.data() as EscalaTrabalhoDoc));
-    return list;
+    if (!snap.empty) {
+      const list: EscalaTrabalhoDoc[] = [];
+      snap.forEach(d => list.push(d.data() as EscalaTrabalhoDoc));
+      return list;
+    }
   } catch (err) {
-    console.error('Erro ao buscar escalas no Firestore:', err);
-    throw err;
+    handleFirestoreError(err, 'get', COLLECTIONS.ESCALAS);
   }
+
+  const saved = localStorage.getItem(STORAGE_KEYS.ESCALAS);
+  return saved ? JSON.parse(saved) : [];
 }
 
 export async function salvarEscalaPonto(escala: EscalaTrabalhoDoc): Promise<void> {
-  const resolvedId = resolveEmpresaId(escala.empresaId);
-  const dataToSave = {
-    ...escala,
-    empresaId: resolvedId,
-    companyId: resolvedId,
-    updatedAt: new Date().toISOString()
-  };
+  try {
+    const docRef = doc(db, COLLECTIONS.ESCALAS, escala.id);
+    await setDoc(docRef, sanitizeFirestoreData(escala), { merge: true });
+  } catch (err) {
+    handleFirestoreError(err, 'write', COLLECTIONS.ESCALAS);
+  }
 
-  const docRef = doc(db, COLLECTIONS.ESCALAS, escala.id);
-  await setDoc(docRef, sanitizeFirestoreData(dataToSave), { merge: true });
+  const saved = localStorage.getItem(STORAGE_KEYS.ESCALAS);
+  const list: EscalaTrabalhoDoc[] = saved ? JSON.parse(saved) : [];
+  const idx = list.findIndex(e => e.id === escala.id);
+  if (idx >= 0) {
+    list[idx] = escala;
+  } else {
+    list.push(escala);
+  }
+  localStorage.setItem(STORAGE_KEYS.ESCALAS, JSON.stringify(list));
 }
 
 // ----------------------------------------------------------------------------
 // AJUSTES DE PONTO
 // ----------------------------------------------------------------------------
 export async function fetchAjustesPonto(empresaId: string): Promise<AjustePontoDoc[]> {
-  const resolvedId = resolveEmpresaId(empresaId);
   try {
-    const q = query(collection(db, COLLECTIONS.AJUSTES), where('empresaId', '==', resolvedId));
+    const q = query(collection(db, COLLECTIONS.AJUSTES), where('empresaId', '==', empresaId));
     const snap = await getDocs(q);
-    const list: AjustePontoDoc[] = [];
-    snap.forEach(d => list.push(d.data() as AjustePontoDoc));
-    return list;
+    if (!snap.empty) {
+      const list: AjustePontoDoc[] = [];
+      snap.forEach(d => list.push(d.data() as AjustePontoDoc));
+      return list;
+    }
   } catch (err) {
-    console.error('Erro ao buscar ajustes de ponto:', err);
-    throw err;
+    handleFirestoreError(err, 'get', COLLECTIONS.AJUSTES);
   }
+
+  const saved = localStorage.getItem(STORAGE_KEYS.AJUSTES);
+  return saved ? JSON.parse(saved) : [];
 }
 
 export async function salvarAjustePonto(ajuste: AjustePontoDoc): Promise<void> {
-  const resolvedId = resolveEmpresaId(ajuste.empresaId);
-  const dataToSave = {
-    ...ajuste,
-    empresaId: resolvedId,
-    companyId: resolvedId,
-    updatedAt: new Date().toISOString()
-  };
+  try {
+    const docRef = doc(db, COLLECTIONS.AJUSTES, ajuste.id);
+    await setDoc(docRef, sanitizeFirestoreData(ajuste), { merge: true });
+  } catch (err) {
+    handleFirestoreError(err, 'write', COLLECTIONS.AJUSTES);
+  }
 
-  const docRef = doc(db, COLLECTIONS.AJUSTES, ajuste.id);
-  await setDoc(docRef, sanitizeFirestoreData(dataToSave), { merge: true });
+  const saved = localStorage.getItem(STORAGE_KEYS.AJUSTES);
+  const list: AjustePontoDoc[] = saved ? JSON.parse(saved) : [];
+  const idx = list.findIndex(a => a.id === ajuste.id);
+  if (idx >= 0) {
+    list[idx] = ajuste;
+  } else {
+    list.unshift(ajuste);
+  }
+  localStorage.setItem(STORAGE_KEYS.AJUSTES, JSON.stringify(list));
 }
 
 // ----------------------------------------------------------------------------
 // BANCO DE HORAS
 // ----------------------------------------------------------------------------
 export async function fetchBancoHoras(empresaId: string): Promise<BancoHorasDoc[]> {
-  const resolvedId = resolveEmpresaId(empresaId);
   try {
-    const q = query(collection(db, COLLECTIONS.BANCO), where('empresaId', '==', resolvedId));
+    const q = query(collection(db, COLLECTIONS.BANCO), where('empresaId', '==', empresaId));
     const snap = await getDocs(q);
-    const list: BancoHorasDoc[] = [];
-    snap.forEach(d => list.push(d.data() as BancoHorasDoc));
-    return list;
+    if (!snap.empty) {
+      const list: BancoHorasDoc[] = [];
+      snap.forEach(d => list.push(d.data() as BancoHorasDoc));
+      return list;
+    }
   } catch (err) {
-    console.error('Erro ao buscar banco de horas:', err);
-    throw err;
+    handleFirestoreError(err, 'get', COLLECTIONS.BANCO);
   }
+
+  const saved = localStorage.getItem(STORAGE_KEYS.BANCO);
+  return saved ? JSON.parse(saved) : [];
 }
 
 export async function salvarBancoHoras(banco: BancoHorasDoc): Promise<void> {
-  const resolvedId = resolveEmpresaId(banco.empresaId);
-  const dataToSave = {
-    ...banco,
-    empresaId: resolvedId,
-    companyId: resolvedId,
-    updatedAt: new Date().toISOString()
-  };
+  try {
+    const docRef = doc(db, COLLECTIONS.BANCO, banco.id);
+    await setDoc(docRef, sanitizeFirestoreData(banco), { merge: true });
+  } catch (err) {
+    handleFirestoreError(err, 'write', COLLECTIONS.BANCO);
+  }
 
-  const docRef = doc(db, COLLECTIONS.BANCO, banco.id);
-  await setDoc(docRef, sanitizeFirestoreData(dataToSave), { merge: true });
+  const saved = localStorage.getItem(STORAGE_KEYS.BANCO);
+  const list: BancoHorasDoc[] = saved ? JSON.parse(saved) : [];
+  const idx = list.findIndex(b => b.id === banco.id);
+  if (idx >= 0) {
+    list[idx] = banco;
+  } else {
+    list.push(banco);
+  }
+  localStorage.setItem(STORAGE_KEYS.BANCO, JSON.stringify(list));
 }
 
 // ----------------------------------------------------------------------------
 // FUNCIONÁRIOS PONTO
 // ----------------------------------------------------------------------------
 export async function fetchFuncionariosPonto(empresaId: string): Promise<FuncionarioPontoInfo[]> {
-  const resolvedId = resolveEmpresaId(empresaId);
   try {
-    const q = query(collection(db, COLLECTIONS.FUNCIONARIOS), where('empresaId', '==', resolvedId));
+    const q = query(collection(db, COLLECTIONS.FUNCIONARIOS), where('empresaId', '==', empresaId));
     const snap = await getDocs(q);
-    const list: FuncionarioPontoInfo[] = [];
-    snap.forEach(d => list.push(d.data() as FuncionarioPontoInfo));
-    return list;
+    if (!snap.empty) {
+      const list: FuncionarioPontoInfo[] = [];
+      snap.forEach(d => list.push(d.data() as FuncionarioPontoInfo));
+      return list;
+    }
   } catch (err) {
-    console.error('Erro ao buscar funcionários ponto:', err);
-    throw err;
+    handleFirestoreError(err, 'get', COLLECTIONS.FUNCIONARIOS);
   }
+
+  const saved = localStorage.getItem(STORAGE_KEYS.FUNCIONARIOS);
+  return saved ? JSON.parse(saved) : [];
 }
 
 export async function salvarFuncionarioPonto(func: FuncionarioPontoInfo): Promise<void> {
-  const resolvedId = resolveEmpresaId(func.empresaId);
-  const dataToSave = {
-    ...func,
-    empresaId: resolvedId,
-    companyId: resolvedId,
-    updatedAt: new Date().toISOString()
-  };
+  try {
+    const docRef = doc(db, COLLECTIONS.FUNCIONARIOS, func.id);
+    await setDoc(docRef, sanitizeFirestoreData(func), { merge: true });
+  } catch (err) {
+    handleFirestoreError(err, 'write', COLLECTIONS.FUNCIONARIOS);
+  }
 
-  const docRef = doc(db, COLLECTIONS.FUNCIONARIOS, func.id);
-  await setDoc(docRef, sanitizeFirestoreData(dataToSave), { merge: true });
+  const saved = localStorage.getItem(STORAGE_KEYS.FUNCIONARIOS);
+  const list: FuncionarioPontoInfo[] = saved ? JSON.parse(saved) : [];
+  const idx = list.findIndex(f => f.id === func.id);
+  if (idx >= 0) {
+    list[idx] = func;
+  } else {
+    list.push(func);
+  }
+  localStorage.setItem(STORAGE_KEYS.FUNCIONARIOS, JSON.stringify(list));
 }
 
 // ----------------------------------------------------------------------------
 // CONFIGURAÇÕES PONTO
 // ----------------------------------------------------------------------------
 export async function fetchConfiguracoesPonto(empresaId: string): Promise<ConfiguracoesPonto> {
-  const resolvedId = resolveEmpresaId(empresaId);
   try {
-    const docRef = doc(db, COLLECTIONS.CONFIG, resolvedId);
+    const docRef = doc(db, COLLECTIONS.CONFIG, empresaId);
     const snap = await getDoc(docRef);
     if (snap.exists()) {
       return snap.data() as ConfiguracoesPonto;
     }
   } catch (err) {
-    console.error('Erro ao buscar configurações do ponto:', err);
+    handleFirestoreError(err, 'get', COLLECTIONS.CONFIG);
   }
 
-  return { ...DEFAULT_CONFIG, empresaId: resolvedId };
+  const saved = localStorage.getItem(STORAGE_KEYS.CONFIG);
+  return saved ? JSON.parse(saved) : { ...DEFAULT_CONFIG, empresaId };
 }
 
 export async function salvarConfiguracoesPonto(config: ConfiguracoesPonto): Promise<void> {
-  const resolvedId = resolveEmpresaId(config.empresaId);
-  const dataToSave = {
-    ...config,
-    empresaId: resolvedId,
-    companyId: resolvedId,
-    updatedAt: new Date().toISOString()
-  };
+  try {
+    const docRef = doc(db, COLLECTIONS.CONFIG, config.empresaId);
+    await setDoc(docRef, sanitizeFirestoreData(config), { merge: true });
+  } catch (err) {
+    handleFirestoreError(err, 'write', COLLECTIONS.CONFIG);
+  }
 
-  const docRef = doc(db, COLLECTIONS.CONFIG, resolvedId);
-  await setDoc(docRef, sanitizeFirestoreData(dataToSave), { merge: true });
+  localStorage.setItem(STORAGE_KEYS.CONFIG, JSON.stringify(config));
 }
 
 // ----------------------------------------------------------------------------
