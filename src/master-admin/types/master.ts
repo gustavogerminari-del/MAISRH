@@ -13,7 +13,8 @@ export type TenantStatus = 'Ativo' | 'Suspenso' | 'Aguardando Pagamento' | 'Canc
 export type MasterPlanPreset = 'Básico' | 'Intermediário' | 'Completo / Enterprise' | 'Customizado';
 
 export interface TenantModulePermissions {
-  vagas: boolean;
+  recrutamento?: boolean;
+  vagas?: boolean;
   headhunter?: boolean;
   bancoTalentos: boolean;
   entrevistas: boolean;

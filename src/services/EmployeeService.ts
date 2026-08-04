@@ -9,20 +9,20 @@ import {
   where 
 } from 'firebase/firestore';
 import { db, auth } from '../lib/firebase';
-import { sanitizeFirestoreData } from '../lib/firestoreUtils';
+import { sanitizeFirestoreData, resolveEmpresaId } from '../lib/firestoreUtils';
 import { InternalTeamMember } from '../internal-team/types/team';
 import { AuditService } from './AuditService';
 
 const COLLECTION_NAME = 'employees';
 
 export class EmployeeService {
-  static async create(empData: Partial<InternalTeamMember> & { companyId?: string }): Promise<InternalTeamMember> {
+  static async create(empData: Partial<InternalTeamMember> & { empresaId?: string; companyId?: string }): Promise<InternalTeamMember> {
     const id = empData.id || `emp-${Date.now()}`;
     const user = auth.currentUser;
     const now = new Date().toISOString();
-    const companyId = empData.companyId || 'emp-001';
+    const resolvedEmpresaId = resolveEmpresaId(empData.empresaId || empData.companyId);
 
-    const employee: InternalTeamMember & { companyId: string; createdBy: string; createdAt: string; updatedAt: string } = {
+    const employee: InternalTeamMember & { empresaId: string; companyId: string; createdBy: string; createdAt: string; updatedAt: string } = {
       id,
       name: empData.name || 'Novo Colaborador',
       email: empData.email || 'colaborador@empresa.com.br',
@@ -59,58 +59,51 @@ export class EmployeeService {
         canExportReports: true,
         canManageTeam: false
       },
-      companyId,
+      empresaId: resolvedEmpresaId,
+      companyId: resolvedEmpresaId,
       createdBy: user?.uid || 'system',
       createdAt: now,
       updatedAt: now
     };
 
-    try {
-      await setDoc(doc(db, COLLECTION_NAME, id), sanitizeFirestoreData(employee), { merge: true });
-      await AuditService.log({
-        action: 'CREATE',
-        description: `Colaborador ${employee.name} admitido no departamento ${employee.departmentName}`,
-        moduleName: 'Equipe Interna',
-        targetEntity: 'Funcionário',
-        companyId
-      });
-    } catch (err) {
-      console.warn('Erro ao salvar funcionário no Firestore:', err);
-    }
+    const docRef = doc(db, COLLECTION_NAME, id);
+    await setDoc(docRef, sanitizeFirestoreData(employee), { merge: true });
+    
+    await AuditService.log({
+      action: 'CREATE',
+      description: `Colaborador ${employee.name} admitido no departamento ${employee.departmentName}`,
+      moduleName: 'Equipe Interna',
+      targetEntity: 'Funcionário',
+      empresaId: resolvedEmpresaId,
+      companyId: resolvedEmpresaId
+    }).catch(err => console.warn('Falha no log de auditoria:', err));
 
     return employee;
   }
 
   static async update(id: string, data: Partial<InternalTeamMember>): Promise<void> {
-    try {
-      await setDoc(doc(db, COLLECTION_NAME, id), sanitizeFirestoreData({
-        ...data,
-        updatedAt: new Date().toISOString()
-      }), { merge: true });
+    const docRef = doc(db, COLLECTION_NAME, id);
+    await setDoc(docRef, sanitizeFirestoreData({
+      ...data,
+      updatedAt: new Date().toISOString()
+    }), { merge: true });
 
-      await AuditService.log({
-        action: 'UPDATE',
-        description: `Cadastro do colaborador ${id} atualizado`,
-        moduleName: 'Equipe Interna',
-        targetEntity: 'Funcionário'
-      });
-    } catch (err) {
-      console.warn('Erro ao atualizar funcionário no Firestore:', err);
-    }
+    await AuditService.log({
+      action: 'UPDATE',
+      description: `Cadastro do colaborador ${id} atualizado`,
+      moduleName: 'Equipe Interna',
+      targetEntity: 'Funcionário'
+    }).catch(err => console.warn('Falha no log de auditoria:', err));
   }
 
   static async delete(id: string): Promise<void> {
-    try {
-      await deleteDoc(doc(db, COLLECTION_NAME, id));
-      await AuditService.log({
-        action: 'DELETE',
-        description: `Colaborador ${id} desativado / removido`,
-        moduleName: 'Equipe Interna',
-        targetEntity: 'Funcionário'
-      });
-    } catch (err) {
-      console.warn('Erro ao excluir funcionário no Firestore:', err);
-    }
+    await deleteDoc(doc(db, COLLECTION_NAME, id));
+    await AuditService.log({
+      action: 'DELETE',
+      description: `Colaborador ${id} desativado / removido`,
+      moduleName: 'Equipe Interna',
+      targetEntity: 'Funcionário'
+    }).catch(err => console.warn('Falha no log de auditoria:', err));
   }
 
   static async getById(id: string): Promise<InternalTeamMember | null> {
@@ -120,7 +113,7 @@ export class EmployeeService {
         return snap.data() as InternalTeamMember;
       }
     } catch (err) {
-      console.warn('Erro em EmployeeService.getById:', err);
+      console.error('Erro em EmployeeService.getById:', err);
     }
     return null;
   }
@@ -129,25 +122,29 @@ export class EmployeeService {
     return this.getById(id);
   }
 
-  static async list(companyId?: string): Promise<InternalTeamMember[]> {
+  static async list(empresaId?: string): Promise<InternalTeamMember[]> {
     try {
-      const q = companyId 
-        ? query(collection(db, COLLECTION_NAME), where('companyId', '==', companyId))
-        : collection(db, COLLECTION_NAME);
-      const snap = await getDocs(q);
-      if (!snap.empty) {
+      if (empresaId) {
+        const resolvedId = resolveEmpresaId(empresaId);
+        const q = query(collection(db, COLLECTION_NAME), where('empresaId', '==', resolvedId));
+        const snap = await getDocs(q);
+        const list: InternalTeamMember[] = [];
+        snap.forEach(d => list.push(d.data() as InternalTeamMember));
+        return list;
+      } else {
+        const snap = await getDocs(collection(db, COLLECTION_NAME));
         const list: InternalTeamMember[] = [];
         snap.forEach(d => list.push(d.data() as InternalTeamMember));
         return list;
       }
     } catch (err) {
-      console.warn('Erro em EmployeeService.list:', err);
+      console.error('Erro em EmployeeService.list:', err);
+      return [];
     }
-    return [];
   }
 
-  static async search(term: string, companyId?: string): Promise<InternalTeamMember[]> {
-    const all = await this.list(companyId);
+  static async search(term: string, empresaId?: string): Promise<InternalTeamMember[]> {
+    const all = await this.list(empresaId);
     const lower = term.toLowerCase();
     return all.filter(e => 
       e.name.toLowerCase().includes(lower) || 
@@ -157,13 +154,13 @@ export class EmployeeService {
     );
   }
 
-  static async count(companyId?: string): Promise<number> {
-    const all = await this.list(companyId);
+  static async count(empresaId?: string): Promise<number> {
+    const all = await this.list(empresaId);
     return all.length;
   }
 
-  static async paginate(page: number, pageSize: number, companyId?: string): Promise<{ items: InternalTeamMember[]; total: number }> {
-    const all = await this.list(companyId);
+  static async paginate(page: number, pageSize: number, empresaId?: string): Promise<{ items: InternalTeamMember[]; total: number }> {
+    const all = await this.list(empresaId);
     const start = (page - 1) * pageSize;
     return {
       items: all.slice(start, start + pageSize),

@@ -517,9 +517,9 @@ export const TeamMemberModal: React.FC<TeamMemberModalProps> = ({
 
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                       {[
-                        { key: 'canCreateJobs', label: 'Criar Novas Vagas', module: 'vagas' },
-                        { key: 'canEditJobs', label: 'Editar Vagas Existentes', module: 'vagas' },
-                        { key: 'canCloseJobs', label: 'Fechar / Encerrar Vagas', module: 'vagas' },
+                        { key: 'canCreateJobs', label: 'Criar Novas Vagas', module: 'recrutamento' },
+                        { key: 'canEditJobs', label: 'Editar Vagas Existentes', module: 'recrutamento' },
+                        { key: 'canCloseJobs', label: 'Fechar / Encerrar Vagas', module: 'recrutamento' },
                         { key: 'canViewSalaries', label: 'Ver Faixas Salariais', module: 'folhaPagamento' },
                         { key: 'canApproveHires', label: 'Aprovar Contratações', module: 'contratacoes' },
                         { key: 'canDeleteCandidates', label: 'Excluir Candidatos', module: 'candidatos' },

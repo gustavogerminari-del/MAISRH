@@ -1,3 +1,5 @@
+import { fetchCompanyReleasedModules } from './ModuleCatalogService';
+
 export type SystemRole = 'MASTER' | 'EMPRESA_ADMIN' | 'RH' | 'GESTOR' | 'COLABORADOR';
 
 export type ModuleCategoryKey = 'RECRUTAMENTO' | 'HEADHUNTER' | 'DEPARTAMENTO_PESSOAL' | 'GESTAO';
@@ -15,7 +17,7 @@ export const PLATFORM_MODULE_CATEGORIES: Record<ModuleCategoryKey, { title: stri
     title: 'Recrutamento & Seleção',
     modules: [
       { key: 'dashboard', name: 'Dashboard', category: 'RECRUTAMENTO', description: 'Painel geral e indicadores de recrutamento', aliases: ['dashboard', 'visaoGeral', 'visao_geral', 'inicio', 'visãogeral', 'visão_geral'] },
-      { key: 'vagas', name: 'Vagas', category: 'RECRUTAMENTO', description: 'Abertura, edição e gestão de vagas', aliases: ['vagas', 'recrutamento', 'jobs', 'create_job', 'edit_job', 'close_job'] },
+      { key: 'recrutamento', name: 'Recrutamento & Seleção', category: 'RECRUTAMENTO', description: 'Abertura, edição e gestão de vagas', aliases: ['recrutamento', 'vagas', 'jobs', 'create_job', 'edit_job', 'close_job'] },
       { key: 'candidatos', name: 'Candidatos', category: 'RECRUTAMENTO', description: 'Triagem, movimentação de pipeline e candidaturas', aliases: ['candidatos', 'delete_candidate', 'candidaturas'] },
       { key: 'bancoTalentos', name: 'Banco de Talentos', category: 'RECRUTAMENTO', description: 'Base centralizada e busca de currículos', aliases: ['bancoTalentos', 'banco-talentos', 'banco_talentos', 'bancotalentos', 'banco_de_talentos'] },
       { key: 'entrevistas', name: 'Entrevistas', category: 'RECRUTAMENTO', description: 'Agendamento e avaliação de entrevistas', aliases: ['entrevistas', 'schedule_interview'] },
@@ -100,6 +102,7 @@ export const ROLE_PERMISSIONS_MAP: Record<SystemRole, string[]> = {
   MASTER: ['*'],
   EMPRESA_ADMIN: [
     'dashboard',
+    'recrutamento',
     'vagas',
     'candidatos',
     'bancoTalentos',
@@ -124,6 +127,7 @@ export const ROLE_PERMISSIONS_MAP: Record<SystemRole, string[]> = {
   ],
   RH: [
     'dashboard',
+    'recrutamento',
     'vagas',
     'candidatos',
     'bancoTalentos',
@@ -144,6 +148,7 @@ export const ROLE_PERMISSIONS_MAP: Record<SystemRole, string[]> = {
   ],
   GESTOR: [
     'dashboard',
+    'recrutamento',
     'vagas',
     'candidatos',
     'bancoTalentos',
@@ -251,7 +256,7 @@ export class PermissionService {
    * Helper to check Level 1 (Company Module Active)
    */
   static isCompanyModuleActive(keyOrAlias: string, companyModules: CompanyModulesMap): boolean {
-    if (!companyModules) return false;
+    if (!companyModules) return true;
 
     // Direct check
     if (companyModules[keyOrAlias] === true) return true;
@@ -266,6 +271,12 @@ export class PermissionService {
         if (companyModules[mod.key] === true) return true;
         if (mod.aliases.some((alias) => companyModules[alias] === true)) return true;
       }
+    }
+
+    // If companyModules is an empty object (no explicit module configuration stored yet for this company),
+    // default core modules like 'recrutamento' / 'vagas' are active for backward compatibility with registered companies.
+    if (Object.keys(companyModules).length === 0) {
+      return true;
     }
 
     return false;
@@ -371,13 +382,29 @@ export class PermissionService {
   /**
    * Strict Guard for Firestore Writes
    */
-  static validateFirestoreWrite(
+  static async validateFirestoreWrite(
     moduleKey: string,
     options: AccessCheckOptions
-  ): void {
-    const check = this.checkAccess(moduleKey, options);
+  ): Promise<void> {
+    const canonicalKey = getCanonicalModuleKey(moduleKey);
+
+    let companyModules = options.companyModules;
+    if ((!companyModules || Object.keys(companyModules).length === 0) && options.companyId) {
+      try {
+        companyModules = await fetchCompanyReleasedModules(options.companyId);
+      } catch (err) {
+        console.warn('Erro ao consultar empresa_modulos no validateFirestoreWrite:', err);
+      }
+    }
+
+    const checkOptions: AccessCheckOptions = {
+      ...options,
+      companyModules: companyModules || {},
+    };
+
+    const check = this.checkAccess(canonicalKey, checkOptions);
     if (!check.allowed) {
-      const errorMsg = `[FIRESTORE GUARD ERROR] Gravação bloqueada no módulo '${moduleKey}': ${check.reason}`;
+      const errorMsg = `[FIRESTORE GUARD ERROR] Gravação bloqueada no módulo '${canonicalKey}': ${check.reason}`;
       console.error(errorMsg);
       throw new Error(errorMsg);
     }

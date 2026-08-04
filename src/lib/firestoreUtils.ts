@@ -121,3 +121,32 @@ export function sanitizeFirestoreData<T>(data: T): T {
   }
   return sanitized as T;
 }
+
+/**
+ * Validates and resolves a mandatory empresaId for Firestore operations.
+ * Throws an explicit error if no valid empresaId is provided or found in context.
+ * Never defaults automatically to "emp-001".
+ */
+export function resolveEmpresaId(providedId?: string | null, fallbackUser?: any): string {
+  if (providedId && typeof providedId === 'string' && providedId.trim().length > 0) {
+    return providedId.trim();
+  }
+
+  if (fallbackUser) {
+    const userEmpresa = fallbackUser.empresaId || fallbackUser.companyId || fallbackUser.tenantId;
+    if (userEmpresa && typeof userEmpresa === 'string' && userEmpresa.trim().length > 0) {
+      return userEmpresa.trim();
+    }
+  }
+
+  // Check current auth user
+  const currentAuthUser = auth?.currentUser;
+  if (currentAuthUser) {
+    const userEmpresa = (currentAuthUser as any).empresaId || (currentAuthUser as any).companyId;
+    if (userEmpresa && typeof userEmpresa === 'string' && userEmpresa.trim().length > 0) {
+      return userEmpresa.trim();
+    }
+  }
+
+  throw new Error('Empresa não identificada. Não foi possível realizar a operação sem vínculo de empresa válido.');
+}

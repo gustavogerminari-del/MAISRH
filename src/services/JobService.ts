@@ -9,7 +9,7 @@ import {
   where 
 } from 'firebase/firestore';
 import { db, auth } from '../lib/firebase';
-import { sanitizeFirestoreData } from '../lib/firestoreUtils';
+import { sanitizeFirestoreData, resolveEmpresaId } from '../lib/firestoreUtils';
 import { Job } from '../types/rh';
 import { AuditService } from './AuditService';
 import { normalizeJobData } from '../jobs/utils/jobUtils';
@@ -24,7 +24,7 @@ export class JobService {
     const user = auth.currentUser;
     const nowIsoDate = new Date().toISOString().split('T')[0];
 
-    const resolvedCompanyId = jobData.companyId || jobData.empresaId || 'emp-001';
+    const resolvedEmpresaId = resolveEmpresaId(jobData.empresaId || jobData.companyId);
     const rawOrigem = (jobData.origemProcesso || jobData.origem || '').toString().toLowerCase();
 
     let resolvedOrigem: 'vaga_interna' | 'recrutamento_cliente' | 'headhunter' = 'vaga_interna';
@@ -40,8 +40,8 @@ export class JobService {
     const jobToSave: Record<string, any> = {
       ...jobData,
       id,
-      companyId: resolvedCompanyId,
-      empresaId: resolvedCompanyId,
+      companyId: resolvedEmpresaId,
+      empresaId: resolvedEmpresaId,
       origem: resolvedOrigem,
       origemProcesso: resolvedOrigem,
       tipoProcesso: isHeadhunter ? 'busca_ativa' : isClient ? 'cliente' : 'interno',
@@ -78,76 +78,68 @@ export class JobService {
       updatedAt: new Date().toISOString()
     };
 
-    try {
-      await PermissionService.validateFirestoreWrite('vagas', resolvedCompanyId);
+    await PermissionService.validateFirestoreWrite('recrutamento', { companyId: resolvedEmpresaId });
 
-      const sanitizedData = sanitizeFirestoreData(jobToSave);
+    const sanitizedData = sanitizeFirestoreData(jobToSave);
 
-      // Dual Save to ensure complete sync across 'jobs' and 'vagas' collections
-      const primaryDoc = doc(db, PRIMARY_COLLECTION, id);
-      const secondaryDoc = doc(db, SECONDARY_COLLECTION, id);
+    // Dual Save to ensure complete sync across 'jobs' and 'vagas' collections
+    const primaryDoc = doc(db, PRIMARY_COLLECTION, id);
+    const secondaryDoc = doc(db, SECONDARY_COLLECTION, id);
 
-      await Promise.all([
-        setDoc(primaryDoc, sanitizedData, { merge: true }),
-        setDoc(secondaryDoc, sanitizedData, { merge: true })
-      ]);
+    await Promise.all([
+      setDoc(primaryDoc, sanitizedData, { merge: true }),
+      setDoc(secondaryDoc, sanitizedData, { merge: true })
+    ]);
 
-      await AuditService.log({
-        action: 'CREATE',
-        description: `Vaga "${jobToSave.title}" criada com sucesso.`,
-        moduleName: 'Vagas',
-        targetEntity: 'Vaga',
-        companyId: resolvedCompanyId
-      });
-    } catch (err: any) {
-      console.error('Erro ao salvar vaga no Firestore:', err);
-    }
+    await AuditService.log({
+      action: 'CREATE',
+      description: `Vaga "${jobToSave.title}" criada com sucesso.`,
+      moduleName: 'Recrutamento',
+      targetEntity: 'Vaga',
+      empresaId: resolvedEmpresaId,
+      companyId: resolvedEmpresaId
+    }).catch(err => console.warn('Falha no audit log:', err));
 
     return jobToSave as Job;
   }
 
   static async update(id: string, data: Record<string, any>): Promise<void> {
-    try {
-      await PermissionService.validateFirestoreWrite('vagas', data.companyId || data.empresaId || 'emp-001');
-      const updatePayload = sanitizeFirestoreData({
-        ...data,
-        updatedAt: new Date().toISOString()
-      });
-
-      const primaryDoc = doc(db, PRIMARY_COLLECTION, id);
-      const secondaryDoc = doc(db, SECONDARY_COLLECTION, id);
-
-      await Promise.all([
-        setDoc(primaryDoc, updatePayload, { merge: true }),
-        setDoc(secondaryDoc, updatePayload, { merge: true })
-      ]);
-
-      await AuditService.log({
-        action: 'UPDATE',
-        description: `Vaga ${id} atualizada`,
-        moduleName: 'Vagas',
-        targetEntity: 'Vaga'
-      });
-    } catch (err: any) {
-      console.error('Erro ao atualizar vaga no Firestore:', err);
+    const resolvedEmpresaId = data.empresaId || data.companyId ? resolveEmpresaId(data.empresaId || data.companyId) : undefined;
+    if (resolvedEmpresaId) {
+      await PermissionService.validateFirestoreWrite('recrutamento', { companyId: resolvedEmpresaId });
     }
+    const updatePayload = sanitizeFirestoreData({
+      ...data,
+      updatedAt: new Date().toISOString()
+    });
+
+    const primaryDoc = doc(db, PRIMARY_COLLECTION, id);
+    const secondaryDoc = doc(db, SECONDARY_COLLECTION, id);
+
+    await Promise.all([
+      setDoc(primaryDoc, updatePayload, { merge: true }),
+      setDoc(secondaryDoc, updatePayload, { merge: true })
+    ]);
+
+    await AuditService.log({
+      action: 'UPDATE',
+      description: `Vaga ${id} atualizada`,
+      moduleName: 'Vagas',
+      targetEntity: 'Vaga'
+    }).catch(err => console.warn('Falha no audit log:', err));
   }
 
   static async delete(id: string): Promise<void> {
-    try {
-      await Promise.all([
-        deleteDoc(doc(db, PRIMARY_COLLECTION, id)),
-        deleteDoc(doc(db, SECONDARY_COLLECTION, id))
-      ]);
-      await AuditService.log({
-        action: 'DELETE',
-        description: `Vaga ${id} excluída`,
-        moduleName: 'Vagas',
-        targetEntity: 'Vaga'
-      });
-    } catch (err) {
-      console.warn('Erro ao excluir vaga no Firestore:', err);
-    }
+    await Promise.all([
+      deleteDoc(doc(db, PRIMARY_COLLECTION, id)),
+      deleteDoc(doc(db, SECONDARY_COLLECTION, id))
+    ]);
+    await AuditService.log({
+      action: 'DELETE',
+      description: `Vaga ${id} excluída`,
+      moduleName: 'Vagas',
+      targetEntity: 'Vaga'
+    }).catch(err => console.warn('Falha no audit log:', err));
   }
 
   static async getById(id: string): Promise<Job | null> {

@@ -47,10 +47,10 @@ export interface PlanConfig {
 
 export const INITIAL_SYSTEM_MODULES: SystemModule[] = [
   {
-    id: "vagas",
-    key: "vagas",
-    nome: "Módulo de Vagas & Recrutamento",
-    descricao: "Abertura, triagem e kanban de candidatos",
+    id: "recrutamento",
+    key: "recrutamento",
+    nome: "Módulo de Recrutamento & Seleção",
+    descricao: "Abertura, edição, triagem e kanban de candidatos",
     icone: "Briefcase",
     categoria: "Recrutamento e Seleção",
     ativo: true,
@@ -235,7 +235,7 @@ export const INITIAL_PLANS: PlanConfig[] = [
     nome: "Essencial",
     descricao: "Plano essencial para pequenas empresas em expansão",
     preco: 490,
-    modulos: ["vagas", "bancoTalentos", "entrevistas", "equipeInterna", "siteVagasPersonalizado"],
+    modulos: ["recrutamento", "bancoTalentos", "entrevistas", "equipeInterna", "siteVagasPersonalizado"],
     limites: { usuarios: 5, vagas: 5, colaboradores: 20 }
   },
   {
@@ -243,7 +243,7 @@ export const INITIAL_PLANS: PlanConfig[] = [
     nome: "Recrutamento",
     descricao: "Plano focado em recrutadores e seleção ativa",
     preco: 890,
-    modulos: ["vagas", "bancoTalentos", "entrevistas", "headhunter", "siteVagasPersonalizado"],
+    modulos: ["recrutamento", "bancoTalentos", "entrevistas", "headhunter", "siteVagasPersonalizado"],
     limites: { usuarios: 10, vagas: 15, colaboradores: 50 }
   },
   {
@@ -251,7 +251,7 @@ export const INITIAL_PLANS: PlanConfig[] = [
     nome: "Profissional",
     descricao: "Gestão completa de R&S, Departamento Pessoal e BI",
     preco: 1290,
-    modulos: ["vagas", "bancoTalentos", "entrevistas", "headhunter", "equipeInterna", "feriasBeneficios", "documentosAssinatura", "relatoriosAvancados", "siteVagasPersonalizado"],
+    modulos: ["recrutamento", "bancoTalentos", "entrevistas", "headhunter", "equipeInterna", "feriasBeneficios", "documentosAssinatura", "relatoriosAvancados", "siteVagasPersonalizado"],
     limites: { usuarios: 15, vagas: 20, colaboradores: 100 }
   },
   {
@@ -259,7 +259,7 @@ export const INITIAL_PLANS: PlanConfig[] = [
     nome: "Completo",
     descricao: "Acesso total aos módulos com IA Gemini e Governança",
     preco: 2890,
-    modulos: ["vagas", "bancoTalentos", "entrevistas", "headhunter", "equipeInterna", "consultorRH", "feriasBeneficios", "documentosAssinatura", "auditoriaLogs", "relatoriosAvancados", "siteVagasPersonalizado"],
+    modulos: ["recrutamento", "bancoTalentos", "entrevistas", "headhunter", "equipeInterna", "consultorRH", "feriasBeneficios", "documentosAssinatura", "auditoriaLogs", "relatoriosAvancados", "siteVagasPersonalizado"],
     limites: { usuarios: 50, vagas: 100, colaboradores: 500 }
   },
   {
@@ -267,7 +267,7 @@ export const INITIAL_PLANS: PlanConfig[] = [
     nome: "Enterprise",
     descricao: "Solução sob medida para grandes corporações",
     preco: 4990,
-    modulos: ["vagas", "bancoTalentos", "entrevistas", "headhunter", "equipeInterna", "consultorRH", "feriasBeneficios", "documentosAssinatura", "auditoriaLogs", "relatoriosAvancados", "siteVagasPersonalizado"],
+    modulos: ["recrutamento", "bancoTalentos", "entrevistas", "headhunter", "equipeInterna", "consultorRH", "feriasBeneficios", "documentosAssinatura", "auditoriaLogs", "relatoriosAvancados", "siteVagasPersonalizado"],
     limites: { usuarios: 999, vagas: 999, colaboradores: 9999 }
   }
 ];
