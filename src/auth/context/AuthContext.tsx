@@ -186,13 +186,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const refreshCompanyModules = async () => {
     if (!auth.currentUser || !user) return;
 
-    if (isMasterProfile(user)) {
-      setActiveModules({});
-      return;
-    }
-
-    const targetCompanyId = user.empresaId || user.companyId;
-    if (!targetCompanyId) return;
+    const targetCompanyId = user.empresaId || user.companyId || 'emp-001';
 
     try {
       const rawCompanyData = await fetchEmpresaModulosFirestore(targetCompanyId);
@@ -202,6 +196,24 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       logger.warn('[AuthContext] Falha ao carregar módulos da empresa no Firestore', error);
     }
   };
+
+  useEffect(() => {
+    const handleModuleUpdate = () => {
+      refreshCompanyModules();
+    };
+
+    if (typeof window !== 'undefined') {
+      window.addEventListener('company_modules_updated', handleModuleUpdate);
+      window.addEventListener('storage', handleModuleUpdate);
+    }
+
+    return () => {
+      if (typeof window !== 'undefined') {
+        window.removeEventListener('company_modules_updated', handleModuleUpdate);
+        window.removeEventListener('storage', handleModuleUpdate);
+      }
+    };
+  }, [user]);
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {

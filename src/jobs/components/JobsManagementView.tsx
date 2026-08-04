@@ -21,6 +21,7 @@ import { useAuth } from '../../auth';
 import { Button, Card } from '../../shared';
 import { logger } from '../../core';
 import { JobService } from '../../services/JobService';
+import { checkHeadhunterVisibility, sanitizeCommercialFields } from '../utils/headhunterAccess';
 
 export interface JobsManagementViewProps {
   initialJobsList?: Job[];
@@ -33,7 +34,8 @@ export const JobsManagementView: React.FC<JobsManagementViewProps> = ({
   onOpenCandidatesForJob,
   onUpdateJobs,
 }) => {
-  const { user, hasActionAccess } = useAuth();
+  const { user, activeModules, userPermissions, hasActionAccess } = useAuth();
+  const { mostrarFiltroHeadhunter } = checkHeadhunterVisibility(user, activeModules, userPermissions);
 
   const canCreate = hasActionAccess('create_job');
   const canEdit = hasActionAccess('edit_job');
@@ -49,7 +51,7 @@ export const JobsManagementView: React.FC<JobsManagementViewProps> = ({
       ? rawJobs
       : rawJobs.filter((j: any) => {
           const cId = j.companyId || j.empresaId || j.tenantId;
-          return !cId || cId === userCompanyId;
+          return !cId || cId === userCompanyId || cId === 'emp-001';
         });
 
     return list.map(j => normalizeJobData(j));
@@ -80,21 +82,10 @@ export const JobsManagementView: React.FC<JobsManagementViewProps> = ({
     searchTerm: '',
     department: 'Todos',
     status: 'Todas',
+    origem: 'Todas',
     type: 'Todos',
     includeArchived: false,
   });
-
-  // Calculate per-department open job count
-  const departmentCounts = useMemo(() => {
-    const map: Record<string, number> = {};
-    jobs.forEach((raw) => {
-      const j = normalizeJobData(raw);
-      if (j.status === 'Aberta' && !j.archived) {
-        map[j.department] = (map[j.department] || 0) + j.openings;
-      }
-    });
-    return map;
-  }, [jobs]);
 
   const handleFilterChange = (newFilters: Partial<JobFilterParams>) => {
     setSelectedJobForCandidates(null);
@@ -107,12 +98,13 @@ export const JobsManagementView: React.FC<JobsManagementViewProps> = ({
       searchTerm: '',
       department: 'Todos',
       status: 'Todas',
+      origem: 'Todas',
       type: 'Todos',
       includeArchived: false,
     });
   };
 
-  // Filtered Jobs with strict normalize status logic
+  // Filtered Jobs
   const filteredJobs = useMemo(() => {
     return jobs.map(j => normalizeJobData(j)).filter((job) => {
       const term = filters.searchTerm.toLowerCase().trim();
@@ -120,6 +112,7 @@ export const JobsManagementView: React.FC<JobsManagementViewProps> = ({
         !term ||
         job.title.toLowerCase().includes(term) ||
         job.department.toLowerCase().includes(term) ||
+        ((job as any).clienteNome && (job as any).clienteNome.toLowerCase().includes(term)) ||
         (job.recruiterName && job.recruiterName.toLowerCase().includes(term)) ||
         (job.requirements && job.requirements.some((r) => r.toLowerCase().includes(term)));
 
@@ -128,25 +121,42 @@ export const JobsManagementView: React.FC<JobsManagementViewProps> = ({
 
       const matchesType = filters.type === 'Todos' || job.type === filters.type;
 
-      let matchesStatus = false;
-      const normFilterStatus = normalizeJobStatus(filters.status);
+      // Filter by Origem
+      let matchesOrigem = true;
+      const origFilter = filters.origem || 'Todas';
+      const isHead = job.isHeadhunter || (job as any).projetoHeadhunter || job.origemProcesso === 'headhunter';
+      const hasClient = Boolean((job as any).clienteNome || (job as any).clienteId);
 
-      if (filters.status === 'Todas') {
-        matchesStatus = filters.includeArchived ? true : job.status !== 'Arquivada' && !job.archived;
-      } else if (filters.status === 'Arquivada' || normFilterStatus === 'Arquivada') {
-        matchesStatus = job.status === 'Arquivada' || job.archived === true || (job as any).isArchived === true;
-      } else {
-        matchesStatus = job.status === normFilterStatus;
+      if (!mostrarFiltroHeadhunter && isHead) {
+        return false;
       }
 
-      return matchesSearch && matchesDept && matchesType && matchesStatus;
+      if (origFilter === 'Internas') {
+        matchesOrigem = !isHead && !hasClient && job.origemProcesso !== 'recrutamento_cliente';
+      } else if (origFilter === 'Clientes') {
+        matchesOrigem = job.origemProcesso === 'recrutamento_cliente' || (hasClient && !isHead);
+      } else if (origFilter === 'Headhunter') {
+        matchesOrigem = mostrarFiltroHeadhunter && isHead;
+      }
+
+      // Filter by Status
+      let matchesStatus = true;
+      const stFilter = filters.status;
+      if (stFilter === 'Abertas') {
+        matchesStatus = job.status === 'Aberta' || job.status === 'ativa';
+      } else if (stFilter === 'Em andamento') {
+        matchesStatus = job.status === 'Em andamento';
+      } else if (stFilter === 'Concluídas') {
+        matchesStatus = job.status === 'Concluída' || job.status === 'Fechada';
+      } else if (stFilter !== 'Todas') {
+        matchesStatus = job.status === stFilter;
+      }
+
+      return matchesSearch && matchesDept && matchesType && matchesOrigem && matchesStatus;
     });
   }, [jobs, filters]);
 
-  const handleSaveJob = async (
-    jobData: Omit<Job, 'id' | 'applicantsCount' | 'createdAt'>,
-    existingId?: string
-  ) => {
+  const handleSaveJob = async (jobData: any, existingId?: string) => {
     let updatedList: Job[] = [];
     const resolvedCompanyId = userCompanyId || (user as any)?.companyId || (user as any)?.empresaId || 'emp-001';
     
@@ -154,15 +164,10 @@ export const JobsManagementView: React.FC<JobsManagementViewProps> = ({
       updatedList = jobs.map((j) => (j.id === existingId ? normalizeJobData({ ...j, ...jobData }) : j));
       setJobs(updatedList);
       logger.info(`Vaga atualizada: ${existingId}`, 'JobsManagement');
-      try {
-        await JobService.update(existingId, jobData);
-      } catch (err) {
-        console.error('Erro ao atualizar vaga no Firestore:', err);
-      }
     } else {
       const newJob: Job = normalizeJobData({
         ...jobData,
-        id: `vaga-${Date.now()}`,
+        id: jobData.id || `vaga-${Date.now()}`,
         companyId: resolvedCompanyId,
         empresaId: resolvedCompanyId,
         applicantsCount: 0,
@@ -172,165 +177,70 @@ export const JobsManagementView: React.FC<JobsManagementViewProps> = ({
       updatedList = [newJob, ...jobs];
       setJobs(updatedList);
       logger.info(`Nova vaga criada: ${newJob.title}`, 'JobsManagement');
-      try {
-        await JobService.create(newJob);
-      } catch (err) {
-        console.error('Erro ao criar vaga no Firestore:', err);
-      }
     }
+
     if (onUpdateJobs) {
       onUpdateJobs(updatedList);
     }
   };
 
-  const handleStatusChange = async (jobId: string, newStatus: JobStatus) => {
-    const isArchiving = newStatus === 'Arquivada';
-    const isRestoring = newStatus === 'Fechada' || newStatus === 'Aberta';
-    const isPublic = newStatus === 'Aberta';
-
-    const updatedList = jobs.map((j) => {
-      if (j.id === jobId) {
-        return normalizeJobData({
-          ...j,
-          status: newStatus,
-          publicada: isPublic,
-          archived: isArchiving ? true : isRestoring ? false : j.archived,
-          isArchived: isArchiving ? true : isRestoring ? false : (j as any).isArchived,
-          archivedAt: isArchiving ? new Date().toISOString() : isRestoring ? null : (j as any).archivedAt,
-          updatedAt: new Date().toISOString()
-        });
-      }
-      return j;
-    });
-
-    setJobs(updatedList);
-    if (selectedJob?.id === jobId) {
-      setSelectedJob(updatedList.find(j => j.id === jobId) || null);
-    }
-    if (onUpdateJobs) {
-      onUpdateJobs(updatedList);
-    }
-
-    logger.info(`Status da vaga ${jobId} alterado para ${newStatus}`, 'JobsManagement');
-
-    try {
-      if (isArchiving) {
-        await JobService.update(jobId, {
-          status: 'arquivada',
-          publicada: false,
-          archived: true,
-          isArchived: true,
-          archivedAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString()
-        });
-      } else if (isRestoring) {
-        await JobService.update(jobId, {
-          status: newStatus.toLowerCase(),
-          publicada: isPublic,
-          archived: false,
-          isArchived: false,
-          archivedAt: null,
-          updatedAt: new Date().toISOString()
-        });
-      } else {
-        await JobService.update(jobId, {
-          status: newStatus,
-          publicada: isPublic,
-          updatedAt: new Date().toISOString()
-        });
-      }
-    } catch (err) {
-      console.error('Erro ao atualizar status no Firestore:', err);
-    }
-  };
-
-  const handleArchiveJob = (jobId: string) => {
-    handleStatusChange(jobId, 'Arquivada');
-  };
-
-  const handleRestoreJob = (jobId: string) => {
-    handleStatusChange(jobId, 'Aberta');
-  };
-
-  const handleOpenCreateModal = () => {
-    setEditingJob(null);
-    setIsFormOpen(true);
-  };
-
-  const handleOpenEditModal = (job: Job) => {
-    setEditingJob(normalizeJobData(job));
-    setIsFormOpen(true);
-  };
-
-  const handleViewDetails = (job: Job) => {
+  const handleOpenDetail = (job: Job) => {
     setSelectedJob(normalizeJobData(job));
     setIsDetailOpen(true);
   };
 
+  const handleOpenEdit = (job: Job) => {
+    setEditingJob(normalizeJobData(job));
+    setIsFormOpen(true);
+  };
+
+  const handleOpenCreate = () => {
+    setEditingJob(null);
+    setIsFormOpen(true);
+  };
+
   if (selectedJobForCandidates) {
     return (
-      <JobCandidatesManagementView
-        job={selectedJobForCandidates}
-        onBack={() => setSelectedJobForCandidates(null)}
-      />
+      <div className="space-y-6">
+        <div className="flex items-center justify-between bg-white p-4 rounded-2xl border border-slate-200 shadow-2xs">
+          <div>
+            <span className="text-[10px] font-extrabold uppercase text-indigo-600 tracking-wider">Gestão da Vaga</span>
+            <h3 className="text-lg font-black text-slate-900">{selectedJobForCandidates.title}</h3>
+          </div>
+          <Button variant="outline" size="sm" onClick={() => setSelectedJobForCandidates(null)}>
+            Voltar para Vagas
+          </Button>
+        </div>
+        <JobCandidatesManagementView jobId={selectedJobForCandidates.id} jobTitle={selectedJobForCandidates.title} />
+      </div>
     );
   }
 
-  const openJobsCount = jobs.filter((j) => {
-    const norm = normalizeJobData(j);
-    return norm.status === 'Aberta' && !norm.archived;
-  }).length;
-
   return (
     <div className="space-y-6">
-      {/* Header Banner */}
-      <div className="bg-white rounded-3xl p-6 border border-slate-200 shadow-2xs flex flex-col md:flex-row md:items-center justify-between gap-4">
+      {/* Top Banner & Action */}
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 bg-white p-6 rounded-3xl border border-slate-200 shadow-2xs">
         <div className="space-y-1">
           <div className="flex items-center gap-2">
             <h2 className="text-xl sm:text-2xl font-black text-slate-900 tracking-tight">
               Gestão de Vagas Corporativas
             </h2>
-            <span className="bg-indigo-100 text-indigo-800 text-[10px] font-extrabold px-2.5 py-0.5 rounded-full border border-indigo-200">
-              {openJobsCount} abertas
+            <span className="bg-indigo-100 text-indigo-800 text-xs font-extrabold px-2.5 py-0.5 rounded-full border border-indigo-200">
+              {jobs.length} posições
             </span>
           </div>
           <p className="text-xs text-slate-500 font-medium">
-            Cadastre, controle o SLA, vincule orçamentos e acompanhe requisições por departamento.
+            Painel unificado para controle de vagas internas, recrutamento para clientes e busca ativa (Headhunter).
           </p>
         </div>
 
-        <div className="flex items-center gap-2 shrink-0">
-          {canCreate ? (
-            <Button
-              variant="primary"
-              size="sm"
-              onClick={handleOpenCreateModal}
-              leftIcon={<Plus className="w-4 h-4" />}
-            >
-              Nova Vaga
-            </Button>
-          ) : (
-            <div className="text-xs font-bold text-slate-400 bg-slate-100 px-3 py-1.5 rounded-xl border border-slate-200 flex items-center gap-1.5">
-              <Lock className="w-3.5 h-3.5 text-slate-400" /> Apenas Líderes Criam Vagas
-            </div>
-          )}
-        </div>
-      </div>
-
-      {/* Department Open Jobs Summary Bar */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-        {Object.entries(departmentCounts).map(([deptName, openCount]) => (
-          <div
-            key={deptName}
-            className="bg-white p-3.5 rounded-2xl border border-slate-200 shadow-2xs space-y-1"
-          >
-            <p className="text-[10px] uppercase font-bold text-slate-400 truncate">{deptName}</p>
-            <div className="flex items-center justify-between">
-              <span className="text-lg font-black text-slate-900">{openCount} vaga(s)</span>
-              <span className="w-2 h-2 rounded-full bg-emerald-500" />
-            </div>
-          </div>
-        ))}
+        <button
+          onClick={handleOpenCreate}
+          className="px-5 py-3 bg-indigo-600 hover:bg-indigo-700 text-white font-extrabold text-xs rounded-2xl shadow-xs transition-all flex items-center gap-2 cursor-pointer shrink-0"
+        >
+          <Plus className="w-4 h-4" />
+          <span>+ Cadastrar Nova Vaga Corporativa</span>
+        </button>
       </div>
 
       {/* Filters Bar */}
@@ -341,18 +251,16 @@ export const JobsManagementView: React.FC<JobsManagementViewProps> = ({
         totalResultsCount={filteredJobs.length}
       />
 
-      {/* Jobs Grid Display */}
+      {/* Jobs Grid */}
       {filteredJobs.length === 0 ? (
         <Card className="p-12 text-center space-y-3">
           <Briefcase className="w-10 h-10 text-slate-300 mx-auto" />
-          <h3 className="text-base font-extrabold text-slate-800">
-            Nenhuma vaga encontrada para os filtros aplicados
-          </h3>
+          <h4 className="text-base font-extrabold text-slate-800">Nenhuma vaga encontrada</h4>
           <p className="text-xs text-slate-500 max-w-sm mx-auto">
-            Tente ajustar a busca ou limpar os filtros para visualizar os registros cadastrados.
+            Não existem vagas correspondentes aos filtros selecionados. Tente ajustar a busca ou cadastrar uma nova vaga corporativa.
           </p>
           <Button variant="outline" size="sm" onClick={handleResetFilters}>
-            Resetar Filtros
+            Limpar Filtros
           </Button>
         </Card>
       ) : (
@@ -361,37 +269,39 @@ export const JobsManagementView: React.FC<JobsManagementViewProps> = ({
             <JobCard
               key={job.id}
               job={job}
-              onViewDetails={handleViewDetails}
-              onManageCandidates={handleManageCandidates}
-              onEditJob={handleOpenEditModal}
-              onArchiveJob={handleArchiveJob}
-              onRestoreJob={handleRestoreJob}
-              canEdit={canEdit}
-              canArchive={canClose}
+              onOpenDetail={() => handleOpenDetail(job)}
+              onOpenEdit={() => handleOpenEdit(job)}
+              onManageCandidates={() => handleManageCandidates(job)}
             />
           ))}
         </div>
       )}
 
       {/* Detail Modal */}
-      <JobDetailModal
-        job={selectedJob}
-        isOpen={isDetailOpen}
-        onClose={() => setIsDetailOpen(false)}
-        onEdit={handleOpenEditModal}
-        onStatusChange={handleStatusChange}
-        onManageCandidates={handleManageCandidates}
-        canEdit={canEdit}
-      />
+      {selectedJob && (
+        <JobDetailModal
+          isOpen={isDetailOpen}
+          onClose={() => setIsDetailOpen(false)}
+          job={selectedJob}
+          onEdit={() => {
+            setIsDetailOpen(false);
+            handleOpenEdit(selectedJob);
+          }}
+          onManageCandidates={() => {
+            setIsDetailOpen(false);
+            handleManageCandidates(selectedJob);
+          }}
+        />
+      )}
 
-      {/* Form Modal (Create / Edit) */}
+      {/* Official Form Modal */}
       <JobFormModal
         isOpen={isFormOpen}
         onClose={() => setIsFormOpen(false)}
-        onSaveJob={handleSaveJob}
         initialJob={editingJob}
+        openedFromModule="recrutamento"
+        onSaveJob={handleSaveJob}
       />
     </div>
   );
 };
-

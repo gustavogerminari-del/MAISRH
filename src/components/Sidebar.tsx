@@ -47,6 +47,8 @@ export type MainTab =
   | 'entrevistas' 
   | 'contratacoes' 
   | 'headhunter'
+  | 'headhunter-projetos'
+  | 'headhunter-vagas'
   | 'headhunter-clientes' 
   | 'headhunter-comercial'
   | 'headhunter-crm'
@@ -57,6 +59,7 @@ export type MainTab =
   | 'headhunter-despesas' 
   | 'headhunter-garantias' 
   | 'headhunter-relatorios' 
+  | 'headhunter-portal-cliente' 
   | 'colaboradores' 
   | 'ponto-digital' 
   | 'jornada'
@@ -154,9 +157,10 @@ export const Sidebar: React.FC<SidebarProps> = ({
       title: 'HEADHUNTER',
       items: [
         { id: 'headhunter' as MainTab, label: 'Visão Geral', icon: LayoutDashboard },
+        { id: 'headhunter-projetos' as MainTab, label: 'Projetos', icon: Briefcase },
         { id: 'headhunter-clientes' as MainTab, label: 'Clientes', icon: Building2 },
-        { id: 'headhunter-comercial' as MainTab, label: 'Comercial', icon: TrendingUp },
         { id: 'headhunter-financeiro' as MainTab, label: 'Financeiro', icon: Wallet },
+        { id: 'headhunter-portal-cliente' as MainTab, label: 'Portal do Cliente', icon: FileText },
       ]
     },
     {

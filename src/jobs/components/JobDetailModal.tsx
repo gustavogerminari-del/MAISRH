@@ -20,6 +20,8 @@ import { Job, JobStatus } from '../types/job';
 import { JobStatusBadge } from './JobStatusBadge';
 import { Button, Card } from '../../shared';
 import { formatDateBR } from '../../core';
+import { useAuth } from '../../auth';
+import { checkHeadhunterVisibility } from '../utils/headhunterAccess';
 
 export interface JobDetailModalProps {
   job: Job | null;
@@ -40,10 +42,20 @@ export const JobDetailModal: React.FC<JobDetailModalProps> = ({
   onManageCandidates,
   canEdit = true,
 }) => {
+  const { user, activeModules, userPermissions } = useAuth();
+  const { mostrarFiltroHeadhunter } = checkHeadhunterVisibility(user, activeModules, userPermissions);
+
   if (!isOpen || !job) return null;
 
   const isArchived = job.status === 'Arquivada' || (job as any).archived === true || (job as any).isArchived === true;
   const archivedAtStr = (job as any).archivedAt ? formatDateBR((job as any).archivedAt) : null;
+  const showHeadhunterDetails = mostrarFiltroHeadhunter && (
+    (job as any).clienteNome || 
+    (job as any).valorNegociado || 
+    (job as any).feePercentual || 
+    job.origemProcesso === 'headhunter' ||
+    (job as any).isHeadhunter
+  );
 
   return (
     <div className="fixed inset-0 bg-black/50 backdrop-blur-xs z-50 flex items-center justify-center p-4 overflow-y-auto">
@@ -149,6 +161,49 @@ export const JobDetailModal: React.FC<JobDetailModalProps> = ({
             </div>
           </div>
         </div>
+
+        {/* Commercial & Headhunter Details Section */}
+        {showHeadhunterDetails && (
+          <div className="p-4 bg-amber-50/60 rounded-2xl border border-amber-200/80 space-y-3">
+            <div className="flex items-center justify-between text-xs font-bold text-amber-950">
+              <span className="flex items-center gap-1.5">
+                <Building2 className="w-4 h-4 text-amber-600" /> Dados Comerciais (Headhunter / Cliente)
+              </span>
+              <span className="text-[10px] bg-amber-100 text-amber-900 px-2 py-0.5 rounded font-extrabold border border-amber-200">
+                {(job as any).situacaoPagamento || 'Aguardando Contratação'}
+              </span>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+              {(job as any).clienteNome && (
+                <div>
+                  <p className="text-[11px] text-amber-800 font-semibold">Cliente Contratante:</p>
+                  <p className="font-extrabold text-slate-900">{(job as any).clienteNome}</p>
+                </div>
+              )}
+              {(job as any).responsavelComercial && (
+                <div>
+                  <p className="text-[11px] text-amber-800 font-semibold">Consultor Comercial:</p>
+                  <p className="font-extrabold text-slate-900">{(job as any).responsavelComercial}</p>
+                </div>
+              )}
+              {(job as any).valorNegociado !== undefined && (job as any).valorNegociado !== null && (
+                <div>
+                  <p className="text-[11px] text-amber-800 font-semibold">Honorários Negociados:</p>
+                  <p className="font-extrabold text-slate-900">
+                    R$ {Number((job as any).valorNegociado).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                  </p>
+                </div>
+              )}
+              {(job as any).feePercentual && (
+                <div>
+                  <p className="text-[11px] text-amber-800 font-semibold">Percentual de Comissão:</p>
+                  <p className="font-extrabold text-slate-900">{(job as any).feePercentual}%</p>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
 
         {/* Budget & Responsibles Section */}
         <div className="p-4 bg-indigo-50/50 rounded-2xl border border-indigo-200 space-y-3">

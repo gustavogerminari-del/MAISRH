@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { X, Plus, Trash2, Briefcase, ShieldAlert, CheckCircle2, Sparkles, Wand2 } from 'lucide-react';
+import { X, Plus, Trash2, Briefcase, ShieldAlert, CheckCircle2, Sparkles, Wand2, Building2, DollarSign, Clock, FileText } from 'lucide-react';
 import { Job, JobStatus, JobType, JobLocationType } from '../types/job';
 import {
   JOB_STATUS_OPTIONS,
@@ -11,13 +11,23 @@ import {
 import { useAuth } from '../../auth';
 import { Button, Input, Select } from '../../shared';
 import { JobGeneratorModal } from '../../ai/components/JobGeneratorModal';
-import { normalizeCompanyModules } from '../../utils/companyModules';
+import { JobService } from '../../services/JobService';
+import { checkHeadhunterVisibility, sanitizeCommercialFields } from '../utils/headhunterAccess';
+
+export interface HeadhunterClientOption {
+  id: string;
+  nomeFantasia: string;
+  razaoSocial?: string;
+  name?: string;
+}
 
 export interface JobFormModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onSaveJob: (jobData: Omit<Job, 'id' | 'applicantsCount' | 'createdAt'>, existingId?: string) => void;
-  initialJob?: Job | null;
+  onSaveJob?: (jobData: any, existingId?: string) => void | Promise<void>;
+  initialJob?: any | null;
+  openedFromModule?: 'recrutamento' | 'headhunter';
+  clients?: HeadhunterClientOption[];
 }
 
 export const JobFormModal: React.FC<JobFormModalProps> = ({
@@ -25,12 +35,11 @@ export const JobFormModal: React.FC<JobFormModalProps> = ({
   onClose,
   onSaveJob,
   initialJob,
+  openedFromModule = 'recrutamento',
+  clients = [],
 }) => {
-  const { user, activeModules, hasActionAccess } = useAuth();
-  const capabilities = normalizeCompanyModules(activeModules);
-  const hasHeadhunter = capabilities.hasHeadhunter;
-  const hasDP = capabilities.hasDP;
-  const hasBothModules = hasHeadhunter && hasDP;
+  const { user, activeModules, userPermissions, hasActionAccess } = useAuth();
+  const { mostrarFiltroHeadhunter } = checkHeadhunterVisibility(user, activeModules, userPermissions);
 
   const canCreate = hasActionAccess('create_job');
   const canEdit = hasActionAccess('edit_job');
@@ -38,68 +47,91 @@ export const JobFormModal: React.FC<JobFormModalProps> = ({
 
   const isEditing = !!initialJob;
 
+  // Primary Fields
   const [title, setTitle] = useState('');
   const [department, setDepartment] = useState(CORPORATE_DEPARTMENTS[0]);
   const [location, setLocation] = useState('São Paulo - SP');
   const [locationType, setLocationType] = useState<JobLocationType>('Híbrido');
   const [type, setType] = useState<JobType>('CLT');
-  const [origemProcesso, setOrigemProcesso] = useState<'recrutamento_interno' | 'headhunter'>('recrutamento_interno');
-  
-  // Headhunter Client Fields State
+  const [origemProcesso, setOrigemProcesso] = useState<'vaga_interna' | 'recrutamento_cliente' | 'headhunter'>('vaga_interna');
+
+  // Commercial / Headhunter Fields
+  const [clienteId, setClienteId] = useState('');
   const [clienteNome, setClienteNome] = useState('');
   const [regraCobranca, setRegraCobranca] = useState('15% do salário bruto anual');
   const [feePercentual, setFeePercentual] = useState<number>(15);
+  const [valorNegociado, setValorNegociado] = useState<number>(15000);
   const [vencimentoPrazo, setVencimentoPrazo] = useState('30 dias após contratação');
-  const [responsavelComercial, setResponsavelComercial] = useState('Carlos Headhunter');
+  const [responsavelComercial, setResponsavelComercial] = useState('Consultor Sênior HR');
+  const [situacaoPagamento, setSituacaoPagamento] = useState('Aguardando Contratação');
+  const [observacoesComerciais, setObservacoesComerciais] = useState('');
 
-  const [status, setStatus] = useState<JobStatus | 'ativa'>('ativa');
+  // Operational Fields
+  const [status, setStatus] = useState<JobStatus | 'ativa' | 'Aberta'>('Aberta');
   const [salaryRange, setSalaryRange] = useState('R$ 8.000 - R$ 12.000');
   const [openings, setOpenings] = useState<number>(1);
-  const [deadline, setDeadline] = useState('2026-08-30');
+  const [deadline, setDeadline] = useState('2026-12-31');
   const [description, setDescription] = useState('');
   const [recruiterName, setRecruiterName] = useState(CORPORATE_RECRUITERS[0].name);
-  const [managerName, setManagerName] = useState('Luciana Mello');
+  const [managerName, setManagerName] = useState('Diretoria Executiva');
   const [centerCostCode, setCenterCostCode] = useState('CC-RH-101');
   const [requirements, setRequirements] = useState<string[]>([]);
   const [newRequirementText, setNewRequirementText] = useState('');
+
+  // Interface State
   const [error, setError] = useState('');
+  const [isSaving, setIsSaving] = useState(false);
+  const [successToast, setSuccessToast] = useState('');
   const [showAiModal, setShowAiModal] = useState(false);
 
   useEffect(() => {
-    // Determine default origin based on company modules
-    let defaultOrig: 'recrutamento_interno' | 'headhunter' = 'recrutamento_interno';
-    if (hasHeadhunter && !hasDP) {
-      defaultOrig = 'headhunter';
-    } else if (!hasHeadhunter && hasDP) {
-      defaultOrig = 'recrutamento_interno';
-    }
+    if (!isOpen) return;
+
+    setError('');
+    setSuccessToast('');
+
+    // Default origin depending on module
+    let defaultOrig: 'vaga_interna' | 'recrutamento_cliente' | 'headhunter' = 
+      (openedFromModule === 'headhunter' && mostrarFiltroHeadhunter) ? 'headhunter' : 'vaga_interna';
 
     if (initialJob) {
       setTitle(initialJob.title || initialJob.titulo || '');
       setDepartment(initialJob.department || 'Tecnologia & Engenharia');
       setLocation(initialJob.location || `${initialJob.cidade || 'São Paulo'} - ${initialJob.estado || 'SP'}`);
-      setLocationType(initialJob.locationType || 'Híbrido');
+      setLocationType(initialJob.locationType || initialJob.modalidade || 'Híbrido');
       setType(initialJob.type || initialJob.tipoContrato || 'CLT');
-      
-      const orig = (initialJob as any).origemProcesso || (initialJob as any).moduloOrigem || ((initialJob as any).isHeadhunter ? 'headhunter' : defaultOrig);
-      const isHead = String(orig).toLowerCase().includes('headhunter') || (initialJob as any).isHeadhunter === true;
-      setOrigemProcesso(isHead ? 'headhunter' : 'recrutamento_interno');
-      
-      setClienteNome((initialJob as any).clienteNome || (initialJob as any).cliente || '');
-      setRegraCobranca((initialJob as any).regraCobranca || '15% do salário bruto anual');
-      setFeePercentual(Number((initialJob as any).feePercentual || (initialJob as any).percentual || 15));
-      setVencimentoPrazo((initialJob as any).vencimentoPrazo || '30 dias após contratação');
-      setResponsavelComercial((initialJob as any).responsavelComercial || 'Carlos Headhunter');
 
-      setStatus(initialJob.status || 'ativa');
+      const rawOrig = (initialJob.origemProcesso || initialJob.origem || initialJob.moduloOrigem || '').toString().toLowerCase();
+      if ((rawOrig.includes('headhunter') || initialJob.isHeadhunter || initialJob.projetoHeadhunter) && mostrarFiltroHeadhunter) {
+        setOrigemProcesso('headhunter');
+      } else if (rawOrig.includes('cliente') || initialJob.clienteNome) {
+        setOrigemProcesso('recrutamento_cliente');
+      } else {
+        setOrigemProcesso('vaga_interna');
+      }
+
+      setClienteId(initialJob.clienteId || '');
+      setClienteNome(initialJob.clienteNome || initialJob.cliente || '');
+      setRegraCobranca(initialJob.regraCobranca || '15% do salário bruto anual');
+      setFeePercentual(Number(initialJob.feePercentual || initialJob.percentualComissao || 15));
+      setValorNegociado(Number(initialJob.valorNegociado || initialJob.valorCobrado || 15000));
+      setVencimentoPrazo(initialJob.vencimentoPrazo || initialJob.prazoGarantia || '30 dias após contratação');
+      setResponsavelComercial(initialJob.responsavelComercial || initialJob.consultorResponsavel || 'Consultor Sênior HR');
+      setSituacaoPagamento(initialJob.situacaoPagamento || 'Aguardando Contratação');
+      setObservacoesComerciais(initialJob.observacoesComerciais || '');
+
+      setStatus(initialJob.status || 'Aberta');
       setSalaryRange(initialJob.salaryRange || initialJob.salario || 'R$ 8.000 - R$ 12.000');
       setOpenings(initialJob.openings || initialJob.quantidadeVagas || 1);
-      setDeadline(initialJob.deadline || '2026-08-30');
+      setDeadline(initialJob.deadline || initialJob.prazoSla || '2026-12-31');
       setDescription(initialJob.description || initialJob.descricao || '');
-      setRecruiterName(initialJob.recruiterName || CORPORATE_RECRUITERS[0].name);
-      setManagerName(initialJob.managerName || 'Luciana Mello');
-      setCenterCostCode(initialJob.budget?.centerCostCode || 'CC-RH-101');
-      setRequirements(initialJob.requirements || initialJob.requisitos || []);
+      setRecruiterName(initialJob.recruiterName || initialJob.recrutadorResponsavel || CORPORATE_RECRUITERS[0].name);
+      setManagerName(initialJob.managerName || initialJob.gestorSolicitante || 'Diretoria Executiva');
+      setCenterCostCode(initialJob.budget?.centerCostCode || initialJob.centroCusto || 'CC-RH-101');
+      setRequirements(initialJob.requirements || initialJob.requisitos || [
+        'Experiência prévia comprovada na função',
+        'Boa comunicação interpessoal'
+      ]);
     } else {
       setTitle('');
       setDepartment(CORPORATE_DEPARTMENTS[0]);
@@ -107,31 +139,35 @@ export const JobFormModal: React.FC<JobFormModalProps> = ({
       setLocationType('Híbrido');
       setType('CLT');
       setOrigemProcesso(defaultOrig);
+      setClienteId('');
       setClienteNome('');
       setRegraCobranca('15% do salário bruto anual');
       setFeePercentual(15);
+      setValorNegociado(15000);
       setVencimentoPrazo('30 dias após contratação');
-      setResponsavelComercial('Carlos Headhunter');
-      setStatus('ativa');
+      setResponsavelComercial('Consultor Sênior HR');
+      setSituacaoPagamento('Aguardando Contratação');
+      setObservacoesComerciais('');
+
+      setStatus('Aberta');
       setSalaryRange('R$ 8.000 - R$ 12.000');
       setOpenings(1);
-      setDeadline('2026-08-30');
+      setDeadline('2026-12-31');
       setDescription('');
       setRecruiterName(CORPORATE_RECRUITERS[0].name);
-      setManagerName('Luciana Mello');
+      setManagerName('Diretoria Executiva');
       setCenterCostCode('CC-RH-101');
       setRequirements([
         'Experiência prévia comprovada na função',
         'Boa comunicação interpessoal',
       ]);
     }
-    setError('');
-  }, [initialJob, isOpen, hasHeadhunter, hasDP]);
+  }, [initialJob, isOpen, openedFromModule]);
 
   if (!isOpen) return null;
 
-  // Check general permission
   const isAllowed = isEditing ? canEdit : canCreate;
+  const showCommercialFields = origemProcesso === 'recrutamento_cliente' || origemProcesso === 'headhunter';
 
   const handleAddRequirement = () => {
     if (!newRequirementText.trim()) return;
@@ -143,10 +179,12 @@ export const JobFormModal: React.FC<JobFormModalProps> = ({
     setRequirements((prev) => prev.filter((_, i) => i !== index));
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (isSaving) return; // Prevent double submit
+
     if (!title.trim() || !description.trim()) {
-      setError('Por favor, preencha o título e a descrição da vaga.');
+      setError('Por favor, preencha o cargo/título e a descrição detalhada da vaga.');
       return;
     }
 
@@ -155,46 +193,56 @@ export const JobFormModal: React.FC<JobFormModalProps> = ({
       return;
     }
 
-    // Determine effective origin based on company capabilities
-    let effectiveOrigem = origemProcesso;
-    if (hasHeadhunter && !hasDP) {
-      effectiveOrigem = 'headhunter';
-    } else if (!hasHeadhunter && hasDP) {
-      effectiveOrigem = 'recrutamento_interno';
-    } else if (hasBothModules && !origemProcesso) {
-      setError('A empresa possui os módulos RH e Headhunter. Escolha obrigatoriamente a origem da vaga.');
+    if (showCommercialFields && !clienteNome.trim()) {
+      setError('Informe o cliente contratante para vagas de Headhunter ou Atendimento a Cliente.');
       return;
     }
 
-    if (effectiveOrigem === 'headhunter' && !clienteNome.trim()) {
-      setError('Para vagas do Headhunter, informe obrigatoriamente o nome do cliente.');
-      return;
-    }
+    setIsSaving(true);
+    setError('');
 
-    const isHead = effectiveOrigem === 'headhunter';
-    const empresaId = user?.companyId || user?.tenantId || user?.id || 'emp-001';
-    const nomeEmpresa = user?.companyName || user?.tenantName || 'MAIS RH Brasil';
-    const parts = location.split('-');
-    const cidade = parts[0]?.trim() || location;
-    const estado = parts[1]?.trim() || 'SP';
-    const nowIsoDate = new Date().toISOString().split('T')[0];
+    try {
+      const empresaId = user?.empresaId || user?.companyId || user?.tenantId || 'emp-001';
+      const nomeEmpresa = user?.companyName || user?.tenantName || 'MAIS RH Brasil';
+      const nowIsoDate = new Date().toISOString().split('T')[0];
+      const parts = location.split('-');
+      const cidade = parts[0]?.trim() || location;
+      const estado = parts[1]?.trim() || 'SP';
 
-    onSaveJob(
-      {
+      const isHead = origemProcesso === 'headhunter';
+      const isClient = origemProcesso === 'recrutamento_cliente';
+
+      const jobId = initialJob?.id || `vaga-${Date.now()}`;
+
+      const payload: Record<string, any> = {
+        id: jobId,
         empresaId,
+        companyId: empresaId,
         nomeEmpresa,
-        origemProcesso: isHead ? 'HEADHUNTER' : 'RH_INTERNO',
-        moduloOrigem: isHead ? 'headhunter' : 'RH',
-        origem: isHead ? 'HEADHUNTER' : 'RH_INTERNO',
+        companyName: nomeEmpresa,
+        
+        // Single Unified Origin Structure
+        origem: origemProcesso,
+        origemProcesso,
+        tipoProcesso: isHead ? 'busca_ativa' : isClient ? 'cliente' : 'interno',
+        projetoHeadhunter: isHead,
         isHeadhunter: isHead,
-        destinoContratacao: isHead ? 'FINANCEIRO_HEADHUNTER' : 'DP',
-        destino: isHead ? 'Financeiro' : 'DP',
-        clienteNome: isHead ? clienteNome.trim() : null,
-        clienteId: isHead ? `cli-${Date.now()}` : null,
-        regraCobranca: isHead ? regraCobranca : null,
-        feePercentual: isHead ? Number(feePercentual) || 15 : null,
-        vencimentoPrazo: isHead ? vencimentoPrazo : null,
-        responsavelComercial: isHead ? responsavelComercial : null,
+        criadaPorModulo: openedFromModule,
+        
+        // Commercial Information
+        clienteId: showCommercialFields ? (clienteId || `cli-${Date.now()}`) : null,
+        clienteNome: showCommercialFields ? clienteNome.trim() : null,
+        regraCobranca: showCommercialFields ? regraCobranca : null,
+        feePercentual: showCommercialFields ? Number(feePercentual) || 15 : null,
+        valorNegociado: showCommercialFields ? Number(valorNegociado) || 0 : null,
+        valorCobrado: showCommercialFields ? Number(valorNegociado) || 0 : null,
+        vencimentoPrazo: showCommercialFields ? vencimentoPrazo : null,
+        responsavelComercial: showCommercialFields ? responsavelComercial : null,
+        consultorResponsavel: showCommercialFields ? responsavelComercial : null,
+        situacaoPagamento: showCommercialFields ? situacaoPagamento : null,
+        observacoesComerciais: showCommercialFields ? observacoesComerciais : null,
+
+        // Position & Operational Details
         titulo: title.trim(),
         title: title.trim(),
         descricao: description.trim(),
@@ -209,35 +257,64 @@ export const JobFormModal: React.FC<JobFormModalProps> = ({
         salaryRange,
         tipoContrato: type,
         type,
-        beneficios: ['Vale Refeição R$ 1.000/mês', 'Plano de Saúde', 'Seguro de Vida', 'Auxílio Home Office'],
-        benefits: ['Vale Refeição R$ 1.000/mês', 'Plano de Saúde', 'Seguro de Vida', 'Auxílio Home Office'],
         quantidadeVagas: Number(openings) || 1,
         openings: Number(openings) || 1,
-        dataCriacao: nowIsoDate,
-        createdAt: nowIsoDate,
-        deadline,
-        status: status === 'Arquivada' || status === 'Fechada' ? status : 'ativa',
-        publicada: true,
+        applicantsCount: initialJob?.applicantsCount || initialJob?.candidatosCount || 0,
+        
         department,
         recruiterName,
+        recrutadorResponsavel: recruiterName,
         managerName,
-        tipoProcesso: isHead ? 'headhunter' : 'interno',
+        gestorSolicitante: managerName,
+        centroCusto: centerCostCode,
+        deadline,
+        prazoSla: deadline,
+        status: status,
+        publicada: true,
+        
+        dataCriacao: initialJob?.dataCriacao || initialJob?.createdAt || nowIsoDate,
+        createdAt: initialJob?.createdAt || initialJob?.dataCriacao || nowIsoDate,
+        updatedAt: new Date().toISOString(),
+        
         budget: {
           approvedSalaryRange: salaryRange,
           centerCostCode,
           isApproved: true,
         },
-        isArchived: status === 'Arquivada',
-      },
-      initialJob?.id
-    );
+      };
 
-    onClose();
+      const sanitizedPayload = sanitizeCommercialFields(payload, mostrarFiltroHeadhunter);
+
+      // Save to official Firestore Service
+      await JobService.create(sanitizedPayload);
+
+      if (onSaveJob) {
+        await onSaveJob(sanitizedPayload, jobId);
+      }
+
+      const msg = openedFromModule === 'headhunter'
+        ? 'Vaga criada com sucesso e vinculada ao Recrutamento.'
+        : 'Vaga criada com sucesso.';
+
+      setSuccessToast(msg);
+
+      setTimeout(() => {
+        setIsSaving(false);
+        onClose();
+      }, 900);
+
+    } catch (err: any) {
+      console.error('Erro ao salvar vaga:', err);
+      setError(`Erro ao salvar vaga: ${err?.message || String(err)}`);
+      setIsSaving(false);
+    }
   };
 
   return (
-    <div className="fixed inset-0 bg-black/50 backdrop-blur-xs z-50 flex items-center justify-center p-4 overflow-y-auto">
-      <div className="bg-white rounded-3xl max-w-2xl w-full p-6 sm:p-8 space-y-6 shadow-2xl relative my-8 max-h-[90vh] overflow-y-auto">
+    <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-50 flex items-center justify-center p-4 overflow-y-auto">
+      <div className="bg-white rounded-3xl max-w-3xl w-full p-6 sm:p-8 space-y-6 shadow-2xl relative my-8 max-h-[92vh] overflow-y-auto border border-slate-200">
+        
+        {/* Header Close Button */}
         <button
           type="button"
           onClick={onClose}
@@ -246,12 +323,27 @@ export const JobFormModal: React.FC<JobFormModalProps> = ({
           <X className="w-5 h-5" />
         </button>
 
-        <div className="flex items-center gap-2">
-          <Briefcase className="w-6 h-6 text-indigo-600" />
-          <h2 className="text-xl font-extrabold text-slate-900">
-            {isEditing ? 'Editar Registro de Vaga' : 'Cadastrar Nova Vaga Corporativa'}
-          </h2>
+        {/* Header Title */}
+        <div className="flex items-center gap-3">
+          <div className="p-3 bg-indigo-50 border border-indigo-100 rounded-2xl text-indigo-600">
+            <Briefcase className="w-6 h-6" />
+          </div>
+          <div>
+            <h2 className="text-xl font-extrabold text-slate-900">
+              {isEditing ? 'Editar Registro de Vaga' : 'Cadastrar Nova Vaga Corporativa'}
+            </h2>
+            <p className="text-xs text-slate-500 font-medium">
+              Formulário oficial unificado para Recrutamento Interno, Atendimento a Clientes e Executive Search.
+            </p>
+          </div>
         </div>
+
+        {successToast && (
+          <div className="p-4 bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs font-bold rounded-2xl flex items-center gap-2 animate-fadeIn">
+            <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0" />
+            <span>{successToast}</span>
+          </div>
+        )}
 
         {!isAllowed ? (
           <div className="p-6 bg-rose-50 border border-rose-200 rounded-2xl text-center space-y-3">
@@ -265,61 +357,55 @@ export const JobFormModal: React.FC<JobFormModalProps> = ({
             </Button>
           </div>
         ) : (
-          <form onSubmit={handleSubmit} className="space-y-4">
+          <form onSubmit={handleSubmit} className="space-y-5">
             {/* 🤖 Banner Gerador com MAIS RH IA */}
-            <div className="p-3.5 bg-gradient-to-r from-emerald-900 to-slate-900 text-white rounded-2xl flex items-center justify-between gap-3 shadow-md">
-              <div className="flex items-center gap-2.5">
-                <div className="p-2 bg-emerald-500/20 rounded-xl border border-emerald-500/30">
-                  <Wand2 className="w-4 h-4 text-amber-300" />
+            <div className="p-4 bg-gradient-to-r from-emerald-900 via-slate-900 to-indigo-950 text-white rounded-2xl flex items-center justify-between gap-3 shadow-md">
+              <div className="flex items-center gap-3">
+                <div className="p-2 bg-emerald-500/20 rounded-xl border border-emerald-500/30 text-amber-300">
+                  <Wand2 className="w-5 h-5" />
                 </div>
                 <div>
                   <h4 className="text-xs font-black text-white">Criar Vaga com MAIS RH IA</h4>
-                  <p className="text-[11px] text-emerald-200">Preencha título, descrição e requisitos automaticamente com IA.</p>
+                  <p className="text-[11px] text-emerald-200">Preencha cargo, descrição detalhada e requisitos automaticamente com Inteligência Artificial.</p>
                 </div>
               </div>
               <button
                 type="button"
                 onClick={() => setShowAiModal(true)}
-                className="px-3.5 py-1.5 bg-emerald-500 hover:bg-emerald-600 text-slate-950 font-black text-xs rounded-xl shadow-xs transition-all cursor-pointer whitespace-nowrap flex items-center gap-1.5"
+                className="px-4 py-2 bg-emerald-500 hover:bg-emerald-600 text-slate-950 font-black text-xs rounded-xl shadow-xs transition-all cursor-pointer whitespace-nowrap flex items-center gap-1.5 shrink-0"
               >
-                <Sparkles className="w-3.5 h-3.5" />
+                <Sparkles className="w-4 h-4" />
                 <span>Gerar com IA</span>
               </button>
             </div>
 
             {error && (
-              <div className="p-3 bg-rose-50 border border-rose-200 text-rose-700 text-xs rounded-xl font-semibold">
+              <div className="p-3.5 bg-rose-50 border border-rose-200 text-rose-700 text-xs rounded-xl font-bold">
                 {error}
               </div>
             )}
 
+            {/* Title / Cargo */}
             <Input
-              label="Cargo / Título da Vaga"
-              placeholder="Ex: Desenvolvedor(a) Frontend Senior"
+              label="Cargo / Título da Vaga *"
+              placeholder="Ex: Diretor de Tecnologia / Gerente Comercial / Desenvolvedor Full Stack"
               value={title}
               onChange={(e) => setTitle(e.target.value)}
               required
             />
 
+            {/* Row 1: Origem, Departamento, Status */}
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-              {hasBothModules ? (
-                <Select
-                  label="Origem da Vaga (Obrigatório)*"
-                  value={origemProcesso}
-                  onChange={(e) => setOrigemProcesso(e.target.value as any)}
-                  options={[
-                    { value: 'recrutamento_interno', label: 'Vaga Interna (Encaminhar para DP)' },
-                    { value: 'headhunter', label: 'Vaga de Cliente (Encaminhar para Financeiro)' },
-                  ]}
-                />
-              ) : (
-                <div className="space-y-1">
-                  <label className="text-xs font-bold text-slate-700 block">Origem da Vaga (Módulo)</label>
-                  <div className="p-2.5 bg-slate-100 border border-slate-200 rounded-xl text-xs font-bold text-slate-800">
-                    {hasHeadhunter ? 'Headhunter (Destino: Financeiro)' : 'RH Interno (Destino: Admissão DP)'}
-                  </div>
-                </div>
-              )}
+              <Select
+                label="Origem da Vaga *"
+                value={origemProcesso}
+                onChange={(e) => setOrigemProcesso(e.target.value as any)}
+                options={[
+                  { value: 'vaga_interna', label: 'Vaga Interna (Processo Próprio)' },
+                  { value: 'recrutamento_cliente', label: 'Recrutamento para Cliente' },
+                  ...(mostrarFiltroHeadhunter ? [{ value: 'headhunter', label: 'Headhunter / Busca Ativa' }] : []),
+                ]}
+              />
 
               <Select
                 label="Departamento"
@@ -331,32 +417,59 @@ export const JobFormModal: React.FC<JobFormModalProps> = ({
               <Select
                 label="Status da Vaga"
                 value={status}
-                onChange={(e) => setStatus(e.target.value as JobStatus)}
-                options={JOB_STATUS_OPTIONS.map((s) => ({ value: s, label: s }))}
+                onChange={(e) => setStatus(e.target.value as any)}
+                options={[
+                  { value: 'Aberta', label: 'Aberta' },
+                  { value: 'Em andamento', label: 'Em andamento' },
+                  { value: 'Concluída', label: 'Concluída' },
+                  { value: 'Suspensa', label: 'Suspensa' },
+                  { value: 'Cancelada', label: 'Cancelada' },
+                  { value: 'Arquivada', label: 'Arquivada' },
+                ]}
               />
             </div>
 
-            {/* Campos Específicos para Headhunter */}
-            {origemProcesso === 'headhunter' && (
-              <div className="p-4 bg-indigo-50/70 border border-indigo-200 rounded-2xl space-y-3">
-                <div className="flex items-center gap-2">
-                  <Briefcase className="w-4 h-4 text-indigo-600" />
-                  <h4 className="text-xs font-extrabold text-indigo-950 uppercase tracking-wider">
-                    Dados do Cliente & Faturamento (Headhunter)
+            {/* BLOCO: DADOS COMERCIAIS (Apenas se cliente ou headhunter) */}
+            {showCommercialFields && (
+              <div className="p-4.5 bg-indigo-50/80 border border-indigo-200/80 rounded-2xl space-y-3.5 shadow-2xs">
+                <div className="flex items-center gap-2 border-b border-indigo-200 pb-2">
+                  <Building2 className="w-4 h-4 text-indigo-700" />
+                  <h4 className="text-xs font-black text-indigo-950 uppercase tracking-wider">
+                    Dados Comerciais & Faturamento ({origemProcesso === 'headhunter' ? 'Headhunter / Executive Search' : 'Recrutamento para Cliente'})
                   </h4>
                 </div>
-                
+
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <Input
-                    label="Nome do Cliente (Contratante)*"
-                    placeholder="Ex: Banco Itaú / TechCorp S.A."
-                    value={clienteNome}
-                    onChange={(e) => setClienteNome(e.target.value)}
-                    required
-                  />
+                  {/* Cliente Contratante */}
+                  <div>
+                    <label className="block text-xs font-bold text-indigo-950 mb-1">Cliente Contratante *</label>
+                    {clients.length > 0 ? (
+                      <select
+                        value={clienteId}
+                        onChange={(e) => {
+                          setClienteId(e.target.value);
+                          const c = clients.find(x => x.id === e.target.value);
+                          if (c) setClienteNome(c.nomeFantasia || c.name || '');
+                        }}
+                        className="w-full p-2.5 bg-white border border-indigo-200 text-indigo-950 font-bold text-xs rounded-xl focus:border-indigo-600 outline-none"
+                      >
+                        <option value="">Selecione um cliente cadastrado...</option>
+                        {clients.map(c => (
+                          <option key={c.id} value={c.id}>{c.nomeFantasia || c.name}</option>
+                        ))}
+                      </select>
+                    ) : (
+                      <Input
+                        placeholder="Ex: Banco Itaú S.A. / TechCorp Brasil"
+                        value={clienteNome}
+                        onChange={(e) => setClienteNome(e.target.value)}
+                        required
+                      />
+                    )}
+                  </div>
 
                   <Input
-                    label="Responsável Comercial"
+                    label="Consultor Comercial Responsável"
                     placeholder="Ex: Carlos Headhunter"
                     value={responsavelComercial}
                     onChange={(e) => setResponsavelComercial(e.target.value)}
@@ -365,40 +478,75 @@ export const JobFormModal: React.FC<JobFormModalProps> = ({
 
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                   <Input
+                    label="Honorário Negociado (R$)"
                     type="number"
-                    label="Honorários (%)"
+                    placeholder="15000"
+                    value={valorNegociado}
+                    onChange={(e) => setValorNegociado(Number(e.target.value))}
+                  />
+
+                  <Input
+                    label="Percentual de Comissão (%)"
+                    type="number"
                     placeholder="15"
                     value={feePercentual}
                     onChange={(e) => setFeePercentual(Number(e.target.value))}
                   />
 
                   <Input
-                    label="Regra de Cobrança"
-                    placeholder="Ex: 15% do salário bruto anual"
-                    value={regraCobranca}
-                    onChange={(e) => setRegraCobranca(e.target.value)}
-                  />
-
-                  <Input
-                    label="Prazo de Vencimento"
+                    label="Prazo de Garantia / SLA"
                     placeholder="Ex: 30 dias após contratação"
                     value={vencimentoPrazo}
                     onChange={(e) => setVencimentoPrazo(e.target.value)}
                   />
                 </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <Input
+                    label="Regra de Cobrança / Contrato"
+                    placeholder="Ex: 15% do salário bruto anual no sucesso"
+                    value={regraCobranca}
+                    onChange={(e) => setRegraCobranca(e.target.value)}
+                  />
+
+                  <Select
+                    label="Situação do Pagamento"
+                    value={situacaoPagamento}
+                    onChange={(e) => setSituacaoPagamento(e.target.value)}
+                    options={[
+                      { value: 'Aguardando Contratação', label: 'Aguardando Contratação' },
+                      { value: 'Pendente Faturamento', label: 'Pendente Faturamento' },
+                      { value: 'Faturado', label: 'Faturado' },
+                      { value: 'Pago', label: 'Pago' },
+                      { value: 'Inadimplente', label: 'Inadimplente' },
+                    ]}
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-indigo-950 mb-1">Observações Comerciais & Cláusulas</label>
+                  <input
+                    type="text"
+                    placeholder="Observações do contrato, parcelamento ou condições comerciais..."
+                    value={observacoesComerciais}
+                    onChange={(e) => setObservacoesComerciais(e.target.value)}
+                    className="w-full bg-white border border-indigo-200 text-slate-800 text-xs rounded-xl p-2.5 outline-none font-medium"
+                  />
+                </div>
               </div>
             )}
 
+            {/* Row 2: Localização, Modalidade, Tipo Contrato */}
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
               <Input
-                label="Localização"
+                label="Localização (Cidade - UF)"
                 placeholder="Ex: São Paulo - SP"
                 value={location}
                 onChange={(e) => setLocation(e.target.value)}
               />
 
               <Select
-                label="Modalidade"
+                label="Modalidade de Trabalho"
                 value={locationType}
                 onChange={(e) => setLocationType(e.target.value as JobLocationType)}
                 options={JOB_LOCATION_OPTIONS.map((l) => ({ value: l, label: l }))}
@@ -412,6 +560,7 @@ export const JobFormModal: React.FC<JobFormModalProps> = ({
               />
             </div>
 
+            {/* Row 3: Faixa Salarial, Centro Custo, N° Vagas */}
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
               <Input
                 label="Faixa Salarial"
@@ -439,6 +588,7 @@ export const JobFormModal: React.FC<JobFormModalProps> = ({
               />
             </div>
 
+            {/* Row 4: Recrutador, Gestor, Prazo SLA */}
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
               <Select
                 label="Recrutador Responsável"
@@ -449,21 +599,23 @@ export const JobFormModal: React.FC<JobFormModalProps> = ({
 
               <Input
                 label="Gestor Solicitante"
+                placeholder="Ex: Diretoria Executiva"
                 value={managerName}
                 onChange={(e) => setManagerName(e.target.value)}
               />
 
               <Input
                 type="date"
-                label="Data Limite (Prazo SLA)"
+                label="Data Limite / Prazo SLA *"
                 value={deadline}
                 onChange={(e) => setDeadline(e.target.value)}
                 required
               />
             </div>
 
+            {/* Descrição Detalhada */}
             <div className="space-y-1">
-              <label className="text-xs font-bold text-slate-700">Descrição Detalhada das Atividades</label>
+              <label className="text-xs font-bold text-slate-700">Descrição Detalhada das Atividades *</label>
               <textarea
                 value={description}
                 onChange={(e) => setDescription(e.target.value)}
@@ -474,12 +626,12 @@ export const JobFormModal: React.FC<JobFormModalProps> = ({
               />
             </div>
 
-            {/* Requirements Manager */}
+            {/* Requisitos */}
             <div className="space-y-2 pt-2 border-t border-slate-100">
-              <label className="text-xs font-bold text-slate-700 block">Requisitos da Vaga</label>
+              <label className="text-xs font-bold text-slate-700 block">Requisitos Obrigatórios da Vaga</label>
               <div className="flex gap-2">
                 <Input
-                  placeholder="Ex: Mínimo 3 anos de experiência em React"
+                  placeholder="Ex: Mínimo 3 anos de experiência em liderança técnica"
                   value={newRequirementText}
                   onChange={(e) => setNewRequirementText(e.target.value)}
                   className="flex-1"
@@ -493,7 +645,7 @@ export const JobFormModal: React.FC<JobFormModalProps> = ({
                 {requirements.map((req, idx) => (
                   <div
                     key={idx}
-                    className="flex items-center justify-between p-2 bg-slate-50 rounded-xl border border-slate-200 text-xs text-slate-800"
+                    className="flex items-center justify-between p-2.5 bg-slate-50 rounded-xl border border-slate-200 text-xs font-semibold text-slate-800"
                   >
                     <span>• {req}</span>
                     <button
@@ -508,12 +660,13 @@ export const JobFormModal: React.FC<JobFormModalProps> = ({
               </div>
             </div>
 
-            <div className="pt-4 border-t border-slate-100 flex justify-end gap-3">
-              <Button type="button" variant="ghost" onClick={onClose}>
+            {/* Action Buttons */}
+            <div className="pt-4 border-t border-slate-100 flex items-center justify-end gap-3">
+              <Button type="button" variant="ghost" onClick={onClose} disabled={isSaving}>
                 Cancelar
               </Button>
-              <Button type="submit" variant="primary">
-                {isEditing ? 'Salvar Alterações' : 'Cadastrar Vaga'}
+              <Button type="submit" variant="primary" disabled={isSaving}>
+                {isSaving ? 'Salvando Vaga...' : isEditing ? 'Salvar Alterações' : 'Cadastrar Vaga'}
               </Button>
             </div>
           </form>

@@ -34,6 +34,7 @@ import {
   LayoutDashboard
 } from 'lucide-react';
 import { AdmissaoPending, ColaboradorCompleto, TipoContrato, StatusAdmissao, ItemChecklistAdmissao } from '../types/dp';
+import { OfficialAdmissaoFlowModal } from './admissao/OfficialAdmissaoFlowModal';
 
 interface GestaoAdmissoesProps {
   admissoes: AdmissaoPending[];
@@ -76,7 +77,10 @@ export const GestaoAdmissoes: React.FC<GestaoAdmissoesProps> = ({
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
   const [drawerTab, setDrawerTab] = useState<'resumo' | 'pessoais' | 'endereco' | 'documentos' | 'profissionais' | 'banco' | 'dependentes' | 'beneficios' | 'exames' | 'contrato' | 'checklist'>('resumo');
 
-  // Auto-open drawer when selectedAdmissionId is provided
+  const [isOfficialFlowOpen, setIsOfficialFlowOpen] = useState(false);
+  const [activeFlowData, setActiveFlowData] = useState<Partial<AdmissaoPending> | null>(null);
+
+  // Auto-open drawer/flow when selectedAdmissionId is provided
   useEffect(() => {
     const targetId = selectedAdmissionId || localStorage.getItem('selectedAdmissionId');
     if (!targetId) return;
@@ -92,7 +96,8 @@ export const GestaoAdmissoes: React.FC<GestaoAdmissoesProps> = ({
 
     if (found) {
       setSelectedAdmissao(found);
-      setIsDrawerOpen(true);
+      setActiveFlowData(found);
+      setIsOfficialFlowOpen(true);
     } else {
       // Direct Firestore fetch fallback
       const fetchAdmission = async () => {
@@ -102,7 +107,8 @@ export const GestaoAdmissoes: React.FC<GestaoAdmissoesProps> = ({
           if (docSnap.exists()) {
             const data = { id: docSnap.id, ...docSnap.data() } as AdmissaoPending;
             setSelectedAdmissao(data);
-            setIsDrawerOpen(true);
+            setActiveFlowData(data);
+            setIsOfficialFlowOpen(true);
           } else {
             const q = query(collection(db, 'solicitacoes_admissao'), where('contratacaoId', '==', targetId));
             const querySnap = await getDocs(q);
@@ -110,7 +116,8 @@ export const GestaoAdmissoes: React.FC<GestaoAdmissoesProps> = ({
               const firstDoc = querySnap.docs[0];
               const data = { id: firstDoc.id, ...firstDoc.data() } as AdmissaoPending;
               setSelectedAdmissao(data);
-              setIsDrawerOpen(true);
+              setActiveFlowData(data);
+              setIsOfficialFlowOpen(true);
             }
           }
         } catch (err) {
@@ -388,19 +395,14 @@ ___________________________________________
           {/* Action Buttons */}
           <div className="flex flex-wrap items-center gap-2">
             <button
-              onClick={() => setShowImportCandidateModal(true)}
-              className="px-3.5 py-2 bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 font-bold text-xs rounded-xl transition-all flex items-center gap-1.5 cursor-pointer shadow-2xs"
-            >
-              <UserCheck className="w-4 h-4 text-blue-600" />
-              <span>Importar Candidato Aprovado</span>
-            </button>
-
-            <button
-              onClick={() => setShowManualModal(true)}
-              className="px-4 py-2 bg-[#2563EB] hover:bg-blue-700 text-white font-extrabold text-xs rounded-xl transition-all flex items-center gap-1.5 cursor-pointer shadow-2xs"
+              onClick={() => {
+                setActiveFlowData(null);
+                setIsOfficialFlowOpen(true);
+              }}
+              className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-extrabold text-xs rounded-xl transition-all flex items-center gap-1.5 cursor-pointer shadow-md"
             >
               <Plus className="w-4 h-4" />
-              <span>Nova Admissão Manual</span>
+              <span>+ Nova Admissão</span>
             </button>
           </div>
         </div>
@@ -506,18 +508,23 @@ ___________________________________________
                 {/* Card Actions */}
                 <div className="pt-3 border-t border-slate-100 flex items-center justify-between gap-2">
                   <button
-                    onClick={() => handleOpenDrawer(adm)}
-                    className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs rounded-xl transition-all flex items-center gap-1.5 cursor-pointer"
+                    onClick={() => {
+                      setSelectedAdmissao(adm);
+                      setActiveFlowData(adm);
+                      setIsOfficialFlowOpen(true);
+                    }}
+                    className="px-3 py-1.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-bold text-xs rounded-xl transition-all flex items-center gap-1.5 cursor-pointer border border-indigo-200"
                   >
-                    <FileText className="w-3.5 h-3.5 text-blue-600" />
-                    <span>Central de Admissão</span>
+                    <FileText className="w-3.5 h-3.5 text-indigo-600" />
+                    <span>{adm.candidatoId ? 'Abrir Admissão' : 'Continuar Admissão'}</span>
                   </button>
 
                   {!jaEfetivado ? (
                     <button
                       onClick={() => {
                         setSelectedAdmissao(adm);
-                        setShowConfirmEfetivarModal(true);
+                        setActiveFlowData(adm);
+                        setIsOfficialFlowOpen(true);
                       }}
                       className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-xs rounded-xl shadow-2xs transition-all flex items-center gap-1 cursor-pointer"
                     >
@@ -1703,6 +1710,23 @@ ___________________________________________
           </div>
         </div>
       )}
+      {/* Official Unified Admission Flow Modal */}
+      <OfficialAdmissaoFlowModal
+        isOpen={isOfficialFlowOpen}
+        onClose={() => {
+          setIsOfficialFlowOpen(false);
+          setActiveFlowData(null);
+        }}
+        admissaoData={activeFlowData}
+        colaboradoresList={colaboradores}
+        onSaveAdmissao={async (updated) => {
+          if (onSalvarAdmissao) await onSalvarAdmissao(updated);
+        }}
+        onEfetivarAdmissao={async (adm, dados) => {
+          await onEfetivarAdmissao(adm, dados);
+        }}
+        companyId={companyId}
+      />
     </div>
   );
 };

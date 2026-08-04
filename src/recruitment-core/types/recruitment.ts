@@ -45,9 +45,12 @@ export interface UnifiedJob {
   id: string;
   empresaId: string;
   companyId?: string;
-  origemProcesso: OrigemProcesso;
+  origemProcesso: OrigemProcesso | 'vaga_interna' | 'recrutamento_cliente' | 'headhunter';
   moduloOrigem?: string;
   origem?: string;
+  tipoProcesso?: string;
+  projetoHeadhunter?: boolean;
+  criadaPorModulo?: string;
   isHeadhunter?: boolean;
   destinoContratacao?: string;
   
@@ -150,6 +153,7 @@ export interface UnifiedCandidate {
   notes?: string;
   appliedDate?: string;
   source?: 'LinkedIn' | 'Indicação' | 'Site Institucional' | 'Gupy' | 'Headhunter' | 'Outro';
+  origem?: 'Portal' | 'Busca Ativa' | 'LinkedIn' | 'Indicação' | 'Importação' | string;
   curriculoUrl?: string;
   resumeUrl?: string;
   curriculoTexto?: string;

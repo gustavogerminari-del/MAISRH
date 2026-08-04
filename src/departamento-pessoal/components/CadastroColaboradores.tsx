@@ -66,12 +66,14 @@ interface CadastroColaboradoresProps {
   onSalvarColaborador: (colab: ColaboradorCompleto) => void;
   onExcluirColaborador?: (id: string) => void;
   companyId: string;
+  onOpenNovaAdmissao?: () => void;
 }
 
 export const CadastroColaboradores: React.FC<CadastroColaboradoresProps> = ({
   colaboradores,
   onSalvarColaborador,
-  companyId
+  companyId,
+  onOpenNovaAdmissao
 }) => {
   const { user } = useAuth();
   const userType = user?.tipoUsuario || (user?.role === 'Super Administrador' ? 'MASTER' : 'EMPRESA');
@@ -360,11 +362,11 @@ export const CadastroColaboradores: React.FC<CadastroColaboradoresProps> = ({
         </div>
 
         <button
-          onClick={handleOpenNew}
-          className="flex items-center gap-2 px-4 py-2.5 bg-[#2563EB] hover:bg-blue-700 text-white text-xs font-bold rounded-xl transition-all shadow-sm cursor-pointer shrink-0"
+          onClick={onOpenNovaAdmissao}
+          className="flex items-center gap-2 px-4 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-xl transition-all shadow-sm cursor-pointer shrink-0"
         >
           <UserPlus className="w-4 h-4" />
-          <span>Cadastrar Colaborador</span>
+          <span>Nova Admissão</span>
         </button>
       </div>
 

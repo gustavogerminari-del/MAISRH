@@ -1,12 +1,13 @@
-import React from 'react';
-import { Filter, Search, RotateCcw, Building2, Briefcase } from 'lucide-react';
+import React, { useEffect } from 'react';
+import { Filter, Search, RotateCcw, Building2, Briefcase, Layers } from 'lucide-react';
 import { JobFilterParams } from '../types/job';
 import {
-  JOB_STATUS_OPTIONS,
   JOB_TYPE_OPTIONS,
   CORPORATE_DEPARTMENTS,
 } from '../constants/jobOptions';
 import { SearchBar } from '../../shared';
+import { useAuth } from '../../auth';
+import { checkHeadhunterVisibility } from '../utils/headhunterAccess';
 
 export interface JobFiltersBarProps {
   filters: JobFilterParams;
@@ -21,20 +22,36 @@ export const JobFiltersBar: React.FC<JobFiltersBarProps> = ({
   onResetFilters,
   totalResultsCount,
 }) => {
+  const { user, activeModules, userPermissions } = useAuth();
+  const { mostrarFiltroHeadhunter } = checkHeadhunterVisibility(user, activeModules, userPermissions);
+
+  // If Headhunter filter is disabled and currently selected, reset filter to 'Todas'
+  useEffect(() => {
+    if (!mostrarFiltroHeadhunter && filters.origem === 'Headhunter') {
+      onFilterChange({ origem: 'Todas' });
+    }
+  }, [mostrarFiltroHeadhunter, filters.origem, onFilterChange]);
+
+  const origemTabs = [
+    { id: 'Todas', label: 'Todas' },
+    { id: 'Internas', label: 'Internas' },
+    { id: 'Clientes', label: 'Clientes' },
+    ...(mostrarFiltroHeadhunter ? [{ id: 'Headhunter', label: 'Headhunter' }] : []),
+  ];
   return (
-    <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-2xs space-y-3">
+    <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-2xs space-y-3.5">
       <div className="flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-3">
         {/* Search */}
         <div className="flex-1">
           <SearchBar
             value={filters.searchTerm}
             onChange={(val) => onFilterChange({ searchTerm: val })}
-            placeholder="Buscar por cargo, palavra-chave ou recrutador..."
+            placeholder="Buscar por cargo, cliente, departamento ou recrutador..."
           />
         </div>
 
-        {/* Department Filter */}
-        <div className="flex items-center gap-2">
+        {/* Department & Type Filters */}
+        <div className="flex items-center gap-2 flex-wrap">
           <select
             value={filters.department}
             onChange={(e) => onFilterChange({ department: e.target.value })}
@@ -48,7 +65,6 @@ export const JobFiltersBar: React.FC<JobFiltersBarProps> = ({
             ))}
           </select>
 
-          {/* Contract Type Filter */}
           <select
             value={filters.type}
             onChange={(e) => onFilterChange({ type: e.target.value })}
@@ -64,21 +80,46 @@ export const JobFiltersBar: React.FC<JobFiltersBarProps> = ({
         </div>
       </div>
 
-      {/* Status Bar Tabs & Counter */}
-      <div className="flex flex-wrap items-center justify-between gap-3 pt-2 border-t border-slate-100">
+      {/* Row 2: Origin Tabs & Status Tabs */}
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 pt-2.5 border-t border-slate-100">
+        
+        {/* Origem Filter Tabs */}
+        <div className="flex items-center gap-1.5 flex-wrap">
+          <span className="text-[11px] font-extrabold uppercase text-slate-400 flex items-center gap-1 mr-1">
+            <Layers className="w-3.5 h-3.5 text-indigo-600" /> Origem:
+          </span>
+
+          {origemTabs.map((orig) => (
+            <button
+              key={orig.id}
+              type="button"
+              onClick={() => onFilterChange({ origem: orig.id })}
+              className={`px-3 py-1 rounded-xl text-xs font-extrabold transition-all cursor-pointer ${
+                (filters.origem || 'Todas') === orig.id
+                  ? 'bg-slate-900 text-white shadow-xs'
+                  : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+              }`}
+            >
+              {orig.label}
+            </button>
+          ))}
+        </div>
+
+        {/* Status Filter Tabs */}
         <div className="flex items-center gap-1.5 flex-wrap">
           <span className="text-[11px] font-extrabold uppercase text-slate-400 flex items-center gap-1 mr-1">
             <Filter className="w-3.5 h-3.5 text-indigo-600" /> Status:
           </span>
 
-          {['Todas', ...JOB_STATUS_OPTIONS].map((st) => (
+          {['Todas', 'Abertas', 'Em andamento', 'Concluídas'].map((st) => (
             <button
               key={st}
+              type="button"
               onClick={() => onFilterChange({ status: st })}
-              className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+              className={`px-3 py-1 rounded-xl text-xs font-extrabold transition-all cursor-pointer ${
                 filters.status === st
-                  ? 'bg-indigo-600 text-white shadow-2xs'
-                  : 'bg-slate-100 text-slate-600 hover:bg-slate-200 hover:text-slate-900'
+                  ? 'bg-indigo-600 text-white shadow-xs'
+                  : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
               }`}
             >
               {st}
@@ -86,12 +127,14 @@ export const JobFiltersBar: React.FC<JobFiltersBarProps> = ({
           ))}
         </div>
 
-        <div className="flex items-center gap-3 text-xs text-slate-500">
+        {/* Results Counter & Reset */}
+        <div className="flex items-center gap-3 text-xs text-slate-500 shrink-0">
           <span className="font-bold text-slate-700">
-            {totalResultsCount} vaga(s) encontrada(s)
+            {totalResultsCount} vaga(s)
           </span>
 
           <button
+            type="button"
             onClick={onResetFilters}
             className="text-indigo-600 hover:text-indigo-800 font-extrabold flex items-center gap-1 cursor-pointer"
           >

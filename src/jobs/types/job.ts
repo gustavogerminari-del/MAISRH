@@ -3,8 +3,8 @@
  * Depende exclusivamente do Módulo NÚCLEO, COMPARTILHADO, AUTENTICAÇÃO e DASHBOARD.
  */
 
-export type JobStatus = 'Aberta' | 'Pausada' | 'Fechada' | 'Arquivada' | 'Rascunho';
-export type JobType = 'CLT' | 'PJ' | 'Estágio' | 'Temporário';
+export type JobStatus = 'Aberta' | 'Pausada' | 'Fechada' | 'Arquivada' | 'Rascunho' | 'Em andamento' | 'Concluída' | 'Cancelada';
+export type JobType = 'CLT' | 'PJ' | 'Estágio' | 'Temporário' | 'Executive';
 export type JobLocationType = 'Presencial' | 'Remoto' | 'Híbrido';
 
 export interface JobBudgetInfo {
@@ -47,13 +47,15 @@ export interface Job {
   recruiterName: string;
   recruiterId?: string;
   managerName?: string;
-  origemProcesso?: 'recrutamento_interno' | 'headhunter' | 'banco_talent';
+  origemProcesso?: 'vaga_interna' | 'recrutamento_cliente' | 'headhunter' | 'recrutamento_interno' | 'banco_talent';
   moduloOrigem?: string;
   origem?: string;
   tipoProcesso?: string;
   isHeadhunter?: boolean;
+  projetoHeadhunter?: boolean;
   clientId?: string;
   clienteId?: string;
+  clienteNome?: string;
   budget?: JobBudgetInfo;
   isArchived?: boolean;
   archived?: boolean;
@@ -65,6 +67,7 @@ export interface JobFilterParams {
   searchTerm: string;
   department: string;
   status: string;
+  origem?: string;
   type: string;
   startDate?: string;
   endDate?: string;

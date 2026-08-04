@@ -13,7 +13,7 @@ export interface PublicJob {
   department: string;
   location: string;
   workMode: 'Presencial' | 'Híbrido' | 'Remoto';
-  contractType: 'CLT' | 'PJ' | 'Estágio' | 'Temporário';
+  contractType: 'CLT' | 'PJ' | 'Estágio' | 'Temporário' | 'Executive';
   salaryRange?: string;
   description: string;
   requirements: string[];

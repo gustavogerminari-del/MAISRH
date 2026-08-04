@@ -5,6 +5,7 @@ import { HeadhunterComercial } from './components/HeadhunterComercial';
 import { HeadhunterFinanceiro } from './components/HeadhunterFinanceiro';
 import { HeadhunterCandidatos } from './components/HeadhunterCandidatos';
 import { HeadhunterPortalCliente } from './components/HeadhunterPortalCliente';
+import { HeadhunterProjetos } from './components/HeadhunterProjetos';
 import { HeadhunterCandidate } from './types';
 
 // Unified Recruitment Core Modules
@@ -70,11 +71,15 @@ export const HeadhunterView: React.FC<HeadhunterViewProps> = ({ initialSubTab = 
 
   useEffect(() => {
     if (initialSubTab) {
-      // Map former loose routes to the 4 main sections
+      // Map routes to main sections
       if (initialSubTab === 'crm' || initialSubTab === 'contratos') {
         setActiveTab('comercial');
       } else if (initialSubTab === 'comissoes' || initialSubTab === 'despesas' || initialSubTab === 'relatorios') {
         setActiveTab('financeiro');
+      } else if (initialSubTab === 'projetos' || (initialSubTab as any) === 'headhunter-projetos') {
+        setActiveTab('vagas');
+      } else if ((initialSubTab as any) === 'portal-cliente' || (initialSubTab as any) === 'headhunter-portal-cliente') {
+        setActiveTab('portal_cliente');
       } else {
         setActiveTab(initialSubTab);
       }
@@ -82,11 +87,11 @@ export const HeadhunterView: React.FC<HeadhunterViewProps> = ({ initialSubTab = 
   }, [initialSubTab]);
 
   // Unified shared data via recruitmentService
-  const [jobs, setJobs] = useState<UnifiedJob[]>(() => recruitmentService.getJobs('headhunter'));
-  const [candidates, setCandidates] = useState<UnifiedCandidate[]>(() => recruitmentService.getCandidates('headhunter'));
-  const [interviews, setInterviews] = useState<UnifiedInterview[]>(() => recruitmentService.getInterviews('headhunter'));
-  const [hirings, setHirings] = useState<UnifiedHiring[]>(() => recruitmentService.getHirings('headhunter'));
-  const [agendaEvents, setAgendaEvents] = useState<UnifiedAgendaEvent[]>(() => recruitmentService.getAgendaEvents('headhunter'));
+  const [jobs, setJobs] = useState<UnifiedJob[]>(() => recruitmentService.getJobs());
+  const [candidates, setCandidates] = useState<UnifiedCandidate[]>(() => recruitmentService.getCandidates());
+  const [interviews, setInterviews] = useState<UnifiedInterview[]>(() => recruitmentService.getInterviews());
+  const [hirings, setHirings] = useState<UnifiedHiring[]>(() => recruitmentService.getHirings());
+  const [agendaEvents, setAgendaEvents] = useState<UnifiedAgendaEvent[]>(() => recruitmentService.getAgendaEvents());
 
   // Headhunter state from Firestore service
   const [clients, setClients] = useState<HeadhunterClient[]>(() => HeadhunterDataService.getClients());
@@ -110,11 +115,11 @@ export const HeadhunterView: React.FC<HeadhunterViewProps> = ({ initialSubTab = 
       setContracts(HeadhunterDataService.getContracts());
       setCommissions(HeadhunterFinanceService.getComissoes());
       setExpenses(HeadhunterFinanceService.getDespesas());
-      setJobs(recruitmentService.getJobs('headhunter'));
-      setCandidates(recruitmentService.getCandidates('headhunter'));
-      setInterviews(recruitmentService.getInterviews('headhunter'));
-      setHirings(recruitmentService.getHirings('headhunter'));
-      setAgendaEvents(recruitmentService.getAgendaEvents('headhunter'));
+      setJobs(recruitmentService.getJobs());
+      setCandidates(recruitmentService.getCandidates());
+      setInterviews(recruitmentService.getInterviews());
+      setHirings(recruitmentService.getHirings());
+      setAgendaEvents(recruitmentService.getAgendaEvents());
     }
     loadData();
   }, []);
@@ -224,25 +229,14 @@ export const HeadhunterView: React.FC<HeadhunterViewProps> = ({ initialSubTab = 
         </button>
 
         <button
-          onClick={() => setActiveTab('prospeccao' as any)}
-          className={`px-3.5 py-2 rounded-xl text-xs font-extrabold transition-all cursor-pointer whitespace-nowrap ${
-            activeTab === ('prospeccao' as any) || activeTab === 'candidatos'
-              ? 'bg-indigo-600 text-white shadow-xs'
-              : 'text-slate-600 hover:bg-slate-100'
-          }`}
-        >
-          Candidatos Prospectados
-        </button>
-
-        <button
           onClick={() => setActiveTab('vagas')}
           className={`px-3.5 py-2 rounded-xl text-xs font-extrabold transition-all cursor-pointer whitespace-nowrap ${
-            activeTab === 'vagas'
+            activeTab === 'vagas' || activeTab === 'projetos' || activeTab === ('headhunter-projetos' as any)
               ? 'bg-indigo-600 text-white shadow-xs'
               : 'text-slate-600 hover:bg-slate-100'
           }`}
         >
-          Vagas Busca Ativa
+          Projetos
         </button>
 
         <button
@@ -254,17 +248,6 @@ export const HeadhunterView: React.FC<HeadhunterViewProps> = ({ initialSubTab = 
           }`}
         >
           Clientes
-        </button>
-
-        <button
-          onClick={() => setActiveTab('comercial')}
-          className={`px-3.5 py-2 rounded-xl text-xs font-extrabold transition-all cursor-pointer whitespace-nowrap ${
-            activeTab === 'comercial' || activeTab === 'crm' || activeTab === 'contratos'
-              ? 'bg-indigo-600 text-white shadow-xs'
-              : 'text-slate-600 hover:bg-slate-100'
-          }`}
-        >
-          Comercial & CRM
         </button>
 
         <button
@@ -373,14 +356,18 @@ export const HeadhunterView: React.FC<HeadhunterViewProps> = ({ initialSubTab = 
         )}
 
         {/* Operational views routed when accessed directly from recruitment links */}
-        {activeTab === 'vagas' && (
-          <UnifiedJobsView
-            origemProcesso="headhunter"
+        {(activeTab === 'vagas' || activeTab === 'projetos' || activeTab === ('headhunter-projetos' as any)) && (
+          <HeadhunterProjetos
             jobs={jobs}
             candidates={candidates}
             interviews={interviews}
             clients={clients}
-            onUpdateJobs={updatedJobs => setJobs(updatedJobs)}
+            contracts={contracts}
+            proposals={proposals}
+            onSaveJob={savedJob => {
+              recruitmentService.saveJob(savedJob);
+              setJobs([savedJob, ...jobs.filter(j => j.id !== savedJob.id)]);
+            }}
             onOpenAiModal={handleOpenAiModal}
           />
         )}

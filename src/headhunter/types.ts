@@ -42,6 +42,7 @@ export type ContractStatus = 'Rascunho' | 'Em revisão' | 'Aguardando assinatura
 export interface HeadhunterBaseDoc {
   id: string;
   empresaId: string;
+  companyId?: string;
   criadoPor: string;
   criadoEm: string;
   atualizadoEm?: string;

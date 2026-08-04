@@ -1,5 +1,5 @@
-export type JobStatus = 'Aberta' | 'Pausada' | 'Fechada' | 'Arquivada' | 'Rascunho';
-export type JobType = 'CLT' | 'PJ' | 'Estágio' | 'Temporário';
+export type JobStatus = 'Aberta' | 'Pausada' | 'Fechada' | 'Arquivada' | 'Rascunho' | 'Em andamento' | 'Concluída' | 'Cancelada' | 'ativa';
+export type JobType = 'CLT' | 'PJ' | 'Estágio' | 'Temporário' | 'Executive';
 export type JobLocationType = 'Presencial' | 'Remoto' | 'Híbrido';
 
 export type StageId = 'inscritos' | 'triagem' | 'entrevista_rh' | 'teste_tecnico' | 'entrevista_gestor' | 'proposta' | 'contratado';
@@ -64,7 +64,7 @@ export interface Job {
   recruiterName: string;
   recruiterId?: string;
   managerName?: string;
-  origemProcesso?: 'recrutamento_interno' | 'headhunter' | 'banco_talent';
+  origemProcesso?: 'vaga_interna' | 'recrutamento_cliente' | 'headhunter' | 'recrutamento_interno' | 'banco_talent';
   moduloOrigem?: string;
   origem?: string;
   tipoProcesso?: string;

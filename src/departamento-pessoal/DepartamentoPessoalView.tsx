@@ -345,6 +345,7 @@ export const DepartamentoPessoalView: React.FC<DepartamentoPessoalViewProps> = (
             colaboradores={colaboradores}
             onSalvarColaborador={handleSalvarColaborador}
             companyId={companyId}
+            onOpenNovaAdmissao={() => setActiveSubTab('admissoes')}
           />
         )}
 

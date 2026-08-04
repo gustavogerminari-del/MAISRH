@@ -231,6 +231,13 @@ export function updateTenantModule(tenantId: string, moduleKey: string, active: 
 
   saveTenantsToStorage(updated);
 
+  // Dispatch global window event for reactive UI updates
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent('company_modules_updated', {
+      detail: { tenantId, moduleKey, active }
+    }));
+  }
+
   // Sync with Firestore `empresa_modulos` and `empresas`
   saveEmpresaModuloFirestore(tenantId, moduleKey, active).catch(err => {
     console.error('Erro ao salvar permissão no Firestore empresa_modulos:', err);
