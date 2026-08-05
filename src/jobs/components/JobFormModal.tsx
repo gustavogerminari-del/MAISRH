@@ -202,7 +202,10 @@ export const JobFormModal: React.FC<JobFormModalProps> = ({
     setError('');
 
     try {
-      const empresaId = user?.empresaId || user?.companyId || user?.tenantId || 'emp-001';
+      const empresaId = user?.empresaId || user?.companyId || user?.tenantId;
+      if (!empresaId) {
+        throw new Error("Não foi possível identificar a empresa do usuário autenticado.");
+      }
       const nomeEmpresa = user?.companyName || user?.tenantName || 'MAIS RH Brasil';
       const nowIsoDate = new Date().toISOString().split('T')[0];
       const parts = location.split('-');
@@ -286,10 +289,17 @@ export const JobFormModal: React.FC<JobFormModalProps> = ({
       const sanitizedPayload = sanitizeCommercialFields(payload, mostrarFiltroHeadhunter);
 
       // Save to official Firestore Service
-      await JobService.create(sanitizedPayload);
+      if (isEditing) {
+        await JobService.update(jobId, sanitizedPayload);
+      } else {
+        await JobService.create(sanitizedPayload);
+      }
 
       if (onSaveJob) {
-        await onSaveJob(sanitizedPayload, jobId);
+        await onSaveJob(
+          sanitizedPayload,
+          isEditing ? jobId : undefined
+        );
       }
 
       const msg = openedFromModule === 'headhunter'

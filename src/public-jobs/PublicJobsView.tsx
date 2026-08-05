@@ -57,10 +57,8 @@ export const PublicJobsView: React.FC<PublicJobsViewProps> = ({
 
   React.useEffect(() => {
     JobService.listPublicJobs().then(res => {
-      if (res && res.length > 0) {
-        setFetchedPublicJobs(res);
-      }
-    }).catch(err => console.warn('Aviso ao buscar vagas públicas:', err));
+      setFetchedPublicJobs(res || []);
+    }).catch(err => console.error('Aviso ao buscar vagas públicas:', err));
   }, []);
 
   // Map internal system jobs + mock jobs into unified public jobs list
@@ -176,8 +174,12 @@ export const PublicJobsView: React.FC<PublicJobsViewProps> = ({
     try {
       await JobCandidateService.create({
         jobId: targetJobId,
+        vagaId: targetJobId,
         companyId: targetCompanyId,
+        empresaId: targetCompanyId,
         candidateId: candidateRecord?.id || `cand-${Date.now()}`,
+        candidatoId: candidateRecord?.id || `cand-${Date.now()}`,
+        jobTitle: targetJob?.title || targetJob?.titulo || 'Vaga',
         name: payload.fullName,
         email: payload.email,
         phone: payload.phone,
@@ -187,7 +189,10 @@ export const PublicJobsView: React.FC<PublicJobsViewProps> = ({
         experienceYears: Number(payload.experienceYears) || 1,
         education: payload.educationLevel || 'Superior Completo',
         resumeUrl: fileUrl,
-        status: 'Novos',
+        status: 'inscricao' as any,
+        etapa: 'inscricao',
+        source: 'portal',
+        origem: 'portal',
         notes: payload.coverNote ? [payload.coverNote] : [`Candidatura enviada via Portal Público MAIS RH`],
       });
     } catch (err) {

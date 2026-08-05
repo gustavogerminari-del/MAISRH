@@ -1,21 +1,28 @@
 import { Job } from '../types/job';
 
 /**
- * Normalizes any variation of job status to standard string ('aberta', 'em_andamento', 'concluida', 'cancelada')
+ * Normalizes any variation of job status to standard string ('aberta', 'em_andamento', 'preenchida', 'pausada', 'cancelada')
  */
 export function normalizeJobStatus(value: any): string {
-  const status = String(value || "").trim().toLowerCase();
+  const status = String(value || "")
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, "_");
 
   if (["aberta", "ativa", "open"].includes(status)) {
     return "aberta";
   }
 
-  if (["em andamento", "em_andamento", "andamento"].includes(status)) {
+  if (["em_andamento", "andamento", "em_processo"].includes(status)) {
     return "em_andamento";
   }
 
-  if (["concluída", "concluida", "fechada"].includes(status)) {
-    return "concluida";
+  if (["preenchida", "preenchido", "concluida", "concluída", "fechada"].includes(status)) {
+    return "preenchida";
+  }
+
+  if (["pausada", "pausado"].includes(status)) {
+    return "pausada";
   }
 
   if (["cancelada", "cancelado"].includes(status)) {
@@ -29,13 +36,15 @@ export function normalizeJobStatus(value: any): string {
  * Normalizes any variation of job origin to standard string ('interna', 'cliente', 'headhunter')
  */
 export function normalizeJobOrigin(value: any): string {
-  const origin = String(value || "").trim().toLowerCase();
+  const origin = String(value || "")
+    .trim()
+    .toLowerCase();
 
   if (["vaga_interna", "interna", "interno"].includes(origin)) {
     return "interna";
   }
 
-  if (["cliente", "atendimento_cliente", "cliente_externo", "recrutamento_cliente"].includes(origin)) {
+  if (["cliente", "clientes", "atendimento_cliente", "recrutamento_cliente"].includes(origin)) {
     return "cliente";
   }
 
@@ -44,6 +53,84 @@ export function normalizeJobOrigin(value: any): string {
   }
 
   return origin;
+}
+
+/**
+ * Normalizes a Firestore document or raw job object so ID is document.id
+ */
+export function normalizeJobDocument(document: any): Job {
+  if (!document) return document;
+  const data = typeof document.data === 'function' ? document.data() : document;
+  const docId = document.id || data.id;
+
+  return normalizeJobData({
+    ...data,
+    id: docId,
+    legacyId: data.id || null
+  });
+}
+
+/**
+ * Deterministic Candidate to Job Match score calculator (0-100)
+ */
+export interface CandidateJobMatch {
+  score: number;
+  matchedSkills: string[];
+  missingSkills: string[];
+  summary: string;
+}
+
+export function calculateCandidateJobMatch(job: any, candidate: any): CandidateJobMatch {
+  if (!job || !candidate) {
+    return {
+      score: 50,
+      matchedSkills: [],
+      missingSkills: [],
+      summary: 'Dados insuficientes para cálculo de compatibilidade.'
+    };
+  }
+
+  let baseScore = 50;
+  const matchedSkills: string[] = [];
+  const missingSkills: string[] = [];
+
+  const candidateSkills = (candidate.skills || candidate.competencias || []).map((s: string) => String(s).toLowerCase().trim());
+  const jobRequirements = (job.requirements || job.requisitos || []).map((r: string) => String(r).toLowerCase().trim());
+
+  jobRequirements.forEach((req: string) => {
+    const isMatched = candidateSkills.some((skill: string) => req.includes(skill) || skill.includes(req));
+    if (isMatched) {
+      matchedSkills.push(req);
+    } else {
+      missingSkills.push(req);
+    }
+  });
+
+  if (jobRequirements.length > 0) {
+    const ratio = matchedSkills.length / jobRequirements.length;
+    baseScore += Math.round(ratio * 40);
+  } else {
+    baseScore += 20;
+  }
+
+  const candidateRole = String(candidate.role || candidate.cargoAtual || candidate.cargoDesejado || '').toLowerCase();
+  const jobTitle = String(job.title || job.titulo || '').toLowerCase();
+  if (candidateRole && jobTitle && (jobTitle.includes(candidateRole) || candidateRole.includes(jobTitle))) {
+    baseScore += 10;
+  }
+
+  const score = Math.min(100, Math.max(0, baseScore));
+
+  const summary = matchedSkills.length > 0
+    ? `Análise básica: Candidato atende a ${matchedSkills.length} requisito(s) alinhado(s) à vaga.`
+    : `Análise básica: Compatibilidade preliminar baseada no perfil e localização.`;
+
+  return {
+    score,
+    matchedSkills,
+    missingSkills,
+    summary
+  };
 }
 
 /**
@@ -61,7 +148,7 @@ export function normalizeJobData(job: any): Job {
   const origin = normalizeJobOrigin(job.origem || job.origemProcesso || job.tipoProcesso);
   const status = normalizeJobStatus(job.status);
 
-  const resolvedCompanyId = job.companyId || job.empresaId || 'emp-001';
+  const resolvedCompanyId = job.companyId || job.empresaId || '';
 
   return {
     ...job,
@@ -88,7 +175,7 @@ export function normalizeJobData(job: any): Job {
     requisitos: job.requirements || job.requisitos || [],
     benefits: job.benefits || job.beneficios || [],
     beneficios: job.benefits || job.beneficios || [],
-    recruiterName: job.recruiterName || 'Recrutador RH',
+    recruiterName: job.recruiterName || job.recrutadorResponsavel || 'Recrutador RH',
     deadline: job.deadline || '2026-12-31',
     createdAt: job.createdAt || job.dataCriacao || new Date().toISOString().split('T')[0],
     companyId: resolvedCompanyId,
@@ -101,3 +188,4 @@ export function normalizeJobData(job: any): Job {
     ativo: job.ativo !== false,
   };
 }
+

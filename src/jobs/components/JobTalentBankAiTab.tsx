@@ -31,6 +31,7 @@ import { CandidateService } from '../../services/CandidateService';
 import { JobCandidateService, JobCandidateApplication } from '../../services/JobCandidateService';
 import { useAuth } from '../../auth';
 import { Button } from '../../shared';
+import { calculateCandidateJobMatch } from '../utils/jobUtils';
 
 export interface TalentBankMatchResult {
   candidateId: string;
@@ -152,13 +153,15 @@ export const JobTalentBankAiTab: React.FC<JobTalentBankAiTabProps> = ({
     loadTalentData();
   }, [job?.id, companyId]);
 
-  // Execute AI Matching call
+  // Execute AI Matching call with deterministic local fallback
   const runAiMatching = async (candidates: Candidate[], currentJob: Job) => {
     setLoading(true);
     setAnalyzingProgress(15);
     const interval = setInterval(() => {
       setAnalyzingProgress((prev) => (prev < 90 ? prev + 15 : prev));
     }, 250);
+
+    let fetchedMatches: TalentBankMatchResult[] = [];
 
     try {
       const response = await fetch('/api/ai/talent-bank-match', {
@@ -172,11 +175,8 @@ export const JobTalentBankAiTab: React.FC<JobTalentBankAiTabProps> = ({
       });
 
       const resData = await response.json();
-      clearInterval(interval);
-      setAnalyzingProgress(100);
-
       if (resData.success && resData.data?.matches) {
-        const matches: TalentBankMatchResult[] = resData.data.matches.map((m: any) => {
+        fetchedMatches = resData.data.matches.map((m: any) => {
           const matchedCand = candidates.find((c) => c.id === m.candidateId || c.name === m.candidateName);
           return {
             ...m,
@@ -198,14 +198,48 @@ export const JobTalentBankAiTab: React.FC<JobTalentBankAiTabProps> = ({
             },
           };
         });
-
-        // Sort by compatibility score descending
-        matches.sort((a, b) => b.compatibilityScore - a.compatibilityScore);
-        setMatchResults(matches);
       }
     } catch (err) {
-      console.error('Erro na análise da IA:', err);
+      console.warn('IA indisponível. Executando cálculo de compatibilidade determinístico local:', err);
     } finally {
+      clearInterval(interval);
+      setAnalyzingProgress(100);
+
+      // Deterministic fallback if API produced no matches
+      if (fetchedMatches.length === 0 && candidates.length > 0) {
+        fetchedMatches = candidates.map((cand) => {
+          const match = calculateCandidateJobMatch(currentJob, cand);
+          const isHigh = match.score >= 80;
+          const isMed = match.score >= 60;
+          return {
+            candidateId: cand.id,
+            candidateName: cand.name,
+            compatibilityScore: match.score,
+            compatibilityLevel: isHigh ? 'Muito compatível' : isMed ? 'Compatível' : 'Baixa compatibilidade',
+            motivos: [match.summary],
+            pontosFortes: match.matchedSkills.length > 0 ? match.matchedSkills : (cand.skills || []),
+            pontosAtencao: match.missingSkills,
+            analiseCurriculo: {
+              experienciaProfissional: `${cand.experienceYears || 0} anos de experiência`,
+              empresasAnteriores: [],
+              tempoExperiencia: `${cand.experienceYears || 0} anos`,
+              formacao: (cand as any).education || 'Ensino Superior',
+              cursos: [],
+              habilidadesTecnicas: cand.skills || [],
+              competenciasComportamentais: [],
+              localizacao: cand.location || '',
+              pretensaoSalarial: cand.salaryExpectation || 'A combinar',
+              compatibilidadeComVaga: match.summary
+            },
+            recomendacao: isHigh ? 'Recomendado para Triagem' : 'Perfil em Análise (Cálculo Básico)',
+            candidateRef: cand
+          };
+        });
+      }
+
+      fetchedMatches.sort((a, b) => b.compatibilityScore - a.compatibilityScore);
+      setMatchResults(fetchedMatches);
+
       setLoading(false);
       setTimeout(() => setAnalyzingProgress(0), 500);
     }

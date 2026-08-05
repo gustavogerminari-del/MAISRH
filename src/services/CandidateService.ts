@@ -33,15 +33,50 @@ export interface ApplicationDoc {
 }
 
 export class CandidateService {
+  static async getByEmail(email: string, companyId?: string): Promise<Candidate | null> {
+    if (!email) return null;
+    try {
+      const normEmail = email.toLowerCase().trim();
+      const candidatesRef = collection(db, PRIMARY_COLLECTION);
+      const q = companyId 
+        ? query(candidatesRef, where('email', '==', normEmail), where('companyId', '==', companyId))
+        : query(candidatesRef, where('email', '==', normEmail));
+      const snap = await getDocs(q);
+      if (!snap.empty) {
+        const d = snap.docs[0];
+        return { ...(d.data() as Candidate), id: d.id };
+      }
+    } catch (err: any) {
+      console.error("FLOW ERROR in CandidateService.getByEmail:", {
+        email,
+        companyId,
+        code: err?.code,
+        message: err?.message
+      });
+    }
+    return null;
+  }
+
   static async create(candidateData: Partial<Candidate> & { companyId?: string }): Promise<Candidate> {
-    const id = candidateData.id || `cand-${Date.now()}`;
     const user = auth.currentUser;
     const now = new Date().toISOString().split('T')[0];
     const companyId = candidateData.companyId || (candidateData as any).empresaId || 'emp-001';
 
+    // Reuse existing candidate if email exists to avoid duplication
+    let id = candidateData.id;
+    if (candidateData.email) {
+      const existing = await this.getByEmail(candidateData.email, companyId);
+      if (existing) {
+        id = existing.id;
+      }
+    }
+    if (!id) {
+      id = `cand-${Date.now()}`;
+    }
+
     const candidate = {
       id,
-      name: candidateData.name || 'Novo Candidato',
+      name: candidateData.name || (candidateData as any).nome || 'Novo Candidato',
       nome: candidateData.name || (candidateData as any).nome || 'Novo Candidato',
       email: candidateData.email || 'candidato@email.com',
       phone: candidateData.phone || (candidateData as any).telefone || '(11) 99999-9999',
@@ -74,10 +109,7 @@ export class CandidateService {
 
     try {
       const sanitized = sanitizeFirestoreData(candidate);
-      await Promise.all([
-        setDoc(doc(db, PRIMARY_COLLECTION, id), sanitized, { merge: true }),
-        setDoc(doc(db, 'candidatos', id), sanitized, { merge: true })
-      ]);
+      await setDoc(doc(db, PRIMARY_COLLECTION, id), sanitized, { merge: true });
 
       await AuditService.log({
         action: 'CREATE',
@@ -86,8 +118,13 @@ export class CandidateService {
         targetEntity: 'Candidato',
         companyId
       });
-    } catch (err) {
-      console.warn('Erro ao salvar candidato no Firestore:', err);
+    } catch (err: any) {
+      console.error('FLOW ERROR in CandidateService.create:', {
+        candidateId: id,
+        companyId,
+        code: err?.code,
+        message: err?.message
+      });
       throw err;
     }
 
@@ -104,10 +141,7 @@ export class CandidateService {
         updatedAt: new Date().toISOString()
       });
 
-      await Promise.all([
-        setDoc(doc(db, PRIMARY_COLLECTION, id), updateData, { merge: true }),
-        setDoc(doc(db, 'candidatos', id), updateData, { merge: true })
-      ]);
+      await setDoc(doc(db, PRIMARY_COLLECTION, id), updateData, { merge: true });
 
       await AuditService.log({
         action: 'UPDATE',
@@ -115,25 +149,30 @@ export class CandidateService {
         moduleName: 'Banco de Talentos',
         targetEntity: 'Candidato'
       });
-    } catch (err) {
-      console.warn('Erro ao atualizar candidato no Firestore:', err);
+    } catch (err: any) {
+      console.error('FLOW ERROR in CandidateService.update:', {
+        candidateId: id,
+        code: err?.code,
+        message: err?.message
+      });
     }
   }
 
   static async delete(id: string): Promise<void> {
     try {
-      await Promise.all([
-        deleteDoc(doc(db, PRIMARY_COLLECTION, id)),
-        deleteDoc(doc(db, 'candidatos', id))
-      ]);
+      await deleteDoc(doc(db, PRIMARY_COLLECTION, id));
       await AuditService.log({
         action: 'DELETE',
         description: `Candidato ${id} excluído do Banco de Talentos`,
         moduleName: 'Banco de Talentos',
         targetEntity: 'Candidato'
       });
-    } catch (err) {
-      console.warn('Erro ao excluir candidato no Firestore:', err);
+    } catch (err: any) {
+      console.error('FLOW ERROR in CandidateService.delete:', {
+        candidateId: id,
+        code: err?.code,
+        message: err?.message
+      });
     }
   }
 

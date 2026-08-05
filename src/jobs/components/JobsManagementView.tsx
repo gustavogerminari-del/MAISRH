@@ -51,7 +51,7 @@ export const JobsManagementView: React.FC<JobsManagementViewProps> = ({
       ? rawJobs
       : rawJobs.filter((j: any) => {
           const cId = j.companyId || j.empresaId || j.tenantId;
-          return !cId || cId === userCompanyId || cId === 'emp-001';
+          return !cId || cId === userCompanyId;
         });
 
     return list.map(j => normalizeJobData(j));
@@ -157,7 +157,7 @@ export const JobsManagementView: React.FC<JobsManagementViewProps> = ({
 
   const handleSaveJob = async (jobData: any, existingId?: string) => {
     let updatedList: Job[] = [];
-    const resolvedCompanyId = userCompanyId || (user as any)?.companyId || (user as any)?.empresaId || 'emp-001';
+    const resolvedCompanyId = userCompanyId || (user as any)?.companyId || (user as any)?.empresaId;
     
     if (existingId) {
       updatedList = jobs.map((j) => (j.id === existingId ? normalizeJobData({ ...j, ...jobData }) : j));

@@ -91,8 +91,14 @@ export type ApplicationStatus =
 export interface JobCandidateApplication {
   id: string;
   companyId: string;
+  empresaId?: string;
   jobId: string;
+  vagaId?: string;
   candidateId: string;
+  candidatoId?: string;
+  jobTitle?: string;
+  source?: string;
+  origem?: string;
   name: string;
   cpf?: string;
   photo?: string;
@@ -172,28 +178,48 @@ export class JobCandidateService {
   }
 
   static async listByJob(jobId: string, companyId?: string): Promise<JobCandidateApplication[]> {
-    if (!jobId || !companyId) return [];
+    if (!jobId) return [];
 
     try {
-      const q = query(
-        collection(db, COLLECTION_NAME),
-        where('companyId', '==', companyId),
-        where('jobId', '==', jobId)
-      );
+      const listMap = new Map<string, JobCandidateApplication>();
+
+      // 1. Query by jobId
+      const q1 = companyId
+        ? query(collection(db, COLLECTION_NAME), where('companyId', '==', companyId), where('jobId', '==', jobId))
+        : query(collection(db, COLLECTION_NAME), where('jobId', '==', jobId));
       
-      const snap = await getDocs(q);
-      if (!snap.empty) {
-        return snap.docs.map(d => ({
-          ...(d.data() as JobCandidateApplication),
-          id: d.id
-        }));
-      }
-    } catch (err) {
-      console.error('Erro ao buscar candidaturas por vaga no Firestore:', err);
+      const snap1 = await getDocs(q1);
+      snap1.forEach(d => {
+        listMap.set(d.id, { ...(d.data() as JobCandidateApplication), id: d.id });
+      });
+
+      // 2. Query by vagaId for backwards compatibility
+      const q2 = companyId
+        ? query(collection(db, COLLECTION_NAME), where('companyId', '==', companyId), where('vagaId', '==', jobId))
+        : query(collection(db, COLLECTION_NAME), where('vagaId', '==', jobId));
+
+      const snap2 = await getDocs(q2);
+      snap2.forEach(d => {
+        listMap.set(d.id, { ...(d.data() as JobCandidateApplication), id: d.id });
+      });
+
+      const applications = Array.from(listMap.values());
+      console.log("APPLICATIONS BY JOB", {
+        jobId,
+        total: applications.length,
+        applicationIds: applications.map(item => item.id)
+      });
+
+      return applications;
+    } catch (err: any) {
+      console.error('FLOW ERROR in JobCandidateService.listByJob:', {
+        jobId,
+        companyId,
+        code: err?.code,
+        message: err?.message
+      });
       throw err;
     }
-
-    return [];
   }
 
   static subscribeByCompany(
@@ -363,6 +389,7 @@ export class JobCandidateService {
 
     const companyId = appData.companyId || (appData as any).empresaId || 'emp-001';
     const jobId = appData.jobId || (appData as any).vagaId;
+    const candidateId = appData.candidateId || (appData as any).candidatoId || `cand-${Date.now()}`;
 
     const newAppDoc: Record<string, any> = {
       ...newApp,
@@ -370,15 +397,40 @@ export class JobCandidateService {
       empresaId: companyId,
       jobId,
       vagaId: jobId,
-      etapa: newApp.status || 'inscritos',
+      candidateId,
+      candidatoId: candidateId,
+      jobTitle: (appData as any).jobTitle || newApp.role || 'Vaga',
+      candidateName: newApp.name,
+      candidateEmail: newApp.email,
+      candidatePhone: newApp.phone,
+      source: (appData as any).source || (appData as any).origem || 'portal',
+      origem: (appData as any).origem || (appData as any).source || 'portal',
+      status: appData.status || (appData as any).etapa || 'inscricao',
+      etapa: (appData as any).etapa || appData.status || 'inscricao',
     };
 
     try {
       const sanitized = sanitizeFirestoreData(newAppDoc);
-      await Promise.all([
-        setDoc(doc(db, COLLECTION_NAME, id), sanitized, { merge: true }),
-        setDoc(doc(db, 'candidaturas', id), sanitized, { merge: true })
-      ]);
+      await setDoc(doc(db, COLLECTION_NAME, id), sanitized, { merge: true });
+
+      // Atualiza a contagem de candidatos na vaga
+      if (jobId) {
+        try {
+          const jobRef = doc(db, 'jobs', jobId);
+          const jobSnap = await getDoc(jobRef);
+          if (jobSnap.exists()) {
+            const currentData = jobSnap.data();
+            const currentCount = Number(currentData.applicantsCount || currentData.candidatosCount || 0);
+            await setDoc(jobRef, {
+              applicantsCount: currentCount + 1,
+              candidatosCount: currentCount + 1,
+              updatedAt: new Date().toISOString()
+            }, { merge: true });
+          }
+        } catch (jobErr) {
+          console.warn('Erro ao atualizar contagem de candidatos na vaga:', jobErr);
+        }
+      }
 
       await AuditService.log({
         action: 'CREATE',
@@ -387,8 +439,14 @@ export class JobCandidateService {
         targetEntity: 'Candidatura',
         companyId
       });
-    } catch (err) {
-      console.error('Erro ao salvar candidatura no Firestore:', err);
+    } catch (err: any) {
+      console.error('FLOW ERROR in JobCandidateService.create:', {
+        jobId,
+        candidateId,
+        companyId,
+        code: err?.code,
+        message: err?.message
+      });
       throw err;
     }
 

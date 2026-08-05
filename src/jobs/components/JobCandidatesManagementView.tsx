@@ -44,6 +44,7 @@ import {
 } from '../../services/JobCandidateService';
 import { CandidateDrawerPanel } from './CandidateDrawerPanel';
 import { JobFormModal } from './JobFormModal';
+import { JobDetailModal } from './JobDetailModal';
 import { useAuth } from '../../auth';
 import { formatFirestoreDate } from '../../lib/firestoreUtils';
 
@@ -95,6 +96,18 @@ export const JobCandidatesManagementView: React.FC<JobCandidatesManagementViewPr
   const [metricsModalJob, setMetricsModalJob] = useState<Job | null>(null);
   const [historyModalJob, setHistoryModalJob] = useState<Job | null>(null);
   const [openMoreOptionsJobId, setOpenMoreOptionsJobId] = useState<string | null>(null);
+  const [selectedDetailJob, setSelectedDetailJob] = useState<Job | null>(null);
+  const [detailModalInitialTab, setDetailModalInitialTab] = useState<'overview' | 'talentMatch'>('overview');
+
+  const handleOpenJobDetails = (j: Job) => {
+    setSelectedDetailJob(j);
+    setDetailModalInitialTab('overview');
+  };
+
+  const handleOpenJobTalentMatch = (j: Job) => {
+    setSelectedDetailJob(j);
+    setDetailModalInitialTab('talentMatch');
+  };
 
   // Load Company Jobs & Subscribe Candidates
   const handleRefresh = async () => {
@@ -717,6 +730,26 @@ export const JobCandidatesManagementView: React.FC<JobCandidatesManagementViewPr
 
                             <button
                               type="button"
+                              onClick={() => handleOpenJobTalentMatch(j)}
+                              className="px-3 py-1.5 bg-gradient-to-r from-amber-500 via-indigo-600 to-indigo-700 hover:from-amber-600 hover:to-indigo-800 text-white text-xs font-black rounded-xl transition-all cursor-pointer flex items-center gap-1.5 shadow-2xs"
+                              title="Cruzamento de Perfis no Banco de Talentos com IA"
+                            >
+                              <Sparkles className="w-3.5 h-3.5 text-amber-200 animate-pulse" />
+                              <span>Match Banco</span>
+                            </button>
+
+                            <button
+                              type="button"
+                              onClick={() => handleOpenJobDetails(j)}
+                              className="px-2.5 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold rounded-xl transition-all cursor-pointer flex items-center gap-1"
+                              title="Ver Detalhes da Vaga"
+                            >
+                              <FileText className="w-3.5 h-3.5 text-slate-600" />
+                              <span>Detalhes</span>
+                            </button>
+
+                            <button
+                              type="button"
                               onClick={() => setMetricsModalJob(j)}
                               className="px-2.5 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold rounded-xl transition-all cursor-pointer flex items-center gap-1"
                               title="Ver indicadores"
@@ -1189,6 +1222,27 @@ export const JobCandidatesManagementView: React.FC<JobCandidatesManagementViewPr
             </div>
           </div>
         </div>
+      )}
+
+      {/* JOB DETAIL MODAL */}
+      {selectedDetailJob && (
+        <JobDetailModal
+          isOpen={!!selectedDetailJob}
+          onClose={() => setSelectedDetailJob(null)}
+          job={selectedDetailJob}
+          initialTab={detailModalInitialTab}
+          onEdit={(j) => {
+            setSelectedDetailJob(null);
+            setEditingJob(j);
+          }}
+          onManageCandidates={(j) => {
+            setSelectedDetailJob(null);
+            handleOpenJobCandidates(j.id);
+          }}
+          onCandidateInvited={() => {
+            handleRefresh();
+          }}
+        />
       )}
 
     </div>
