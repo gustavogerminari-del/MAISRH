@@ -38,6 +38,7 @@ import {
   Globe
 } from 'lucide-react';
 import { useAuth } from '../auth';
+import { checkHeadhunterVisibility } from '../jobs/utils/headhunterAccess';
 
 export type MainTab = 
   | 'dashboard' 
@@ -121,8 +122,9 @@ export const Sidebar: React.FC<SidebarProps> = ({
   isOpenMobile = false,
   onCloseMobile
 }) => {
-  const { user, isModuleActive, hasScreenAccess } = useAuth();
+  const { user, isModuleActive, hasScreenAccess, activeModules, userPermissions } = useAuth();
   const isMaster = user?.role === 'Super Administrador' || user?.tipoUsuario === 'MASTER';
+  const { mostrarFiltroHeadhunter } = checkHeadhunterVisibility(user, activeModules, userPermissions);
 
   const [isCollapsed, setIsCollapsed] = useState<boolean>(() => {
     const saved = localStorage.getItem(COLLAPSED_STORAGE_KEY);
@@ -143,24 +145,19 @@ export const Sidebar: React.FC<SidebarProps> = ({
     },
     {
       id: 'recrutamento',
-      title: 'RECRUTAMENTO',
+      title: 'RECRUTAMENTO & HEADHUNTER',
       items: [
         { id: 'vagas', label: 'Vagas', icon: Briefcase, badge: jobsCount > 0 ? jobsCount : undefined },
         { id: 'candidatos', label: 'Candidatos', icon: Users, badge: candidatesCount > 0 ? candidatesCount : undefined },
         { id: 'banco-talentos', label: 'Banco de Talentos', icon: Contact },
         { id: 'entrevistas', label: 'Entrevistas', icon: Video, badge: interviewsCount > 0 ? interviewsCount : undefined },
         { id: 'contratacoes', label: 'Contratações', icon: UserCheck },
-      ]
-    },
-    {
-      id: 'headhunter',
-      title: 'HEADHUNTER',
-      items: [
-        { id: 'headhunter' as MainTab, label: 'Visão Geral', icon: LayoutDashboard },
-        { id: 'headhunter-projetos' as MainTab, label: 'Projetos', icon: Briefcase },
-        { id: 'headhunter-clientes' as MainTab, label: 'Clientes', icon: Building2 },
-        { id: 'headhunter-financeiro' as MainTab, label: 'Financeiro', icon: Wallet },
-        { id: 'headhunter-portal-cliente' as MainTab, label: 'Portal do Cliente', icon: FileText },
+        ...(mostrarFiltroHeadhunter ? [
+          { id: 'headhunter-projetos' as MainTab, label: 'Projetos', icon: Briefcase },
+          { id: 'headhunter-clientes' as MainTab, label: 'Clientes', icon: Building2 },
+          { id: 'headhunter-financeiro' as MainTab, label: 'Financeiro', icon: Wallet },
+          { id: 'headhunter-portal-cliente' as MainTab, label: 'Portal do Cliente', icon: FileText },
+        ] : [])
       ]
     },
     {

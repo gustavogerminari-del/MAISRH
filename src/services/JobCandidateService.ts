@@ -564,15 +564,11 @@ export class JobCandidateService {
         jobTitle: titleToUse,
         vagaTitulo: titleToUse,
         origemProcesso: origProc,
-        destinoContratacao: destContr,
-        encaminhadoPara: destContr,
-        destino: isHeadhunter ? 'Financeiro' : 'DP',
-        admissaoId: isHeadhunter ? null : `adm_${contratacaoId}`,
-        statusAdmissao: isHeadhunter ? null : 'Aguardando Admissão',
-        encaminhadoAdmissao: !isHeadhunter,
-        encaminhadoAdmissaoEm: isHeadhunter ? null : now,
-        status: 'Contratado',
-        statusEncaminhamento: initialStatusForward,
+        destinoContratacao: null, // Definido exclusivamente na Central Única de Contratações
+        statusContratacao: 'Pendente',
+        status: 'Aprovado',
+        aprovadoPor: auth.currentUser?.displayName || 'Recrutador RH',
+        aprovadoEm: now,
         contratadoEm: now,
         createdAt: now,
         updatedAt: now,
@@ -590,107 +586,24 @@ export class JobCandidateService {
         clienteNome: (candidate as any).clienteNome || jobData?.clienteNome || null,
         consultorResponsavel: (candidate as any).consultorResponsavel || auth.currentUser?.displayName || 'Recrutador RH',
         observacoes: (candidate as any).observacoes || '',
-        timeline: updatedTimeline
+        timeline: [
+          ...updatedTimeline,
+          {
+            id: `evt-aprov-${Date.now()}`,
+            title: 'Candidato Aprovado no Recrutamento',
+            description: 'Candidato aprovado na seleção. Encaminhado para a Central Única de Contratações para definição do destino.',
+            date: now.replace('T', ' ').substring(0, 16),
+            by: auth.currentUser?.displayName || 'Recrutador RH'
+          }
+        ]
       });
 
-      // 1. Etapa 1: Atualizar candidate_applications, criar contratacoes e criar documento de destino (DP ou Financeiro)
-      console.log("[HIRE] Etapa 1: Atualizar candidate_applications, criar contratacoes e documento de destino");
+      // 1. Etapa 1: Atualizar candidate_applications e criar registro em contratacoes (Aguardando definição na Central)
+      console.log("[HIRE] Etapa 1: Atualizar candidate_applications e registrar em contratacoes");
 
       const batch = writeBatch(db);
       batch.set(doc(db, COLLECTION_NAME, candidate.id), appUpdateDoc, { merge: true });
       batch.set(doc(db, 'contratacoes', contratacaoId), contratacaoDoc, { merge: true });
-
-      if (isHeadhunter) {
-        const cobrancaId = `cob_${contratacaoId}`;
-        const cobrancaDoc = sanitizeFirestoreData({
-          id: cobrancaId,
-          companyId: candidate.companyId || 'emp-001',
-          empresaId: candidate.companyId || 'emp-001',
-          clientId: (candidate as any).clienteId || (candidate as any).clientId || jobData?.clientId || jobData?.clienteId || 'cli-001',
-          clienteId: (candidate as any).clienteId || (candidate as any).clientId || jobData?.clientId || jobData?.clienteId || 'cli-001',
-          clienteNome: (candidate as any).clienteNome || jobData?.clienteNome || 'Cliente Headhunter',
-          candidateId: candidate.candidateId || candidate.id,
-          candidatoId: candidate.candidateId || candidate.id,
-          applicationId: candidate.id,
-          candidaturaId: candidate.id,
-          jobId: candidate.jobId,
-          vagaId: candidate.jobId,
-          vagaTitulo: titleToUse,
-          candidatoNome: candidate.name,
-          contratacaoId: contratacaoId,
-          valor: candidate.salaryExpectation || jobData?.salary || 0,
-          percentual: jobData?.feePercentual || 15,
-          comissao: (candidate.salaryExpectation || jobData?.salary || 0) * ((jobData?.feePercentual || 15) / 100),
-          dataContratacao: now,
-          vencimento: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
-          status: 'Aguardando Cobrança',
-          historicoStatus: [
-            {
-              id: `hist-${Date.now()}`,
-              dataHora: now,
-              statusAnterior: 'Contratado',
-              novoStatus: 'Aguardando Cobrança',
-              origem: 'Headhunter',
-              destino: 'Financeiro',
-              usuario: auth.currentUser?.displayName || 'Recrutador RH',
-              descricao: 'Encaminhado automaticamente para o módulo Financeiro (Aguardando Cobrança)'
-            }
-          ],
-          createdAt: now,
-          updatedAt: now
-        });
-        batch.set(doc(db, 'financeiro_cobrancas', cobrancaId), cobrancaDoc, { merge: true });
-      } else {
-        const admissaoId = `adm_${contratacaoId}`;
-        const admissaoDoc = sanitizeFirestoreData({
-          id: admissaoId,
-          companyId: candidate.companyId || 'emp-001',
-          empresaId: candidate.companyId || 'emp-001',
-          candidateId: candidate.candidateId || candidate.id,
-          candidatoId: candidate.candidateId || candidate.id,
-          applicationId: candidate.id,
-          candidaturaId: candidate.id,
-          jobId: candidate.jobId,
-          vagaId: candidate.jobId,
-          vagaTitulo: titleToUse,
-          contratacaoId: contratacaoId,
-          nome: candidate.name,
-          nomeCompleto: candidate.name,
-          email: candidate.email || '',
-          telefone: candidate.phone || '',
-          cpf: candidate.cpf || '',
-          cargo: titleToUse,
-          departamento: (candidate as any).department || jobData?.department || 'Operações',
-          tipoContrato: jobData?.tipoContrato || 'CLT',
-          salario: candidate.salaryExpectation || jobData?.salary || 0,
-          salarioCombinado: candidate.salaryExpectation || jobData?.salary || 0,
-          beneficios: jobData?.beneficios || 'Nenhum informado',
-          empresa: (candidate as any).companyName || 'Empresa',
-          status: 'Aguardando Admissão',
-          checklist: [
-            { item: 'RG', obrigatorio: true, concluido: !!(candidate as any).rg },
-            { item: 'CPF', obrigatorio: true, concluido: !!candidate.cpf },
-            { item: 'Carteira de Trabalho (CTPS)', obrigatorio: true, concluido: false },
-            { item: 'Comprovante de Residência', obrigatorio: true, concluido: false },
-            { item: 'Exame Admissional (ASO)', obrigatorio: true, concluido: false }
-          ],
-          historicoEtapas: [
-            {
-              dataHora: now,
-              usuario: auth.currentUser?.displayName || 'Recrutador RH',
-              acao: 'Solicitação de Admissão Criada',
-              descricao: 'Encaminhado automaticamente para o Departamento Pessoal (Aguardando Admissão)',
-              origem: 'RH Interno',
-              destino: 'Departamento Pessoal',
-              statusAnterior: 'Contratado',
-              novoStatus: 'Aguardando Admissão'
-            }
-          ],
-          createdAt: now,
-          updatedAt: now
-        });
-        batch.set(doc(db, 'solicitacoes_admissao', admissaoId), admissaoDoc, { merge: true });
-      }
 
       await batch.commit();
       console.log("[HIRE] Etapa 1 CONCLUÍDA com sucesso!");

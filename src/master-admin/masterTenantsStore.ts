@@ -133,7 +133,7 @@ export async function saveTenantAsync(tenantData: Partial<ClientTenant>): Promis
     console.error('Falha na persistência remota da empresa no Firestore:', err);
   }
 
-  // 2. Create/Sync admin user in Auth & Firestore
+  // 2. Create/Sync admin user in Auth & Firestore via backend Admin SDK API
   const adminEmail = fullTenantData.adminCredentials?.adminEmail || fullTenantData.ownerEmail;
   if (adminEmail) {
     try {
@@ -146,45 +146,70 @@ export async function saveTenantAsync(tenantData: Partial<ClientTenant>): Promis
           nome: fullTenantData.ownerName || fullTenantData.companyName || 'Administrador',
           role: 'ADMIN_EMPRESA',
           empresaId: tenantId,
-          ativo: fullTenantData.status === 'Ativo'
+          companyName: fullTenantData.companyName || 'Empresa Cliente',
+          ativo: fullTenantData.status === 'Ativo',
+          modules: fullTenantData.modules || {},
+          createdBy: 'MASTER'
         })
       });
 
       const resData = await res.json();
+      if (!resData.success) {
+        throw new Error(resData.error || 'Erro ao criar usuário no Firebase Authentication e Firestore.');
+      }
+
       const uid = resData?.uid;
 
       if (uid) {
-        // Guarantee write to `usuarios` and `users` Firestore collections with full profile
         const userProfile = {
           uid,
           email: adminEmail,
           nome: fullTenantData.ownerName || fullTenantData.companyName || 'Administrador',
+          displayName: fullTenantData.ownerName || fullTenantData.companyName || 'Administrador',
           role: 'ADMIN_EMPRESA',
-          tipoUsuario: 'EMPRESA',
+          perfil: 'ADMIN_EMPRESA',
+          tipoUsuario: 'ADMIN_EMPRESA',
           empresaId: tenantId,
           companyId: tenantId,
-          companyName: fullTenantData.companyName || 'Empresa Nova',
+          companyName: fullTenantData.companyName || 'Empresa Cliente',
+          modules: fullTenantData.modules || {},
           ativo: fullTenantData.status === 'Ativo',
           status: fullTenantData.status || 'Ativo',
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString()
+          updatedAt: new Date().toISOString(),
+          createdBy: 'MASTER'
         };
 
-        await setDoc(doc(db, 'usuarios', uid), userProfile, { merge: true });
-        await setDoc(doc(db, 'users', uid), userProfile, { merge: true });
+        try {
+          await setDoc(doc(db, 'usuarios', uid), userProfile, { merge: true });
+          await setDoc(doc(db, 'users', uid), userProfile, { merge: true });
+          if (fullTenantData.modules) {
+            await setDoc(doc(db, 'empresa_modulos', tenantId), {
+              empresaId: tenantId,
+              modulos: fullTenantData.modules,
+              updatedAt: new Date().toISOString()
+            }, { merge: true });
+          }
+        } catch (fsErr) {
+          console.warn('Aviso ao gravar perfil do usuário no client Firestore:', fsErr);
+        }
 
         // Save initial company config doc
-        await setDoc(doc(db, 'configuracoes_gerais', tenantId), {
-          empresaId: tenantId,
-          companyName: fullTenantData.companyName,
-          cnpj: fullTenantData.cnpj,
-          email: fullTenantData.ownerEmail,
-          phone: fullTenantData.ownerPhone,
-          updatedAt: new Date().toISOString()
-        }, { merge: true });
+        try {
+          await setDoc(doc(db, 'configuracoes_gerais', tenantId), {
+            empresaId: tenantId,
+            companyName: fullTenantData.companyName,
+            cnpj: fullTenantData.cnpj,
+            email: fullTenantData.ownerEmail,
+            phone: fullTenantData.ownerPhone,
+            updatedAt: new Date().toISOString()
+          }, { merge: true });
+        } catch (cfgErr) {
+          console.warn('Aviso ao salvar configuracoes_gerais no client Firestore:', cfgErr);
+        }
       }
-    } catch (err) {
-      console.warn('Aviso ao sincronizar usuário admin da empresa:', err);
+    } catch (err: any) {
+      console.error('Erro ao sincronizar usuário admin da empresa:', err);
+      throw err;
     }
   }
 

@@ -3,33 +3,135 @@ import path from 'path';
 import { createServer as createViteServer } from 'vite';
 import dotenv from 'dotenv';
 import { GoogleGenAI, Type } from '@google/genai';
-import { initializeApp as initAdminApp, getApps as getAdminApps } from 'firebase-admin/app';
+import {
+  cert,
+  getApp as getAdminApp,
+  getApps as getAdminApps,
+  initializeApp as initializeAdminApp,
+} from 'firebase-admin/app';
 import { getAuth as getAdminAuth } from 'firebase-admin/auth';
-import { getFirestore as getAdminDb } from 'firebase-admin/firestore';
+import { getFirestore as getAdminFirestore } from 'firebase-admin/firestore';
 import firebaseAppletConfig from './firebase-applet-config.json';
 
 dotenv.config();
 
+function normalizePrivateKey(value?: string): string | undefined {
+  if (!value) return undefined;
+
+  return value
+    .trim()
+    .replace(/^["']|["']$/g, '')
+    .replace(/\\n/g, '\n');
+}
+
+const projectId = process.env.FIREBASE_PROJECT_ID;
+const clientEmail = process.env.FIREBASE_CLIENT_EMAIL;
+const privateKey = normalizePrivateKey(process.env.FIREBASE_PRIVATE_KEY);
+
+console.log('FIREBASE ADMIN ENV CHECK', {
+  hasProjectId: Boolean(projectId),
+  hasClientEmail: Boolean(clientEmail),
+  hasPrivateKey: Boolean(privateKey),
+  privateKeyLength: privateKey?.length || 0,
+  startsCorrectly:
+    privateKey?.startsWith('-----BEGIN PRIVATE KEY-----') || false,
+  endsCorrectly:
+    privateKey?.endsWith('-----END PRIVATE KEY-----') || false,
+});
+
 const getFirebaseAdmin = () => {
-  if (!getAdminApps().length) {
-    try {
-      const projId = firebaseAppletConfig.projectId || process.env.VITE_FIREBASE_PROJECT_ID || 'rl-rh-f0127';
-      initAdminApp({
-        projectId: projId
-      });
-      console.log('🔥 [Firebase Admin Initialized]', {
-        projectId: projId,
-        database: '(default)'
-      });
-    } catch (err) {
-      console.error('❌ [Firebase Admin Init Error]:', err);
-    }
+  if (!projectId || !clientEmail || !privateKey) {
+    return {
+      adminApp: null,
+      adminAuth: null,
+      adminDb: null,
+      isConfigured: false,
+      error: 'Credenciais do Firebase Admin não configuradas no ambiente server-side.'
+    };
   }
-  return {
-    adminAuth: getAdminAuth(),
-    adminDb: getAdminDb()
-  };
+
+  try {
+    const adminApp =
+      getAdminApps().length > 0
+        ? getAdminApp()
+        : initializeAdminApp({
+            credential: cert({
+              projectId,
+              clientEmail,
+              privateKey,
+            }),
+            projectId,
+          });
+
+    return {
+      adminApp,
+      adminAuth: getAdminAuth(adminApp),
+      adminDb: getAdminFirestore(adminApp),
+      isConfigured: true,
+      error: null
+    };
+  } catch (err: any) {
+    console.error('❌ [Firebase Admin Init Error]:', err?.message || err);
+    return {
+      adminApp: null,
+      adminAuth: null,
+      adminDb: null,
+      isConfigured: false,
+      error: `Erro ao inicializar Firebase Admin: ${err?.message || String(err)}`
+    };
+  }
 };
+
+async function testFirebaseAdmin() {
+  const admin = getFirebaseAdmin();
+  const maskedEmail = clientEmail ? clientEmail.replace(/^(..)(.*)(@.*)$/, '$1***$3') : 'N/A';
+
+  const report: any = {
+    projectId: projectId || 'N/A',
+    clientEmailMasked: maskedEmail,
+    appName: admin.adminApp?.name || 'N/A',
+    isConfigured: admin.isConfigured,
+    authTest: { success: false },
+    firestoreTest: { success: false }
+  };
+
+  if (!admin.isConfigured || !admin.adminApp || !admin.adminAuth || !admin.adminDb) {
+    report.error = admin.error || "Credenciais do Firebase Admin não configuradas no ambiente server-side.";
+    console.log("FIREBASE ADMIN TEST RESULT", JSON.stringify(report, null, 2));
+    return report;
+  }
+
+  try {
+    const listRes = await admin.adminAuth.listUsers(1);
+    report.authTest = {
+      success: true,
+      usersCount: listRes.users.length
+    };
+  } catch (err: any) {
+    report.authTest = {
+      success: false,
+      code: err.code || 'unknown',
+      message: err.message || String(err)
+    };
+  }
+
+  try {
+    const snap = await admin.adminDb.collection("_health").limit(1).get();
+    report.firestoreTest = {
+      success: true,
+      docCount: snap.size
+    };
+  } catch (err: any) {
+    report.firestoreTest = {
+      success: false,
+      code: err.code || 'unknown',
+      message: err.message || String(err)
+    };
+  }
+
+  console.log("FIREBASE ADMIN TEST RESULT", JSON.stringify(report, null, 2));
+  return report;
+}
 
 async function startServer() {
   const app = express();
@@ -59,88 +161,175 @@ async function startServer() {
     res.json({ status: 'ok', timestamp: new Date().toISOString() });
   });
 
+  // FIREBASE ADMIN HEALTH TEST API
+  app.get('/api/admin/firebase-test', async (req, res) => {
+    const report = await testFirebaseAdmin();
+    res.json(report);
+  });
+
   // FIREBASE USER CREATION & SYNC API
   app.post('/api/users/create', async (req, res) => {
     try {
-      const { email, password, nome, role, empresaId, ativo, permissions } = req.body;
-      if (!email || typeof email !== 'string') {
-        return res.status(400).json({ success: false, error: 'E-mail é obrigatório.' });
+      const { email, password, senha, nome, role, empresaId, companyName, ativo, modules, createdBy } = req.body;
+      const rawPassword = password || senha;
+
+      if (!email || typeof email !== 'string' || !email.trim()) {
+        return res.status(400).json({ success: false, code: 'invalid-argument', error: 'E-mail é obrigatório.' });
+      }
+      if (!rawPassword || typeof rawPassword !== 'string' || rawPassword.length < 6) {
+        return res.status(400).json({ success: false, code: 'invalid-argument', error: 'Senha é obrigatória e deve ter pelo menos 6 caracteres.' });
+      }
+      if (!nome || typeof nome !== 'string' || !nome.trim()) {
+        return res.status(400).json({ success: false, code: 'invalid-argument', error: 'Nome é obrigatório.' });
       }
 
       const normEmail = email.trim().toLowerCase();
-      const { adminAuth, adminDb } = getFirebaseAdmin();
+      const isMaster = normEmail === 'gustavo.germinari@gmail.com' || normEmail === 'master@maisrh.com.br' || role === 'MASTER';
 
+      if (!isMaster && (!empresaId || typeof empresaId !== 'string' || !empresaId.trim())) {
+        return res.status(400).json({ success: false, code: 'invalid-argument', error: 'empresaId é obrigatório para cadastro de clientes.' });
+      }
+
+      const adminRes = getFirebaseAdmin();
+      if (!adminRes.isConfigured || !adminRes.adminAuth || !adminRes.adminDb) {
+        console.error("FIREBASE ADMIN NOT CONFIGURED IN USER CREATE", { error: adminRes.error });
+        return res.status(500).json({
+          success: false,
+          code: 'auth/admin-not-configured',
+          error: adminRes.error || "Credenciais do Firebase Admin não configuradas no ambiente server-side."
+        });
+      }
+
+      const { adminAuth, adminDb } = adminRes;
       let userRecord: any = null;
-      let alreadyExistedInAuth = false;
+      let authCreated = false;
 
+      // 1. Consultar ou criar no Firebase Authentication
       try {
         userRecord = await adminAuth.getUserByEmail(normEmail);
-        alreadyExistedInAuth = true;
-        if (password && password.length >= 6) {
-          await adminAuth.updateUser(userRecord.uid, {
-            password,
-            displayName: nome || normEmail.split('@')[0],
-            disabled: !(ativo ?? true)
-          });
-        }
       } catch (findErr: any) {
-        if (findErr.code === 'auth/user-not-found' || String(findErr.message || '').includes('not-found')) {
-          const initialPassword = password && password.length >= 6 ? password : 'Gugato94@';
+        if (findErr.code === 'auth/user-not-found' || String(findErr.message || '').includes('user-not-found')) {
           try {
             userRecord = await adminAuth.createUser({
               email: normEmail,
-              password: initialPassword,
-              displayName: nome || normEmail.split('@')[0],
-              disabled: !(ativo ?? true)
+              password: rawPassword,
+              displayName: nome.trim(),
+              disabled: false,
+              emailVerified: false,
             });
+            authCreated = true;
           } catch (createErr: any) {
-            console.warn(`[Admin Auth create user fallback]:`, createErr.message);
+            console.error("USER CREATE AUTH ERROR", {
+              code: createErr.code,
+              message: createErr.message,
+              email: normEmail
+            });
+            return res.status(500).json({
+              success: false,
+              code: createErr.code || 'auth/create-failed',
+              error: createErr.message || 'Falha ao criar usuário no Firebase Authentication.'
+            });
           }
         } else {
-          console.warn(`[Admin Auth lookup warning]:`, findErr.message);
+          console.error("USER GET BY EMAIL ERROR", {
+            code: findErr.code,
+            message: findErr.message,
+            email: normEmail
+          });
+          return res.status(500).json({
+            success: false,
+            code: findErr.code || 'auth/lookup-failed',
+            error: findErr.message || 'Falha ao consultar usuário no Firebase Authentication.'
+          });
         }
       }
 
-      const uid = userRecord ? userRecord.uid : `usr-${Date.now()}`;
+      if (!userRecord || !userRecord.uid) {
+        return res.status(500).json({
+          success: false,
+          code: 'auth/uid-missing',
+          error: 'UID não retornado pelo Firebase Authentication.'
+        });
+      }
+
+      const uid = userRecord.uid;
       const nowIso = new Date().toISOString();
-
-      const isMaster = normEmail === 'gustavo.germinari@gmail.com' || role === 'MASTER';
       const finalRole = isMaster ? 'MASTER' : (role || 'ADMIN_EMPRESA');
-      const finalEmpresaId = isMaster ? null : (empresaId || 'emp-001');
+      const finalEmpresaId = isMaster ? null : empresaId.trim();
+      const finalCompanyName = isMaster ? 'MAIS RH SaaS' : (companyName || 'Empresa Cliente');
+      const finalModules = modules && typeof modules === 'object' ? modules : {};
 
-      const firestoreData = {
+      // 2. Montar objeto do documento
+      const userDocData = {
         uid,
         email: normEmail,
-        nome: nome || normEmail.split('@')[0],
-        role: finalRole,
+        nome: nome.trim(),
+        displayName: nome.trim(),
         empresaId: finalEmpresaId,
-        ativo: ativo ?? true,
-        permissions: permissions || [],
+        companyId: finalEmpresaId,
+        companyName: finalCompanyName,
+        role: finalRole,
+        perfil: finalRole,
+        tipoUsuario: finalRole,
+        status: "ativo",
+        ativo: true,
+        modules: finalModules,
         createdAt: nowIso,
         updatedAt: nowIso
       };
 
+      let usersDocumentSaved = false;
+      let usuariosDocumentSaved = false;
+
+      // 3. Salvar nos dois documentos users/{uid} e usuarios/{uid}
       try {
-        await adminDb.collection('usuarios').doc(uid).set(firestoreData, { merge: true });
-        await adminDb.collection('users').doc(uid).set({
-          ...firestoreData,
-          displayName: firestoreData.nome,
-          companyId: firestoreData.empresaId,
-          tipoUsuario: isMaster ? 'MASTER' : 'EMPRESA',
-          status: (ativo ?? true) ? 'Ativo' : 'Inativo'
-        }, { merge: true });
-      } catch (fsErr) {
-        console.warn('Firestore Admin write notice:', fsErr);
+        await adminDb.collection('users').doc(uid).set(userDocData, { merge: true });
+        usersDocumentSaved = true;
+
+        await adminDb.collection('usuarios').doc(uid).set(userDocData, { merge: true });
+        usuariosDocumentSaved = true;
+
+        if (finalEmpresaId && Object.keys(finalModules).length > 0) {
+          await adminDb.collection('empresa_modulos').doc(finalEmpresaId).set({
+            empresaId: finalEmpresaId,
+            modulos: finalModules,
+            updatedAt: nowIso
+          }, { merge: true });
+        }
+      } catch (fsErr: any) {
+        console.error("FIRESTORE WRITE ERROR", {
+          code: fsErr.code,
+          message: fsErr.message,
+          uid
+        });
+        return res.status(500).json({
+          success: false,
+          code: fsErr.code || 'firestore/write-failed',
+          error: `Usuário no Auth (${uid}), mas falhou ao gravar no Firestore: ${fsErr.message || String(fsErr)}`
+        });
       }
+
+      const activeProjectId = process.env.FIREBASE_PROJECT_ID || adminRes.adminApp?.options?.projectId || 'N/A';
+
+      // 4. Log seguro
+      console.log("USER CREATE RESULT", {
+        email: normEmail,
+        uid,
+        authCreated,
+        usersDocumentSaved,
+        usuariosDocumentSaved,
+        projectId: activeProjectId
+      });
 
       return res.json({
         success: true,
         uid,
-        alreadyExistedInAuth,
-        user: firestoreData,
-        message: alreadyExistedInAuth
-          ? `Perfil do usuário sincronizado no Firestore (${uid}).`
-          : `Usuário criado no Firebase Authentication e Firestore com sucesso (${uid}).`
+        authCreated,
+        usersDocumentSaved,
+        usuariosDocumentSaved,
+        projectId: activeProjectId,
+        user: userDocData,
+        message: `Usuário ${normEmail} registrado e perfil sincronizado com sucesso (${uid}).`
       });
     } catch (err: any) {
       console.error('Error in /api/users/create:', err);
@@ -149,6 +338,149 @@ async function startServer() {
         code: err.code || 'internal-error',
         error: err.message || String(err)
       });
+    }
+  });
+
+  // ENDPOINT DE REPARO E RECONCILIAÇÃO DE USUÁRIOS
+  app.post('/api/users/repair', async (req, res) => {
+    try {
+      const adminRes = getFirebaseAdmin();
+      if (!adminRes.isConfigured || !adminRes.adminAuth || !adminRes.adminDb) {
+        return res.status(500).json({
+          success: false,
+          error: adminRes.error || "Credenciais do Firebase Admin não configuradas no ambiente server-side."
+        });
+      }
+      const { adminAuth, adminDb } = adminRes;
+      const repairedUsers: any[] = [];
+
+      // 1. Carregar todas as empresas cadastradas no Firestore
+      const empresasSnap = await adminDb.collection('empresas').get();
+      const empresasMap = new Map<string, any>();
+
+      empresasSnap.forEach(docSnap => {
+        const data = docSnap.data();
+        const empId = data.empresaId || docSnap.id;
+        empresasMap.set(empId, {
+          empresaId: empId,
+          companyName: data.nomeEmpresa || data.rawTenantData?.companyName || 'Empresa Cliente',
+          email: data.email || data.rawTenantData?.ownerEmail || data.rawTenantData?.adminCredentials?.adminEmail,
+          rawTenantData: data.rawTenantData
+        });
+      });
+
+      // Lista de e-mails para checar no Auth
+      const targetEmails = ['rh04consultoria@gmail.com', 'gustavo.germinari@gmail.com'];
+      empresasMap.forEach(emp => {
+        if (emp.email) targetEmails.push(emp.email.toLowerCase().trim());
+      });
+
+      const uniqueEmails = Array.from(new Set(targetEmails));
+
+      for (const email of uniqueEmails) {
+        let userRecord: any = null;
+        try {
+          userRecord = await adminAuth.getUserByEmail(email);
+        } catch {
+          // Ignore Auth API errors
+        }
+
+        let uid = userRecord?.uid || null;
+
+        if (!uid) {
+          try {
+            const uSnap = await adminDb.collection('usuarios').where('email', '==', email).limit(1).get();
+            if (!uSnap.empty) {
+              uid = uSnap.docs[0].id;
+            } else {
+              const uSnapAlt = await adminDb.collection('users').where('email', '==', email).limit(1).get();
+              if (!uSnapAlt.empty) {
+                uid = uSnapAlt.docs[0].id;
+              }
+            }
+          } catch {
+            // ignore
+          }
+        }
+
+        const isMaster = email === 'gustavo.germinari@gmail.com' || email === 'master@maisrh.com.br';
+        if (isMaster) {
+          uid = uid || 'cTvCNCMkMnT09mhmfmMgDC6ZI133';
+        }
+
+        if (!uid) {
+          const cleanEmailHash = Buffer.from(email).toString('hex').slice(0, 16);
+          uid = `usr_${cleanEmailHash}`;
+        }
+
+        let empMatch = Array.from(empresasMap.values()).find(e => e.email?.toLowerCase().trim() === email);
+        if (!empMatch && !isMaster) {
+          empMatch = empresasMap.values().next().value || {
+            empresaId: 'emp-001',
+            companyName: 'RH 04 Consultoria'
+          };
+        }
+
+        const empresaId = isMaster ? null : (empMatch?.empresaId || 'emp-001');
+        const companyName = isMaster ? 'MAIS RH SaaS' : (empMatch?.companyName || 'RH 04 Consultoria');
+        const modules = empMatch?.rawTenantData?.modules || {
+          vagas: true,
+          headhunter: true,
+          bancoTalentos: true,
+          entrevistas: true,
+          equipeInterna: true,
+          consultorRH: false,
+          feriasBeneficios: true,
+          documentosAssinatura: true,
+          auditoriaLogs: false,
+          relatoriosAvancados: true,
+          siteVagasPersonalizado: true
+        };
+
+        const nowIso = new Date().toISOString();
+        const role = isMaster ? 'MASTER' : 'ADMIN_EMPRESA';
+        const profileUsuarios = {
+          uid,
+          email,
+          nome: userRecord.displayName || empMatch?.companyName || email.split('@')[0],
+          displayName: userRecord.displayName || empMatch?.companyName || email.split('@')[0],
+          role,
+          perfil: role,
+          tipoUsuario: role,
+          ativo: true,
+          status: 'Ativo',
+          empresaId,
+          companyId: empresaId,
+          companyName,
+          modules,
+          createdAt: nowIso,
+          updatedAt: nowIso,
+          createdBy: 'MASTER'
+        };
+
+        await adminDb.collection('usuarios').doc(uid).set(profileUsuarios, { merge: true });
+        await adminDb.collection('users').doc(uid).set({
+          ...profileUsuarios,
+          displayName: profileUsuarios.nome
+        }, { merge: true });
+
+        repairedUsers.push({
+          email,
+          uid,
+          empresaId,
+          companyName,
+          role
+        });
+      }
+
+      return res.json({
+        success: true,
+        message: `${repairedUsers.length} usuários reconciliados no Firestore com sucesso.`,
+        repaired: repairedUsers
+      });
+    } catch (err: any) {
+      console.error('Error repairing users:', err);
+      return res.status(500).json({ success: false, error: err.message || String(err) });
     }
   });
 

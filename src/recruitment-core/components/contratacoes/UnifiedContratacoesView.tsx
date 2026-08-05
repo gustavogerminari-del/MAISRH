@@ -837,7 +837,7 @@ export const UnifiedContratacoesView: React.FC<UnifiedContratacoesViewProps> = (
                         ) : (
                           <>
                             <DollarSign className="w-3.5 h-3.5" />
-                            <span>Abrir Financeiro</span>
+                            <span>Finalizar e Encaminhar ao Cliente</span>
                             <ArrowRight className="w-3 h-3 ml-0.5" />
                           </>
                         )}

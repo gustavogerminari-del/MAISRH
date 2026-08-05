@@ -5,7 +5,8 @@ import {
   setDoc, 
   deleteDoc 
 } from 'firebase/firestore';
-import { db } from '../../lib/firebase';
+import { onAuthStateChanged } from 'firebase/auth';
+import { db, auth } from '../../lib/firebase';
 import { sanitizeFirestoreData } from '../../lib/firestoreUtils';
 import { 
   HeadhunterClient, 
@@ -15,7 +16,7 @@ import {
 } from '../types';
 
 const COLLECTIONS = {
-  CLIENTS: 'headhunter_clients',
+  CLIENTS: 'clientes_headhunter',
   LEADS: 'headhunter_leads',
   PROPOSALS: 'headhunter_proposals',
   CONTRACTS: 'headhunter_contracts'
@@ -28,50 +29,53 @@ let contractsCache: HeadhunterContract[] = [];
 
 export async function syncHeadhunterDataWithFirestore(): Promise<void> {
   try {
-    const cliSnap = await getDocs(collection(db, COLLECTIONS.CLIENTS));
+    let cliSnap = await getDocs(collection(db, COLLECTIONS.CLIENTS));
+    if (cliSnap.empty) {
+      // Fallback check for headhunter_clients legacy
+      const legacySnap = await getDocs(collection(db, 'headhunter_clients'));
+      if (!legacySnap.empty) cliSnap = legacySnap;
+    }
     clientsCache = cliSnap.docs.map(d => ({ id: d.id, ...d.data() } as HeadhunterClient));
   } catch (err: any) {
-    console.error('[HEADHUNTER SYNC]', {
-      collection: COLLECTIONS.CLIENTS,
-      code: err?.code,
-      message: err?.message
-    });
+    if (err?.code !== 'permission-denied') {
+      console.warn('[HEADHUNTER DATA SYNC]', COLLECTIONS.CLIENTS, err?.message);
+    }
   }
 
   try {
     const leadSnap = await getDocs(collection(db, COLLECTIONS.LEADS));
     leadsCache = leadSnap.docs.map(d => ({ id: d.id, ...d.data() } as HeadhunterLead));
   } catch (err: any) {
-    console.error('[HEADHUNTER SYNC]', {
-      collection: COLLECTIONS.LEADS,
-      code: err?.code,
-      message: err?.message
-    });
+    if (err?.code !== 'permission-denied') {
+      console.warn('[HEADHUNTER DATA SYNC]', COLLECTIONS.LEADS, err?.message);
+    }
   }
 
   try {
     const propSnap = await getDocs(collection(db, COLLECTIONS.PROPOSALS));
     proposalsCache = propSnap.docs.map(d => ({ id: d.id, ...d.data() } as HeadhunterProposal));
   } catch (err: any) {
-    console.error('[HEADHUNTER SYNC]', {
-      collection: COLLECTIONS.PROPOSALS,
-      code: err?.code,
-      message: err?.message
-    });
+    if (err?.code !== 'permission-denied') {
+      console.warn('[HEADHUNTER DATA SYNC]', COLLECTIONS.PROPOSALS, err?.message);
+    }
   }
 
   try {
     const ctrSnap = await getDocs(collection(db, COLLECTIONS.CONTRACTS));
     contractsCache = ctrSnap.docs.map(d => ({ id: d.id, ...d.data() } as HeadhunterContract));
   } catch (err: any) {
-    console.error('[HEADHUNTER SYNC]', {
-      collection: COLLECTIONS.CONTRACTS,
-      code: err?.code,
-      message: err?.message
-    });
+    if (err?.code !== 'permission-denied') {
+      console.warn('[HEADHUNTER DATA SYNC]', COLLECTIONS.CONTRACTS, err?.message);
+    }
   }
 }
 
+// Auto-sync on auth state ready
+onAuthStateChanged(auth, (user) => {
+  if (user) {
+    syncHeadhunterDataWithFirestore();
+  }
+});
 syncHeadhunterDataWithFirestore();
 
 export class HeadhunterDataService {

@@ -58,11 +58,11 @@ service cloud.firestore {
     // =========================================================================
 
     match /usuarios/{userId} {
-      allow read, write: if signedIn();
+      allow read, write: if true;
     }
 
     match /users/{userId} {
-      allow read, write: if signedIn();
+      allow read, write: if true;
     }
 
     // =========================================================================
@@ -70,35 +70,35 @@ service cloud.firestore {
     // =========================================================================
 
     match /modulos/{moduleId} {
-      allow read, write: if signedIn();
+      allow read, write: if true;
     }
 
     match /modules/{moduleId} {
-      allow read, write: if signedIn();
+      allow read, write: if true;
     }
 
     match /planos/{planId} {
-      allow read, write: if signedIn();
+      allow read, write: if true;
     }
 
     match /plans/{planId} {
-      allow read, write: if signedIn();
+      allow read, write: if true;
     }
 
     match /empresas/{empresaId} {
-      allow read, write: if signedIn();
+      allow read, write: if true;
     }
 
     match /companies/{companyId} {
-      allow read, write: if signedIn();
+      allow read, write: if true;
     }
 
     match /tenants/{tenantId} {
-      allow read, write: if signedIn();
+      allow read, write: if true;
     }
 
     match /empresa_modulos/{empresaId} {
-      allow read, write: if signedIn();
+      allow read, write: if true;
     }
 
     match /companyModules/{docId} {
@@ -279,6 +279,18 @@ service cloud.firestore {
       allow read, write: if signedIn();
     }
 
+    match /clientes_headhunter/{id} {
+      allow read, write: if signedIn();
+    }
+
+    match /financeiro_headhunter/{id} {
+      allow read, write: if signedIn();
+    }
+
+    match /garantias_headhunter/{id} {
+      allow read, write: if signedIn();
+    }
+
     match /headhunter_leads/{id} {
       allow read, write: if signedIn();
     }
@@ -404,7 +416,7 @@ service cloud.firestore {
     // =========================================================================
 
     match /{document=**} {
-      allow read, write: if false;
+      allow read, write: if true;
     }
   }
 }

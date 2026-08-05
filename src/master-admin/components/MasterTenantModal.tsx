@@ -471,6 +471,14 @@ export const MasterTenantModal: React.FC<MasterTenantModalProps> = ({
           </div>
         )}
 
+        {/* Save Error Banner */}
+        {saveError && (
+          <div className="mx-6 mt-4 p-3 bg-rose-50 border border-rose-200 rounded-xl text-rose-700 text-xs flex items-center gap-2">
+            <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
+            <span className="font-semibold">{saveError}</span>
+          </div>
+        )}
+
         {/* Modal Form Body */}
         <form onSubmit={handleSubmit} className="p-6 space-y-6 max-h-[60vh] overflow-y-auto">
           

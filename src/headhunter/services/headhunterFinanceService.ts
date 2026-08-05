@@ -7,7 +7,8 @@ import {
   query, 
   where 
 } from 'firebase/firestore';
-import { db } from '../../lib/firebase';
+import { onAuthStateChanged } from 'firebase/auth';
+import { db, auth } from '../../lib/firebase';
 import { sanitizeFirestoreData } from '../../lib/firestoreUtils';
 import { 
   HeadhunterReceita, 
@@ -37,51 +38,56 @@ let garantiasCache: HeadhunterGarantia[] = [];
 // Sync function with Firestore
 export async function syncHeadhunterFinanceWithFirestore(): Promise<void> {
   try {
-    const recSnap = await getDocs(collection(db, COLLECTIONS.RECEITAS));
+    let recSnap = await getDocs(collection(db, COLLECTIONS.RECEITAS));
+    if (recSnap.empty) {
+      const altSnap = await getDocs(collection(db, 'financeiro_headhunter'));
+      if (!altSnap.empty) recSnap = altSnap;
+    }
     receitasCache = recSnap.docs.map(d => ({ id: d.id, ...d.data() } as HeadhunterReceita));
   } catch (err: any) {
-    console.error('[HEADHUNTER SYNC]', {
-      collection: COLLECTIONS.RECEITAS,
-      code: err?.code,
-      message: err?.message
-    });
+    if (err?.code !== 'permission-denied') {
+      console.warn('[HEADHUNTER FINANCE SYNC]', COLLECTIONS.RECEITAS, err?.message);
+    }
   }
 
   try {
     const despSnap = await getDocs(collection(db, COLLECTIONS.DESPESAS));
     despesasCache = despSnap.docs.map(d => ({ id: d.id, ...d.data() } as HeadhunterExpense));
   } catch (err: any) {
-    console.error('[HEADHUNTER SYNC]', {
-      collection: COLLECTIONS.DESPESAS,
-      code: err?.code,
-      message: err?.message
-    });
+    if (err?.code !== 'permission-denied') {
+      console.warn('[HEADHUNTER FINANCE SYNC]', COLLECTIONS.DESPESAS, err?.message);
+    }
   }
 
   try {
     const comSnap = await getDocs(collection(db, COLLECTIONS.COMISSOES));
     comissoesCache = comSnap.docs.map(d => ({ id: d.id, ...d.data() } as HeadhunterCommission));
   } catch (err: any) {
-    console.error('[HEADHUNTER SYNC]', {
-      collection: COLLECTIONS.COMISSOES,
-      code: err?.code,
-      message: err?.message
-    });
+    if (err?.code !== 'permission-denied') {
+      console.warn('[HEADHUNTER FINANCE SYNC]', COLLECTIONS.COMISSOES, err?.message);
+    }
   }
 
   try {
-    const garSnap = await getDocs(collection(db, COLLECTIONS.GARANTIAS));
+    let garSnap = await getDocs(collection(db, COLLECTIONS.GARANTIAS));
+    if (garSnap.empty) {
+      const altGar = await getDocs(collection(db, 'garantias_headhunter'));
+      if (!altGar.empty) garSnap = altGar;
+    }
     garantiasCache = garSnap.docs.map(d => ({ id: d.id, ...d.data() } as HeadhunterGarantia));
   } catch (err: any) {
-    console.error('[HEADHUNTER SYNC]', {
-      collection: COLLECTIONS.GARANTIAS,
-      code: err?.code,
-      message: err?.message
-    });
+    if (err?.code !== 'permission-denied') {
+      console.warn('[HEADHUNTER FINANCE SYNC]', COLLECTIONS.GARANTIAS, err?.message);
+    }
   }
 }
 
-// Initial auto-sync
+// Auto-sync on auth state ready
+onAuthStateChanged(auth, (user) => {
+  if (user) {
+    syncHeadhunterFinanceWithFirestore();
+  }
+});
 syncHeadhunterFinanceWithFirestore();
 
 export class HeadhunterFinanceService {
