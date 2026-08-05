@@ -1109,7 +1109,18 @@ export const JobCandidatesManagementView: React.FC<JobCandidatesManagementViewPr
         isOpen={isDrawerOpen}
         onClose={() => setIsDrawerOpen(false)}
         onRefresh={handleRefresh}
-        jobTitle={companyJobs.find(j => j.id === selectedCandidate?.jobId)?.title}
+        jobTitle={companyJobs.find(j => j.id === selectedCandidate?.jobId)?.title || selectedCandidate?.role}
+        candidateId={selectedCandidate?.candidateId || (selectedCandidate as any)?.candidatoId || selectedCandidate?.id}
+        applicationId={selectedCandidate?.id}
+        jobId={selectedCandidate?.jobId || (selectedCandidate as any)?.vagaId}
+        empresaId={selectedCandidate?.companyId || (selectedCandidate as any)?.empresaId || companyId}
+        onWhatsApp={(c) => console.log('Ação WhatsApp:', c.name)}
+        onEmail={(c) => console.log('Ação E-mail:', c.name)}
+        onScheduleInterview={(c) => console.log('Ação Agendar Entrevista:', c.name)}
+        onEvaluate={(c) => console.log('Ação Avaliar:', c.name)}
+        onHire={(c) => console.log('Ação Contratar:', c.name)}
+        onReject={(c) => console.log('Ação Reprovar:', c.name)}
+        onTabChange={(tab) => console.log('Aba do candidato alterada:', tab)}
       />
 
       {/* JOB EDIT / CREATE FORM MODAL */}

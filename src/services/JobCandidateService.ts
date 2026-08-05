@@ -222,6 +222,80 @@ export class JobCandidateService {
     }
   }
 
+  static async listCandidatesByJob(
+    jobId: string,
+    companyId?: string
+  ): Promise<{
+    applicationId: string;
+    jobId: string;
+    candidateId: string;
+    companyId: string;
+    status: ApplicationStatus;
+    etapa?: string;
+    application: JobCandidateApplication;
+    candidate: any | null;
+    hasBrokenLink?: boolean;
+  }[]> {
+    if (!jobId) return [];
+
+    const listMap = new Map<string, JobCandidateApplication>();
+
+    // 1. Query by jobId
+    const q1 = companyId
+      ? query(collection(db, COLLECTION_NAME), where('companyId', '==', companyId), where('jobId', '==', jobId))
+      : query(collection(db, COLLECTION_NAME), where('jobId', '==', jobId));
+    const snap1 = await getDocs(q1);
+    snap1.forEach(d => listMap.set(d.id, { ...(d.data() as JobCandidateApplication), id: d.id }));
+
+    // 2. Query by vagaId for backwards compatibility
+    const q2 = companyId
+      ? query(collection(db, COLLECTION_NAME), where('companyId', '==', companyId), where('vagaId', '==', jobId))
+      : query(collection(db, COLLECTION_NAME), where('vagaId', '==', jobId));
+    const snap2 = await getDocs(q2);
+    snap2.forEach(d => listMap.set(d.id, { ...(d.data() as JobCandidateApplication), id: d.id }));
+
+    const applications = Array.from(listMap.values());
+    const result = [];
+
+    for (const app of applications) {
+      const candId = app.candidateId || app.candidatoId;
+      let candidateRecord = null;
+      let hasBrokenLink = false;
+
+      if (candId) {
+        try {
+          const cSnap = await getDoc(doc(db, 'candidates', candId));
+          if (cSnap.exists()) {
+            candidateRecord = { ...(cSnap.data() as any), id: cSnap.id };
+          } else {
+            console.error(`BROKEN CANDIDATE LINK: candidates/${candId} not found for application ${app.id}`);
+            hasBrokenLink = true;
+          }
+        } catch (cErr) {
+          console.error(`Error fetching candidate ${candId} for application ${app.id}:`, cErr);
+          hasBrokenLink = true;
+        }
+      } else {
+        console.error(`BROKEN CANDIDATE LINK: application ${app.id} missing candidateId`);
+        hasBrokenLink = true;
+      }
+
+      result.push({
+        applicationId: app.id,
+        jobId: app.jobId || app.vagaId || jobId,
+        candidateId: candId || '',
+        companyId: app.companyId || app.empresaId || companyId || '',
+        status: app.status,
+        etapa: app.etapa || app.status,
+        application: app,
+        candidate: candidateRecord,
+        hasBrokenLink
+      });
+    }
+
+    return result;
+  }
+
   static subscribeByCompany(
     companyId: string | undefined,
     onUpdate: (apps: JobCandidateApplication[]) => void,
@@ -269,31 +343,56 @@ export class JobCandidateService {
       return () => {};
     }
 
-    const q = query(
+    const map = new Map<string, JobCandidateApplication>();
+
+    const updateCombined = () => {
+      onUpdate(Array.from(map.values()));
+    };
+
+    const q1 = query(
       collection(db, COLLECTION_NAME),
       where('companyId', '==', companyId),
       where('jobId', '==', jobId)
     );
 
-    return onSnapshot(
-      q,
+    const q2 = query(
+      collection(db, COLLECTION_NAME),
+      where('companyId', '==', companyId),
+      where('vagaId', '==', jobId)
+    );
+
+    const unsub1 = onSnapshot(
+      q1,
       (snapshot) => {
-        const list: JobCandidateApplication[] = [];
         snapshot.forEach((d) => {
-          const data = d.data() as JobCandidateApplication;
-          list.push({
-            ...data,
-            id: d.id
-          });
+          map.set(d.id, { ...(d.data() as JobCandidateApplication), id: d.id });
         });
-        onUpdate(list);
+        updateCombined();
       },
       (err) => {
-        console.error('Erro na assinatura em tempo real de candidaturas da vaga:', err);
+        console.error('Erro na assinatura em tempo real por jobId:', err);
         if (onError) onError(err);
-        else onUpdate([]);
       }
     );
+
+    const unsub2 = onSnapshot(
+      q2,
+      (snapshot) => {
+        snapshot.forEach((d) => {
+          map.set(d.id, { ...(d.data() as JobCandidateApplication), id: d.id });
+        });
+        updateCombined();
+      },
+      (err) => {
+        console.error('Erro na assinatura em tempo real por vagaId:', err);
+        if (onError) onError(err);
+      }
+    );
+
+    return () => {
+      unsub1();
+      unsub2();
+    };
   }
 
   static async getById(id: string): Promise<JobCandidateApplication | null> {
@@ -1118,6 +1217,32 @@ export class JobCandidateService {
         updatedAt: now
       };
       await setDoc(doc(db, 'entrevistas', interviewDocId), sanitizeFirestoreData(interviewDoc), { merge: true });
+
+      // Save to official 'interviews' collection as well
+      const interviewsDoc = {
+        id: interviewDocId,
+        candidateId: existing.candidateId || existing.id,
+        applicationId: existing.id,
+        jobId: existing.jobId,
+        empresaId: existing.companyId,
+        companyId: existing.companyId,
+        data: interview.date,
+        date: interview.date,
+        horario: interview.time,
+        time: interview.time,
+        tipo: interview.type,
+        type: interview.type,
+        localOuLink: interview.location || interview.meetingLink || '',
+        location: interview.location || '',
+        meetingLink: interview.meetingLink || '',
+        entrevistadorId: interview.interviewer,
+        interviewer: interview.interviewer,
+        notes: interview.notes || '',
+        status: statusToSet,
+        createdAt: now,
+        updatedAt: now
+      };
+      await setDoc(doc(db, 'interviews', interviewDocId), sanitizeFirestoreData(interviewsDoc), { merge: true });
 
       // 2. Atualizar ou criar documento na coleção 'agenda'
       let agendaDocId = `age-${id}`;

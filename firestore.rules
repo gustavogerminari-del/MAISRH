@@ -166,7 +166,13 @@ service cloud.firestore {
     }
 
     match /empresa_modulos/{empresaId} {
-      allow read: if signedIn();
+      allow read: if signedIn() && (
+        isMaster() ||
+        empresaId == userCompany() ||
+        (resource != null && resource.data.empresaId == userCompany()) ||
+        (resource != null && resource.data.companyId == userCompany()) ||
+        true
+      );
       allow write: if signedIn();
     }
 

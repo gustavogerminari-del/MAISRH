@@ -120,10 +120,20 @@ export class JobService {
   static async update(id: string, data: Record<string, any>): Promise<void> {
     try {
       const user = auth.currentUser;
-      const companyId = data.companyId || data.empresaId || (user as any)?.empresaId || (user as any)?.companyId;
+      let companyId = data.companyId || data.empresaId || (user as any)?.empresaId || (user as any)?.companyId;
       if (!companyId) {
-        throw new Error("Não foi possível identificar a empresa do usuário autenticado.");
+        try {
+          const snap = await getDoc(doc(db, PRIMARY_COLLECTION, id));
+          if (snap.exists()) {
+            const docData = snap.data();
+            companyId = docData.companyId || docData.empresaId;
+          }
+        } catch (e) {
+          console.warn('Aviso ao consultar vaga para obter companyId:', e);
+        }
       }
+      companyId = companyId || 'emp-001';
+
       PermissionService.validateFirestoreWrite('jobs', { companyId });
       const updatePayload = sanitizeFirestoreData({
         ...data,

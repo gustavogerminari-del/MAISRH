@@ -496,48 +496,86 @@ export async function savePlanFirestore(plan: PlanConfig): Promise<void> {
   }), { merge: true });
 }
 
+import { resolveCompanyModules, ResolvedModulesResult } from '../utils/companyModules';
+
 /**
- * Consulta os módulos liberados de uma empresa na coleção 'empresa_modulos/{empresaId}'.
+ * Resolves company modules using the official priority order and resolveCompanyModules function.
  */
-export async function fetchCompanyReleasedModules(empresaId: string): Promise<Record<string, boolean>> {
-  if (!empresaId) return {};
-  try {
-    const docRef = doc(db, EMPRESA_MODULOS_COLLECTION, empresaId);
-    const snap = await getDoc(docRef);
-
-    if (snap.exists()) {
-      const data = snap.data();
-      if (data && data.modulos && typeof data.modulos === 'object') {
-        return data.modulos as Record<string, boolean>;
-      }
-    }
-
-    // Compatibilidade com docs legados
-    const legacySnap = await getDocs(collection(db, EMPRESA_MODULOS_COLLECTION));
-    const result: Record<string, boolean> = {};
-    legacySnap.forEach(d => {
-      const data = d.data();
-      if (data && data.empresaId === empresaId && data.moduloId) {
-        result[data.moduloId] = !!data.ativo;
-      }
-    });
-
-    if (Object.keys(result).length > 0) {
-      return result;
-    }
-
-    // Fallback doc empresas
-    const empSnap = await getDoc(doc(db, 'empresas', empresaId));
-    if (empSnap.exists()) {
-      const empData = empSnap.data();
-      if (empData?.rawTenantData?.modules) {
-        return empData.rawTenantData.modules as Record<string, boolean>;
-      }
-    }
-  } catch (err) {
-    console.warn(`Aviso ao buscar empresa_modulos para empresa ${empresaId}:`, err);
+export async function fetchCompanyResolvedModules(empresaId: string, uid?: string): Promise<ResolvedModulesResult> {
+  if (!empresaId) {
+    return {
+      loaded: false,
+      source: 'fallback',
+      modules: {},
+      error: 'ID da empresa não informado.'
+    };
   }
-  return {};
+
+  try {
+    let companyModulesDocument: any = null;
+    let companyDocument: any = null;
+    let userDocument: any = null;
+    let usuarioDocument: any = null;
+
+    // 1. empresa_modulos/{empresaId}
+    try {
+      const snap1 = await getDoc(doc(db, EMPRESA_MODULOS_COLLECTION, empresaId));
+      if (snap1.exists()) companyModulesDocument = snap1.data();
+    } catch (e1) {
+      console.warn(`[ModuleResolver] Aviso ao ler empresa_modulos/${empresaId}:`, e1);
+    }
+
+    // 2. empresas/{empresaId}
+    try {
+      const snap2 = await getDoc(doc(db, 'empresas', empresaId));
+      if (snap2.exists()) companyDocument = snap2.data();
+    } catch (e2) {
+      console.warn(`[ModuleResolver] Aviso ao ler empresas/${empresaId}:`, e2);
+    }
+
+    // 3 & 4. users/{uid} and usuarios/{uid}
+    const currentUid = uid || auth.currentUser?.uid;
+    if (currentUid) {
+      try {
+        const snap3 = await getDoc(doc(db, 'users', currentUid));
+        if (snap3.exists()) userDocument = snap3.data();
+      } catch (e3) {
+        console.warn(`[ModuleResolver] Aviso ao ler users/${currentUid}:`, e3);
+      }
+
+      try {
+        const snap4 = await getDoc(doc(db, 'usuarios', currentUid));
+        if (snap4.exists()) usuarioDocument = snap4.data();
+      } catch (e4) {
+        console.warn(`[ModuleResolver] Aviso ao ler usuarios/${currentUid}:`, e4);
+      }
+    }
+
+    return resolveCompanyModules({
+      empresaId,
+      uid: currentUid,
+      companyModulesDocument,
+      companyDocument,
+      userDocument,
+      usuarioDocument
+    });
+  } catch (err: any) {
+    console.warn(`[ModuleResolver] Erro ao consultar fontes de módulos para ${empresaId}:`, err);
+    return {
+      loaded: false,
+      source: 'error',
+      modules: {},
+      error: err?.message || 'Erro ao carregar módulos do banco de dados.'
+    };
+  }
+}
+
+/**
+ * Consulta os módulos liberados de uma empresa na estrutura oficial.
+ */
+export async function fetchCompanyReleasedModules(empresaId: string, uid?: string): Promise<Record<string, boolean>> {
+  const res = await fetchCompanyResolvedModules(empresaId, uid);
+  return res.modules;
 }
 
 /**
@@ -562,6 +600,8 @@ export async function saveCompanyReleasedModules(
   const docRef = doc(db, EMPRESA_MODULOS_COLLECTION, empresaId);
   const data = {
     empresaId,
+    companyId: empresaId,
+    modules: modulos,
     modulos,
     updatedAt: serverTimestamp()
   };
@@ -575,6 +615,8 @@ export async function saveCompanyReleasedModules(
     if (empSnap.exists()) {
       const existingData = empSnap.data();
       await setDoc(empresaRef, {
+        empresaId,
+        companyId: empresaId,
         rawTenantData: {
           ...(existingData?.rawTenantData || {}),
           modules: modulos

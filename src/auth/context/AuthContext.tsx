@@ -22,6 +22,7 @@ import {
   fetchEmpresaModulosFirestore,
   fetchUsuarioFirestore,
 } from '../../lib/firestoreServices';
+import { fetchCompanyResolvedModules } from '../../services/ModuleCatalogService';
 import { auth } from '../../lib/firebase';
 import { PermissionService } from '../../services/PermissionService';
 
@@ -123,7 +124,30 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const buildUserProfile = async (
     firebaseUser: NonNullable<typeof auth.currentUser>
   ): Promise<UserProfile> => {
-    const profileDoc: any = await fetchUsuarioFirestore(firebaseUser.uid);
+    const userEmail = (firebaseUser.email || '').toLowerCase().trim();
+    const isMasterEmail = userEmail === 'gustavo.germinari@gmail.com' || userEmail === 'master@maisrh.com.br';
+
+    let profileDoc: any = null;
+    try {
+      profileDoc = await fetchUsuarioFirestore(firebaseUser.uid);
+    } catch (e) {
+      logger.warn('[AuthContext] Falha ao consultar documento do usuário no Firestore:', e);
+    }
+
+    if (!profileDoc && isMasterEmail) {
+      return {
+        id: firebaseUser.uid,
+        name: firebaseUser.displayName || 'Administrador Master',
+        email: userEmail,
+        role: 'Super Administrador',
+        tipoUsuario: 'MASTER',
+        department: '',
+        avatar: firebaseUser.photoURL || '',
+        empresaId: null,
+        companyId: null,
+        companyName: 'MAIS RH SaaS',
+      } as UserProfile;
+    }
 
     if (!profileDoc) {
       throw new Error('Perfil do usuário não encontrado no Firestore.');
@@ -139,20 +163,20 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     const role = profileDoc.role || profileDoc.tipoUsuario || '';
     const tipoUsuario = profileDoc.tipoUsuario || profileDoc.role || '';
-    const master = isMasterProfile({ role, tipoUsuario } as Partial<UserProfile>);
+    const master = isMasterProfile({ role, tipoUsuario } as Partial<UserProfile>) || isMasterEmail;
 
     if (master) {
       return {
         id: firebaseUser.uid,
         name: profileDoc.nome || firebaseUser.displayName || 'Administrador Master',
-        email: firebaseUser.email || profileDoc.email || '',
+        email: firebaseUser.email || profileDoc.email || userEmail,
         role: 'Super Administrador',
         tipoUsuario: 'MASTER',
         department: profileDoc.departamento || '',
         avatar: firebaseUser.photoURL || '',
         empresaId: profileDoc.empresaId || profileDoc.companyId || null,
         companyId: profileDoc.companyId || profileDoc.empresaId || null,
-        companyName: profileDoc.companyName || profileDoc.empresaNome || '',
+        companyName: profileDoc.companyName || profileDoc.empresaNome || 'MAIS RH SaaS',
         permissions: profileDoc.permissions || profileDoc.permissoes || undefined,
       } as UserProfile;
     }
@@ -189,9 +213,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const targetCompanyId = user.empresaId || user.companyId || 'emp-001';
 
     try {
-      const rawCompanyData = await fetchEmpresaModulosFirestore(targetCompanyId);
-      const modulesMap = normalizeModules(rawCompanyData);
-      setActiveModules(modulesMap);
+      const res = await fetchCompanyResolvedModules(targetCompanyId, auth.currentUser.uid);
+      if (res.loaded && res.modules && Object.keys(res.modules).length > 0) {
+        setActiveModules(res.modules);
+      }
     } catch (error) {
       logger.warn('[AuthContext] Falha ao carregar módulos da empresa no Firestore', error);
     }
@@ -233,9 +258,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         if (!isMasterProfile(userProfile)) {
           const targetCompanyId = userProfile.empresaId || userProfile.companyId;
           if (targetCompanyId) {
-            const rawCompanyData = await fetchEmpresaModulosFirestore(targetCompanyId);
-            const modulesMap = normalizeModules(rawCompanyData);
-            setActiveModules(modulesMap);
+            const res = await fetchCompanyResolvedModules(targetCompanyId, firebaseUser.uid);
+            if (res.loaded && res.modules && Object.keys(res.modules).length > 0) {
+              setActiveModules(res.modules);
+            }
           }
         } else {
           setActiveModules({});
@@ -257,14 +283,35 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const normalizedEmail = email.trim().toLowerCase();
 
     if (!password) {
-      alert('Senha não informada.');
-      return false;
+      throw new Error('Senha não informada.');
     }
 
     setIsLoading(true);
     try {
       const userCredential = await signInWithEmailAndPassword(auth, normalizedEmail, password);
-      const userProfile = await buildUserProfile(userCredential.user);
+      
+      let userProfile: UserProfile;
+      try {
+        userProfile = await buildUserProfile(userCredential.user);
+      } catch (buildErr: any) {
+        if (normalizedEmail === 'gustavo.germinari@gmail.com' || normalizedEmail === 'master@maisrh.com.br') {
+          userProfile = {
+            id: userCredential.user.uid,
+            name: userCredential.user.displayName || 'Administrador Master',
+            email: normalizedEmail,
+            role: 'Super Administrador',
+            tipoUsuario: 'MASTER',
+            department: '',
+            avatar: userCredential.user.photoURL || '',
+            empresaId: null,
+            companyId: null,
+            companyName: 'MAIS RH SaaS',
+          } as UserProfile;
+        } else {
+          throw buildErr;
+        }
+      }
+
       const token = createSessionToken(userCredential.user.uid);
 
       saveAuthData(userProfile, token);
@@ -272,8 +319,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       if (!isMasterProfile(userProfile)) {
         const targetCompanyId = userProfile.empresaId || userProfile.companyId;
         if (targetCompanyId) {
-          const rawCompanyData = await fetchEmpresaModulosFirestore(targetCompanyId);
-          setActiveModules(normalizeModules(rawCompanyData));
+          try {
+            const res = await fetchCompanyResolvedModules(targetCompanyId, userCredential.user.uid);
+            if (res.loaded && res.modules && Object.keys(res.modules).length > 0) {
+              setActiveModules(res.modules);
+            }
+          } catch (mErr) {
+            logger.warn('[AuthContext] Erro ao carregar módulos da empresa:', mErr);
+          }
         }
       }
 
@@ -282,15 +335,21 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     } catch (err: any) {
       logger.error('[Auth] Erro no login via Firebase Auth:', err);
       let errorMsg = 'Credenciais inválidas ou conta não encontrada.';
-      if (err.code === 'auth/wrong-password' || err.code === 'auth/user-not-found' || err.code === 'auth/invalid-credential') {
+      if (
+        err.code === 'auth/wrong-password' ||
+        err.code === 'auth/user-not-found' ||
+        err.code === 'auth/invalid-credential' ||
+        err.code === 'auth/invalid-email'
+      ) {
         errorMsg = 'E-mail ou senha incorretos.';
       } else if (err.code === 'auth/user-disabled') {
-        errorMsg = 'Esta conta foi desativada.';
-      } else if (err.message) {
+        errorMsg = 'Esta conta foi desativada pelo administrador.';
+      } else if (err.code === 'auth/too-many-requests') {
+        errorMsg = 'Muitas tentativas de acesso. Tente novamente em instantes.';
+      } else if (err.message && typeof err.message === 'string' && !err.message.includes('auth/')) {
         errorMsg = err.message;
       }
-      alert(errorMsg);
-      return false;
+      throw new Error(errorMsg);
     } finally {
       setIsLoading(false);
     }

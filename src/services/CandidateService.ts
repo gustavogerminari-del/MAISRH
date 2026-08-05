@@ -35,8 +35,8 @@ export interface ApplicationDoc {
 export class CandidateService {
   static async getByEmail(email: string, companyId?: string): Promise<Candidate | null> {
     if (!email) return null;
+    const normEmail = email.toLowerCase().trim();
     try {
-      const normEmail = email.toLowerCase().trim();
       const candidatesRef = collection(db, PRIMARY_COLLECTION);
       const q = companyId 
         ? query(candidatesRef, where('email', '==', normEmail), where('companyId', '==', companyId))
@@ -48,56 +48,88 @@ export class CandidateService {
       }
     } catch (err: any) {
       console.error("FLOW ERROR in CandidateService.getByEmail:", {
-        email,
+        email: normEmail,
         companyId,
         code: err?.code,
         message: err?.message
       });
+      throw err;
     }
     return null;
+  }
+
+  static async createOrGetByEmail(data: Partial<Candidate> & { companyId: string }): Promise<Candidate> {
+    if (!data.email || !data.name) {
+      throw new Error('Nome e e-mail do candidato são obrigatórios.');
+    }
+    if (!data.companyId) {
+      throw new Error('Não foi possível identificar a empresa do candidato.');
+    }
+    const normEmail = data.email.toLowerCase().trim();
+    const existing = await this.getByEmail(normEmail, data.companyId);
+
+    if (existing) {
+      return existing;
+    }
+
+    return this.create({
+      ...data,
+      email: normEmail
+    });
   }
 
   static async create(candidateData: Partial<Candidate> & { companyId?: string }): Promise<Candidate> {
     const user = auth.currentUser;
     const now = new Date().toISOString().split('T')[0];
-    const companyId = candidateData.companyId || (candidateData as any).empresaId || 'emp-001';
+    const companyId = candidateData.companyId || (candidateData as any).empresaId;
+
+    if (!companyId) {
+      throw new Error('Não foi possível identificar a empresa do candidato.');
+    }
+
+    const name = candidateData.name || (candidateData as any).nome;
+    const email = candidateData.email ? candidateData.email.toLowerCase().trim() : '';
+
+    if (!name || !email) {
+      throw new Error('Nome e e-mail do candidato são obrigatórios.');
+    }
 
     // Reuse existing candidate if email exists to avoid duplication
     let id = candidateData.id;
-    if (candidateData.email) {
-      const existing = await this.getByEmail(candidateData.email, companyId);
+    if (email) {
+      const existing = await this.getByEmail(email, companyId);
       if (existing) {
         id = existing.id;
       }
     }
     if (!id) {
-      id = `cand-${Date.now()}`;
+      id = `cand-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
     }
 
-    const candidate = {
+    const candidate: Record<string, any> = {
       id,
-      name: candidateData.name || (candidateData as any).nome || 'Novo Candidato',
-      nome: candidateData.name || (candidateData as any).nome || 'Novo Candidato',
-      email: candidateData.email || 'candidato@email.com',
-      phone: candidateData.phone || (candidateData as any).telefone || '(11) 99999-9999',
-      telefone: candidateData.phone || (candidateData as any).telefone || '(11) 99999-9999',
-      role: candidateData.role || (candidateData as any).cargoAtual || 'Desenvolvedor',
-      cargoAtual: candidateData.role || (candidateData as any).cargoAtual || 'Desenvolvedor',
-      location: candidateData.location || (candidateData as any).cidade || 'São Paulo - SP',
-      cidade: candidateData.location || (candidateData as any).cidade || 'São Paulo - SP',
-      experienceYears: candidateData.experienceYears || 3,
-      experienciaAnos: candidateData.experienceYears || 3,
-      skills: candidateData.skills || ['React', 'TypeScript'],
+      name,
+      nome: name,
+      email,
+      phone: candidateData.phone || (candidateData as any).telefone || '',
+      telefone: candidateData.phone || (candidateData as any).telefone || '',
+      role: candidateData.role || (candidateData as any).cargoAtual || '',
+      cargoAtual: candidateData.role || (candidateData as any).cargoAtual || '',
+      location: candidateData.location || (candidateData as any).cidade || '',
+      cidade: candidateData.location || (candidateData as any).cidade || '',
+      experienceYears: Number(candidateData.experienceYears) || 0,
+      experienciaAnos: Number(candidateData.experienceYears) || 0,
+      skills: candidateData.skills || [],
       status: candidateData.status || 'Em Processo',
-      currentJobId: candidateData.currentJobId || 'vaga-1',
-      vagaId: candidateData.currentJobId || 'vaga-1',
+      currentJobId: candidateData.currentJobId || (candidateData as any).vagaId || '',
+      vagaId: candidateData.currentJobId || (candidateData as any).vagaId || '',
       currentStageId: candidateData.currentStageId || 'triagem',
-      rating: candidateData.rating || 4,
-      notes: candidateData.notes || 'Candidato promissor',
+      rating: candidateData.rating || 0,
+      notes: candidateData.notes || '',
       avatar: candidateData.avatar || '',
       appliedDate: candidateData.appliedDate || now,
-      source: candidateData.source || 'LinkedIn',
-      salaryExpectation: candidateData.salaryExpectation || 'A combinar',
+      source: (candidateData.source && ['LinkedIn', 'Indicação', 'Site Institucional', 'Gupy', 'Outro'].includes(candidateData.source) ? candidateData.source : 'Site Institucional') as any,
+      salaryExpectation: candidateData.salaryExpectation || '',
       resumeUrl: candidateData.resumeUrl || (candidateData as any).curriculoUrl || '',
       curriculoUrl: candidateData.resumeUrl || (candidateData as any).curriculoUrl || '',
       companyId,
@@ -128,12 +160,25 @@ export class CandidateService {
       throw err;
     }
 
-    return candidate as any;
+    return candidate as unknown as Candidate;
   }
 
   static async update(id: string, data: Partial<Candidate>): Promise<void> {
+    let cId = (data as any).companyId || (data as any).empresaId;
+    if (!cId) {
+      try {
+        const snap = await getDoc(doc(db, PRIMARY_COLLECTION, id));
+        if (snap.exists()) {
+          const docData = snap.data();
+          cId = docData.companyId || docData.empresaId;
+        }
+      } catch (e) {
+        console.warn('Aviso ao consultar candidato no Banco de Talentos para obter empresaId:', e);
+      }
+    }
+    cId = cId || 'emp-001';
+
     try {
-      const cId = (data as any).companyId || (data as any).empresaId || 'emp-001';
       const updateData = sanitizeFirestoreData({
         ...data,
         companyId: cId,
@@ -155,6 +200,7 @@ export class CandidateService {
         code: err?.code,
         message: err?.message
       });
+      throw err;
     }
   }
 
@@ -173,6 +219,7 @@ export class CandidateService {
         code: err?.code,
         message: err?.message
       });
+      throw err;
     }
   }
 
@@ -180,10 +227,11 @@ export class CandidateService {
     try {
       const snap = await getDoc(doc(db, COLLECTION_NAME, id));
       if (snap.exists()) {
-        return snap.data() as Candidate;
+        return { ...(snap.data() as Candidate), id: snap.id };
       }
-    } catch (err) {
-      console.warn('Erro em CandidateService.getById:', err);
+    } catch (err: any) {
+      console.error('FLOW ERROR in CandidateService.getById:', { candidateId: id, code: err?.code, message: err?.message });
+      throw err;
     }
     return null;
   }
@@ -198,15 +246,17 @@ export class CandidateService {
         ? query(collection(db, COLLECTION_NAME), where('companyId', '==', companyId))
         : collection(db, COLLECTION_NAME);
       const snap = await getDocs(q);
-      if (!snap.empty) {
-        const list: Candidate[] = [];
-        snap.forEach(d => list.push(d.data() as Candidate));
-        return list;
-      }
-    } catch (err) {
-      console.warn('Erro em CandidateService.list:', err);
+      const list: Candidate[] = [];
+      snap.forEach(d => list.push({ ...(d.data() as Candidate), id: d.id }));
+      return list;
+    } catch (err: any) {
+      console.error('CANDIDATE LIST ERROR in CandidateService.list:', {
+        companyId,
+        code: err?.code,
+        message: err?.message
+      });
+      throw err;
     }
-    return INITIAL_CANDIDATES;
   }
 
   static async search(term: string, companyId?: string): Promise<Candidate[]> {
@@ -216,7 +266,7 @@ export class CandidateService {
       c.name.toLowerCase().includes(lower) || 
       c.email.toLowerCase().includes(lower) ||
       (c.role && c.role.toLowerCase().includes(lower)) ||
-      c.skills.some(s => s.toLowerCase().includes(lower))
+      (c.skills && c.skills.some(s => s.toLowerCase().includes(lower)))
     );
   }
 
@@ -236,15 +286,18 @@ export class CandidateService {
 
   // CANDIDATURAS
   static async createApplication(app: Partial<ApplicationDoc>): Promise<ApplicationDoc> {
+    if (!app.companyId || !app.jobId || !app.candidateId) {
+      throw new Error('companyId, jobId e candidateId são obrigatórios para registrar a candidatura.');
+    }
     const id = app.id || `app-${Date.now()}`;
     const user = auth.currentUser;
     const now = new Date().toISOString();
 
     const applicationDoc: ApplicationDoc = {
       id,
-      companyId: app.companyId || 'emp-001',
-      jobId: app.jobId || 'vaga-1',
-      candidateId: app.candidateId || 'cand-1',
+      companyId: app.companyId,
+      jobId: app.jobId,
+      candidateId: app.candidateId,
       stage: app.stage || 'triagem',
       rating: app.rating || 3,
       notes: app.notes || '',
@@ -256,8 +309,9 @@ export class CandidateService {
 
     try {
       await setDoc(doc(db, APPLICATIONS_COLLECTION, id), sanitizeFirestoreData(applicationDoc), { merge: true });
-    } catch (err) {
-      console.warn('Erro ao salvar candidatura no Firestore:', err);
+    } catch (err: any) {
+      console.error('FLOW ERROR em CandidateService.createApplication:', { id, code: err?.code, message: err?.message });
+      throw err;
     }
 
     return applicationDoc;
@@ -268,11 +322,11 @@ export class CandidateService {
       const q = query(collection(db, APPLICATIONS_COLLECTION), where('jobId', '==', jobId));
       const snap = await getDocs(q);
       const list: ApplicationDoc[] = [];
-      snap.forEach(d => list.push(d.data() as ApplicationDoc));
+      snap.forEach(d => list.push({ ...(d.data() as ApplicationDoc), id: d.id }));
       return list;
-    } catch (err) {
-      console.warn('Erro ao buscar candidaturas no Firestore:', err);
-      return [];
+    } catch (err: any) {
+      console.error('FLOW ERROR em CandidateService.getApplicationsForJob:', { jobId, code: err?.code, message: err?.message });
+      throw err;
     }
   }
 }
