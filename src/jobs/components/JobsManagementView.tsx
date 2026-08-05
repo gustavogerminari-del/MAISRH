@@ -11,7 +11,7 @@ import {
   Lock,
 } from 'lucide-react';
 import { Job, JobFilterParams, JobStatus } from '../types/job';
-import { normalizeJobStatus, normalizeJobData } from '../utils/jobUtils';
+import { normalizeJobStatus, normalizeJobOrigin, normalizeJobData } from '../utils/jobUtils';
 import { JobCard } from './JobCard';
 import { JobDetailModal } from './JobDetailModal';
 import { JobFormModal } from './JobFormModal';
@@ -124,32 +124,31 @@ export const JobsManagementView: React.FC<JobsManagementViewProps> = ({
       // Filter by Origem
       let matchesOrigem = true;
       const origFilter = filters.origem || 'Todas';
-      const isHead = job.isHeadhunter || (job as any).projetoHeadhunter || job.origemProcesso === 'headhunter';
-      const hasClient = Boolean((job as any).clienteNome || (job as any).clienteId);
-
-      if (!mostrarFiltroHeadhunter && isHead) {
-        return false;
-      }
+      const normOrigin = normalizeJobOrigin(job.origem || job.origemProcesso || job.tipoProcesso);
 
       if (origFilter === 'Internas') {
-        matchesOrigem = !isHead && !hasClient && job.origemProcesso !== 'recrutamento_cliente';
+        matchesOrigem = normOrigin === 'interna';
       } else if (origFilter === 'Clientes') {
-        matchesOrigem = job.origemProcesso === 'recrutamento_cliente' || (hasClient && !isHead);
+        matchesOrigem = normOrigin === 'cliente';
       } else if (origFilter === 'Headhunter') {
-        matchesOrigem = mostrarFiltroHeadhunter && isHead;
+        matchesOrigem = normOrigin === 'headhunter';
       }
 
       // Filter by Status
       let matchesStatus = true;
       const stFilter = filters.status;
+      const normStatus = normalizeJobStatus(job.status);
+
       if (stFilter === 'Abertas') {
-        matchesStatus = job.status === 'Aberta' || job.status === 'ativa';
+        matchesStatus = normStatus === 'aberta';
       } else if (stFilter === 'Em andamento') {
-        matchesStatus = job.status === 'Em andamento';
+        matchesStatus = normStatus === 'em_andamento';
       } else if (stFilter === 'Concluídas') {
-        matchesStatus = job.status === 'Concluída' || job.status === 'Fechada';
+        matchesStatus = normStatus === 'concluida';
+      } else if (stFilter === 'Canceladas') {
+        matchesStatus = normStatus === 'cancelada';
       } else if (stFilter !== 'Todas') {
-        matchesStatus = job.status === stFilter;
+        matchesStatus = normStatus === String(stFilter).toLowerCase();
       }
 
       return matchesSearch && matchesDept && matchesType && matchesOrigem && matchesStatus;
@@ -178,6 +177,19 @@ export const JobsManagementView: React.FC<JobsManagementViewProps> = ({
       setJobs(updatedList);
       logger.info(`Nova vaga criada: ${newJob.title}`, 'JobsManagement');
     }
+
+    // Refetch latest jobs directly from Firestore jobs collection
+    try {
+      const freshJobs = await JobService.list(isMaster ? undefined : userCompanyId);
+      if (freshJobs && freshJobs.length > 0) {
+        setJobs(freshJobs.map(j => normalizeJobData(j)));
+      }
+    } catch (e) {
+      console.warn('Erro ao atualizar lista de vagas do Firestore:', e);
+    }
+
+    // Clear incompatible filters so new job appears immediately
+    setFilters(prev => ({ ...prev, status: 'Todas', origem: 'Todas', searchTerm: '' }));
 
     if (onUpdateJobs) {
       onUpdateJobs(updatedList);

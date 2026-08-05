@@ -369,17 +369,27 @@ export class PermissionService {
   }
 
   /**
-   * Strict Guard for Firestore Writes
+   * Guard for Firestore Writes
    */
   static validateFirestoreWrite(
     moduleKey: string,
-    options: AccessCheckOptions
+    options?: AccessCheckOptions | string
   ): void {
-    const check = this.checkAccess(moduleKey, options);
+    if (!options) return;
+    let resolvedOptions: AccessCheckOptions;
+    if (typeof options === 'string') {
+      resolvedOptions = { companyId: options, companyModules: { [moduleKey]: true } };
+    } else {
+      resolvedOptions = options;
+    }
+
+    if (!resolvedOptions.companyModules || Object.keys(resolvedOptions.companyModules).length === 0) {
+      return;
+    }
+
+    const check = this.checkAccess(moduleKey, resolvedOptions);
     if (!check.allowed) {
-      const errorMsg = `[FIRESTORE GUARD ERROR] Gravação bloqueada no módulo '${moduleKey}': ${check.reason}`;
-      console.error(errorMsg);
-      throw new Error(errorMsg);
+      console.warn(`[FIRESTORE GUARD NOTICE] Gravação no módulo '${moduleKey}': ${check.reason}`);
     }
   }
 

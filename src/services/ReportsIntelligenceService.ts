@@ -93,7 +93,7 @@ export class ReportsIntelligenceService {
   static async fetchConsolidatedMetrics(companyId: string = 'emp-001') {
     try {
       // Fetch Vagas (Jobs)
-      const jobsSnap = await getDocs(query(collection(db, 'vagas')));
+      const jobsSnap = await getDocs(query(collection(db, 'jobs')));
       const jobs = jobsSnap.docs.map(d => ({ id: d.id, ...d.data() }));
 
       // Fetch Candidates

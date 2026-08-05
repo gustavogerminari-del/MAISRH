@@ -1,4 +1,4 @@
-export type JobStatus = 'Aberta' | 'Pausada' | 'Fechada' | 'Arquivada' | 'Rascunho' | 'Em andamento' | 'Concluída' | 'Cancelada' | 'ativa';
+export type JobStatus = 'Aberta' | 'Pausada' | 'Fechada' | 'Arquivada' | 'Rascunho' | 'Em andamento' | 'Concluída' | 'Cancelada' | 'aberta' | 'em_andamento' | 'concluida' | 'cancelada' | 'ativa' | string;
 export type JobType = 'CLT' | 'PJ' | 'Estágio' | 'Temporário' | 'Executive';
 export type JobLocationType = 'Presencial' | 'Remoto' | 'Híbrido';
 
@@ -60,6 +60,8 @@ export interface Job {
   deadline: string;
   status: JobStatus | 'ativa';
   publicada?: boolean;
+  publicado?: boolean;
+  ativo?: boolean;
   department: string;
   recruiterName: string;
   recruiterId?: string;

@@ -67,14 +67,17 @@ export class UserService {
     const currentUser = auth.currentUser;
     const now = new Date().toISOString();
 
-    const profile: UserProfile = {
+    const profile: Record<string, any> = {
       uid: finalUid,
       email,
       displayName,
+      nome: displayName,
       role,
       companyId,
+      empresaId: companyId,
       tipoUsuario: userData.tipoUsuario || 'EMPRESA',
       status,
+      ativo: isAtivo,
       permissions: userData.permissions || [],
       createdBy: currentUser?.uid || 'system',
       createdAt: userData.createdAt || now,
@@ -82,19 +85,11 @@ export class UserService {
     };
 
     try {
-      await setDoc(doc(db, COLLECTION_NAME, finalUid), sanitizeFirestoreData(profile), { merge: true });
-      await setDoc(doc(db, 'usuarios', finalUid), sanitizeFirestoreData({
-        uid: finalUid,
-        email,
-        nome: displayName,
-        role,
-        empresaId: companyId,
-        ativo: isAtivo,
-        status,
-        permissions: userData.permissions || [],
-        createdAt: now,
-        updatedAt: now
-      }), { merge: true });
+      const sanitized = sanitizeFirestoreData(profile);
+      await Promise.all([
+        setDoc(doc(db, COLLECTION_NAME, finalUid), sanitized, { merge: true }),
+        setDoc(doc(db, 'usuarios', finalUid), sanitized, { merge: true })
+      ]);
 
       await AuditService.log({
         action: 'CREATE',
@@ -105,9 +100,10 @@ export class UserService {
       });
     } catch (err) {
       console.warn('Erro ao salvar perfil do usuário no Firestore:', err);
+      throw err;
     }
 
-    return profile;
+    return profile as any;
   }
 
   static async update(uid: string, data: Partial<UserProfile>): Promise<void> {

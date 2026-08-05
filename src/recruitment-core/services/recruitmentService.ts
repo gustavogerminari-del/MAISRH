@@ -20,9 +20,10 @@ import {
   ProcessStage 
 } from '../types/recruitment';
 
+import { normalizeJobData } from '../../jobs/utils/jobUtils';
+
 const COLLECTIONS = {
-  JOBS_PRIMARY: 'vagas',
-  JOBS_SECONDARY: 'jobs',
+  JOBS: 'jobs',
   CANDIDATES: 'candidatos',
   PROCESSES: 'candidaturas',
   INTERVIEWS: 'entrevistas',
@@ -45,23 +46,13 @@ export async function syncRecruitmentWithFirestore(): Promise<void> {
   try {
     const jobMap = new Map<string, UnifiedJob>();
 
-    // Load from 'vagas'
-    try {
-      const snap1 = await getDocs(collection(db, COLLECTIONS.JOBS_PRIMARY));
-      snap1.docs.forEach(d => {
-        jobMap.set(d.id, { id: d.id, ...d.data() } as UnifiedJob);
-      });
-    } catch (e) {
-      console.warn('Sync vagas note:', e);
-    }
-
     // Load from 'jobs'
     try {
-      const snap2 = await getDocs(collection(db, COLLECTIONS.JOBS_SECONDARY));
-      snap2.docs.forEach(d => {
-        if (!jobMap.has(d.id)) {
-          jobMap.set(d.id, { id: d.id, ...d.data() } as UnifiedJob);
-        }
+      const snap = await getDocs(collection(db, COLLECTIONS.JOBS));
+      snap.docs.forEach(d => {
+        const raw = { id: d.id, ...d.data() };
+        const norm = normalizeJobData(raw);
+        jobMap.set(d.id, norm as UnifiedJob);
       });
     } catch (e) {
       console.warn('Sync jobs note:', e);
@@ -147,13 +138,10 @@ export class RecruitmentService {
     // Update Cache
     jobsCache = [newJob, ...jobsCache.filter(j => j.id !== id)];
 
-    // Persist to both Firestore collections
+    // Persist to Firestore collection
     try {
       const sanitized = sanitizeFirestoreData(newJob);
-      await Promise.all([
-        setDoc(doc(db, COLLECTIONS.JOBS_PRIMARY, id), sanitized, { merge: true }),
-        setDoc(doc(db, COLLECTIONS.JOBS_SECONDARY, id), sanitized, { merge: true })
-      ]);
+      await setDoc(doc(db, COLLECTIONS.JOBS, id), sanitized, { merge: true });
     } catch (err) {
       console.error('Erro ao salvar vaga no Firestore:', err);
     }
@@ -172,10 +160,7 @@ export class RecruitmentService {
   static async deleteJob(jobId: string): Promise<void> {
     jobsCache = jobsCache.filter(j => j.id !== jobId);
     try {
-      await Promise.all([
-        deleteDoc(doc(db, COLLECTIONS.JOBS_PRIMARY, jobId)),
-        deleteDoc(doc(db, COLLECTIONS.JOBS_SECONDARY, jobId))
-      ]);
+      await deleteDoc(doc(db, COLLECTIONS.JOBS, jobId));
     } catch (err) {
       console.error('Erro ao remover vaga do Firestore:', err);
     }

@@ -1,27 +1,49 @@
-import { Job, JobStatus } from '../types/job';
+import { Job } from '../types/job';
 
 /**
- * Normalizes any variation of job status to standard JobStatus
+ * Normalizes any variation of job status to standard string ('aberta', 'em_andamento', 'concluida', 'cancelada')
  */
-export function normalizeJobStatus(status?: string): JobStatus {
-  const value = String(status || "").trim().toLowerCase();
+export function normalizeJobStatus(value: any): string {
+  const status = String(value || "").trim().toLowerCase();
 
-  const statusMap: Record<string, JobStatus> = {
-    aberta: "Aberta",
-    open: "Aberta",
-    ativa: "Aberta",
-    pausada: "Pausada",
-    paused: "Pausada",
-    fechada: "Fechada",
-    closed: "Fechada",
-    arquivada: "Arquivada",
-    archived: "Arquivada",
-    arquivo: "Arquivada",
-    rascunho: "Rascunho",
-    draft: "Rascunho",
-  };
+  if (["aberta", "ativa", "open"].includes(status)) {
+    return "aberta";
+  }
 
-  return statusMap[value] || (value ? (value.charAt(0).toUpperCase() + value.slice(1)) as JobStatus : "Aberta");
+  if (["em andamento", "em_andamento", "andamento"].includes(status)) {
+    return "em_andamento";
+  }
+
+  if (["concluída", "concluida", "fechada"].includes(status)) {
+    return "concluida";
+  }
+
+  if (["cancelada", "cancelado"].includes(status)) {
+    return "cancelada";
+  }
+
+  return status;
+}
+
+/**
+ * Normalizes any variation of job origin to standard string ('interna', 'cliente', 'headhunter')
+ */
+export function normalizeJobOrigin(value: any): string {
+  const origin = String(value || "").trim().toLowerCase();
+
+  if (["vaga_interna", "interna", "interno"].includes(origin)) {
+    return "interna";
+  }
+
+  if (["cliente", "atendimento_cliente", "cliente_externo", "recrutamento_cliente"].includes(origin)) {
+    return "cliente";
+  }
+
+  if (["headhunter", "executive_search", "busca_ativa"].includes(origin)) {
+    return "headhunter";
+  }
+
+  return origin;
 }
 
 /**
@@ -29,34 +51,53 @@ export function normalizeJobStatus(status?: string): JobStatus {
  */
 export function normalizeJobData(job: any): Job {
   if (!job) return job;
-  const rawStatus = job.status || (job.archived || job.isArchived ? 'arquivada' : 'aberta');
-  const normalizedStatus = normalizeJobStatus(rawStatus);
-  const isArchived = normalizedStatus === 'Arquivada' || job.archived === true || job.isArchived === true;
+
+  const title = job.title || job.titulo || 'Vaga Sem Título';
+  const description = job.description || job.descricao || '';
+  const companyName = job.companyName || job.nomeEmpresa || 'MAIS RH Brasil';
+  const location = job.location || (job.cidade ? `${job.cidade} - ${job.estado || ''}` : 'São Paulo - SP');
+  const contractType = job.type || job.tipoContrato || 'CLT';
+  const salaryRange = job.salaryRange || job.salario || 'A combinar';
+  const origin = normalizeJobOrigin(job.origem || job.origemProcesso || job.tipoProcesso);
+  const status = normalizeJobStatus(job.status);
 
   const resolvedCompanyId = job.companyId || job.empresaId || 'emp-001';
 
   return {
     ...job,
-    title: job.title || job.titulo || 'Vaga Sem Título',
-    description: job.description || job.descricao || '',
+    id: job.id,
+    title,
+    titulo: title,
+    description,
+    descricao: description,
+    companyName,
+    nomeEmpresa: companyName,
     department: job.department || 'Geral',
-    location: job.location || (job.cidade ? `${job.cidade} - ${job.estado || ''}` : 'São Paulo - SP'),
+    location,
     locationType: job.locationType || job.modalidade || 'Híbrido',
-    type: job.type || job.tipoContrato || 'CLT',
-    salaryRange: job.salaryRange || job.salario || 'A combinar',
+    type: contractType as any,
+    tipoContrato: contractType as any,
+    salaryRange,
+    salario: salaryRange,
     openings: job.openings || job.quantidadeVagas || 1,
-    applicantsCount: (job.applicantsCount !== undefined && job.applicantsCount > 0) 
-      ? job.applicantsCount 
-      : (job.candidatosCount || 3),
+    quantidadeVagas: job.openings || job.quantidadeVagas || 1,
+    applicantsCount: (job.applicantsCount !== undefined && job.applicantsCount > 0)
+      ? job.applicantsCount
+      : (job.candidatosCount || 0),
     requirements: job.requirements || job.requisitos || [],
+    requisitos: job.requirements || job.requisitos || [],
     benefits: job.benefits || job.beneficios || [],
+    beneficios: job.benefits || job.beneficios || [],
     recruiterName: job.recruiterName || 'Recrutador RH',
     deadline: job.deadline || '2026-12-31',
     createdAt: job.createdAt || job.dataCriacao || new Date().toISOString().split('T')[0],
     companyId: resolvedCompanyId,
     empresaId: resolvedCompanyId,
-    status: isArchived ? 'Arquivada' : normalizedStatus,
-    isArchived: isArchived,
-    archived: isArchived,
+    origem: origin,
+    origemProcesso: job.origemProcesso || (origin === 'interna' ? 'vaga_interna' : origin === 'cliente' ? 'recrutamento_cliente' : 'headhunter'),
+    status: status as any,
+    publicada: job.publicada !== false && job.publicado !== false,
+    publicado: job.publicado !== false && job.publicada !== false,
+    ativo: job.ativo !== false,
   };
 }

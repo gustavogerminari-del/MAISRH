@@ -14,6 +14,7 @@ import { Candidate } from '../types/rh';
 import { INITIAL_CANDIDATES } from '../data/initialData';
 import { AuditService } from './AuditService';
 
+const PRIMARY_COLLECTION = 'candidates';
 const COLLECTION_NAME = 'candidates';
 const APPLICATIONS_COLLECTION = 'applications';
 
@@ -36,19 +37,25 @@ export class CandidateService {
     const id = candidateData.id || `cand-${Date.now()}`;
     const user = auth.currentUser;
     const now = new Date().toISOString().split('T')[0];
-    const companyId = candidateData.companyId || 'emp-001';
+    const companyId = candidateData.companyId || (candidateData as any).empresaId || 'emp-001';
 
-    const candidate: Candidate & { companyId: string; createdBy: string; createdAt: string; updatedAt: string } = {
+    const candidate = {
       id,
       name: candidateData.name || 'Novo Candidato',
+      nome: candidateData.name || (candidateData as any).nome || 'Novo Candidato',
       email: candidateData.email || 'candidato@email.com',
-      phone: candidateData.phone || '(11) 99999-9999',
-      role: candidateData.role || 'Desenvolvedor',
-      location: candidateData.location || 'São Paulo - SP',
+      phone: candidateData.phone || (candidateData as any).telefone || '(11) 99999-9999',
+      telefone: candidateData.phone || (candidateData as any).telefone || '(11) 99999-9999',
+      role: candidateData.role || (candidateData as any).cargoAtual || 'Desenvolvedor',
+      cargoAtual: candidateData.role || (candidateData as any).cargoAtual || 'Desenvolvedor',
+      location: candidateData.location || (candidateData as any).cidade || 'São Paulo - SP',
+      cidade: candidateData.location || (candidateData as any).cidade || 'São Paulo - SP',
       experienceYears: candidateData.experienceYears || 3,
+      experienciaAnos: candidateData.experienceYears || 3,
       skills: candidateData.skills || ['React', 'TypeScript'],
       status: candidateData.status || 'Em Processo',
       currentJobId: candidateData.currentJobId || 'vaga-1',
+      vagaId: candidateData.currentJobId || 'vaga-1',
       currentStageId: candidateData.currentStageId || 'triagem',
       rating: candidateData.rating || 4,
       notes: candidateData.notes || 'Candidato promissor',
@@ -56,14 +63,22 @@ export class CandidateService {
       appliedDate: candidateData.appliedDate || now,
       source: candidateData.source || 'LinkedIn',
       salaryExpectation: candidateData.salaryExpectation || 'A combinar',
+      resumeUrl: candidateData.resumeUrl || (candidateData as any).curriculoUrl || '',
+      curriculoUrl: candidateData.resumeUrl || (candidateData as any).curriculoUrl || '',
       companyId,
+      empresaId: companyId,
       createdBy: user?.uid || 'system',
       createdAt: now,
       updatedAt: new Date().toISOString()
     };
 
     try {
-      await setDoc(doc(db, COLLECTION_NAME, id), sanitizeFirestoreData(candidate), { merge: true });
+      const sanitized = sanitizeFirestoreData(candidate);
+      await Promise.all([
+        setDoc(doc(db, PRIMARY_COLLECTION, id), sanitized, { merge: true }),
+        setDoc(doc(db, 'candidatos', id), sanitized, { merge: true })
+      ]);
+
       await AuditService.log({
         action: 'CREATE',
         description: `Candidato ${candidate.name} cadastrado no Banco de Talentos`,
@@ -73,17 +88,26 @@ export class CandidateService {
       });
     } catch (err) {
       console.warn('Erro ao salvar candidato no Firestore:', err);
+      throw err;
     }
 
-    return candidate;
+    return candidate as any;
   }
 
   static async update(id: string, data: Partial<Candidate>): Promise<void> {
     try {
-      await setDoc(doc(db, COLLECTION_NAME, id), sanitizeFirestoreData({
+      const cId = (data as any).companyId || (data as any).empresaId || 'emp-001';
+      const updateData = sanitizeFirestoreData({
         ...data,
+        companyId: cId,
+        empresaId: cId,
         updatedAt: new Date().toISOString()
-      }), { merge: true });
+      });
+
+      await Promise.all([
+        setDoc(doc(db, PRIMARY_COLLECTION, id), updateData, { merge: true }),
+        setDoc(doc(db, 'candidatos', id), updateData, { merge: true })
+      ]);
 
       await AuditService.log({
         action: 'UPDATE',
@@ -98,7 +122,10 @@ export class CandidateService {
 
   static async delete(id: string): Promise<void> {
     try {
-      await deleteDoc(doc(db, COLLECTION_NAME, id));
+      await Promise.all([
+        deleteDoc(doc(db, PRIMARY_COLLECTION, id)),
+        deleteDoc(doc(db, 'candidatos', id))
+      ]);
       await AuditService.log({
         action: 'DELETE',
         description: `Candidato ${id} excluído do Banco de Talentos`,

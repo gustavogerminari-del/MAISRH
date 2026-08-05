@@ -61,7 +61,9 @@ export class JobService {
       locationType: jobData.locationType || jobData.modalidade || 'Híbrido',
       type: jobData.type || jobData.tipoContrato || 'CLT',
       status: jobData.status || 'Aberta',
-      publicada: jobData.publicada ?? true,
+      publicada: jobData.publicada !== false,
+      publicado: jobData.publicado !== false && jobData.publicada !== false,
+      ativo: jobData.ativo !== false,
       salaryRange: jobData.salaryRange || jobData.salario || 'A combinar',
       salario: jobData.salario || jobData.salaryRange || 'A combinar',
       openings: Number(jobData.openings || jobData.quantidadeVagas || 1),
@@ -79,7 +81,13 @@ export class JobService {
     };
 
     try {
-      await PermissionService.validateFirestoreWrite('vagas', resolvedCompanyId);
+      console.log("JOB PAYLOAD", jobToSave);
+      console.log("AUTH USER", {
+        uid: auth.currentUser?.uid,
+        email: auth.currentUser?.email
+      });
+
+      PermissionService.validateFirestoreWrite('vagas', { companyId: resolvedCompanyId });
 
       const sanitizedData = sanitizeFirestoreData(jobToSave);
 
@@ -100,7 +108,13 @@ export class JobService {
         companyId: resolvedCompanyId
       });
     } catch (err: any) {
+      console.error("FIRESTORE JOB CREATE ERROR", {
+        code: err?.code,
+        message: err?.message,
+        stack: err?.stack
+      });
       console.error('Erro ao salvar vaga no Firestore:', err);
+      throw err;
     }
 
     return jobToSave as Job;
@@ -108,9 +122,12 @@ export class JobService {
 
   static async update(id: string, data: Record<string, any>): Promise<void> {
     try {
-      await PermissionService.validateFirestoreWrite('vagas', data.companyId || data.empresaId || 'emp-001');
+      const companyId = data.companyId || data.empresaId || 'emp-001';
+      PermissionService.validateFirestoreWrite('vagas', { companyId });
       const updatePayload = sanitizeFirestoreData({
         ...data,
+        empresaId: companyId,
+        companyId: companyId,
         updatedAt: new Date().toISOString()
       });
 
@@ -130,6 +147,7 @@ export class JobService {
       });
     } catch (err: any) {
       console.error('Erro ao atualizar vaga no Firestore:', err);
+      throw err;
     }
   }
 
@@ -174,35 +192,34 @@ export class JobService {
     try {
       const listMap = new Map<string, Job>();
 
-      // Fetch from PRIMARY_COLLECTION ('jobs')
-      try {
-        const snap = await getDocs(collection(db, PRIMARY_COLLECTION));
-        snap.forEach(d => {
-          const data: any = { ...d.data(), id: d.id };
-          const cId = data.companyId || data.empresaId;
-          if (!companyId || cId === companyId) {
-            listMap.set(d.id, normalizeJobData(data));
-          }
-        });
-      } catch (e) {
-        console.warn('Erro ao listar primary jobs:', e);
-      }
+      // Primary source: collection(db, "jobs")
+      const snap = await getDocs(collection(db, PRIMARY_COLLECTION));
+      
+      console.log("JOBS LOADED", {
+        total: snap.size,
+        ids: snap.docs.map(doc => doc.id)
+      });
 
-      // Fetch from SECONDARY_COLLECTION ('vagas')
-      try {
-        const snap = await getDocs(collection(db, SECONDARY_COLLECTION));
-        snap.forEach(d => {
-          if (!listMap.has(d.id)) {
-            const data: any = { ...d.data(), id: d.id };
-            const cId = data.companyId || data.empresaId;
-            if (!companyId || cId === companyId) {
-              listMap.set(d.id, normalizeJobData(data));
-            }
-          }
+      snap.forEach(d => {
+        const rawData: any = { ...d.data(), id: d.id };
+        const normalized = normalizeJobData(rawData);
+
+        console.log("JOB NORMALIZED", {
+          id: d.id,
+          originalStatus: rawData.status,
+          normalizedStatus: normalized.status,
+          originalOrigin: rawData.origem || rawData.origemProcesso || rawData.tipoProcesso,
+          normalizedOrigin: normalized.origem,
+          publicada: rawData.publicada ?? rawData.publicado,
+          ativo: rawData.ativo,
+          empresaId: rawData.empresaId || rawData.companyId
         });
-      } catch (e) {
-        console.warn('Erro ao listar secondary vagas:', e);
-      }
+
+        const cId = rawData.empresaId || rawData.companyId;
+        if (!companyId || cId === companyId) {
+          listMap.set(d.id, normalized);
+        }
+      });
 
       return Array.from(listMap.values());
     } catch (err) {
@@ -212,8 +229,27 @@ export class JobService {
   }
 
   static async listPublicJobs(): Promise<Job[]> {
-    const all = await this.list();
-    return all.filter(j => j.publicada !== false && (j.status === 'Aberta' || j.status === 'ativa' || !j.status));
+    try {
+      const snap = await getDocs(collection(db, PRIMARY_COLLECTION));
+      const publicJobs: Job[] = [];
+
+      snap.forEach(d => {
+        const rawData: any = { ...d.data(), id: d.id };
+        const isPublic = (rawData.publicada === true || rawData.publicado === true) && rawData.ativo !== false;
+        
+        if (isPublic) {
+          const normalized = normalizeJobData(rawData);
+          if ((normalized.status as string) === 'aberta') {
+            publicJobs.push(normalized);
+          }
+        }
+      });
+
+      return publicJobs;
+    } catch (err) {
+      console.warn('Erro em JobService.listPublicJobs:', err);
+      return [];
+    }
   }
 
   static async listByCompany(companyId?: string): Promise<Job[]> {

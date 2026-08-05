@@ -361,14 +361,31 @@ export class JobCandidateService {
       updatedAt: now
     };
 
+    const companyId = appData.companyId || (appData as any).empresaId || 'emp-001';
+    const jobId = appData.jobId || (appData as any).vagaId;
+
+    const newAppDoc: Record<string, any> = {
+      ...newApp,
+      companyId,
+      empresaId: companyId,
+      jobId,
+      vagaId: jobId,
+      etapa: newApp.status || 'inscritos',
+    };
+
     try {
-      await setDoc(doc(db, COLLECTION_NAME, id), sanitizeFirestoreData(newApp), { merge: true });
+      const sanitized = sanitizeFirestoreData(newAppDoc);
+      await Promise.all([
+        setDoc(doc(db, COLLECTION_NAME, id), sanitized, { merge: true }),
+        setDoc(doc(db, 'candidaturas', id), sanitized, { merge: true })
+      ]);
+
       await AuditService.log({
         action: 'CREATE',
         description: `Candidatura de ${newApp.name} criada para a vaga ${newApp.jobId}`,
         moduleName: 'Recrutamento',
         targetEntity: 'Candidatura',
-        companyId: appData.companyId
+        companyId
       });
     } catch (err) {
       console.error('Erro ao salvar candidatura no Firestore:', err);

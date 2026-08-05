@@ -31,6 +31,7 @@ import { JobCandidateService } from '../services/JobCandidateService';
 import { CandidateService } from '../services/CandidateService';
 import { JobService } from '../services/JobService';
 import { formatFirestoreDate } from '../lib/firestoreUtils';
+import { normalizeJobStatus } from '../jobs/utils/jobUtils';
 
 export interface PublicJobsViewProps {
   jobs?: Job[];
@@ -74,14 +75,10 @@ export const PublicJobsView: React.FC<PublicJobsViewProps> = ({
 
     const customJobsMapped: PublicJob[] = Array.from(allSourceJobsMap.values())
       .filter(j => {
-        const rawStatus = String(j.status || '').trim().toLowerCase();
-        const isArchived = j.archived === true || j.isArchived === true || rawStatus === 'arquivada' || rawStatus === 'arquivo';
-        if (isArchived) return false;
-        if (rawStatus === 'pausada' || rawStatus === 'fechada' || rawStatus === 'rascunho' || rawStatus === 'draft' || rawStatus === 'closed' || rawStatus === 'paused') {
-          return false;
-        }
-        if ((j as any).publicada === false) return false;
-        return rawStatus === 'aberta' || rawStatus === 'ativa' || rawStatus === 'open' || (!j.status && (j as any).publicada !== false);
+        const isPublic = (j.publicada === true || (j as any).publicado === true || j.publicada !== false) && j.ativo !== false;
+        if (!isPublic) return false;
+        const normStatus = normalizeJobStatus(j.status);
+        return normStatus === 'aberta';
       })
       .map(j => {
         const title = j.title || j.titulo || 'Vaga em Aberto';
