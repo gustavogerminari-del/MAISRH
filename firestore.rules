@@ -3,239 +3,55 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    // =========================================================================
-    // HELPER FUNCTIONS (FASE 2)
-    // =========================================================================
-
+    // Helper Functions
     function signedIn() {
       return request.auth != null;
     }
 
-    function hasUsuarioProfile() {
-      return signedIn() && exists(/databases/$(database)/documents/usuarios/$(request.auth.uid));
+    function isOwner(userId) {
+      return signedIn() && request.auth.uid == userId;
     }
 
-    function hasUsersProfile() {
-      return signedIn() && exists(/databases/$(database)/documents/users/$(request.auth.uid));
-    }
-
-    function hasProfile() {
-      return hasUsuarioProfile() || hasUsersProfile();
-    }
-
-    function profile() {
-      return hasUsuarioProfile()
-        ? get(/databases/$(database)/documents/usuarios/$(request.auth.uid)).data
-        : get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
-    }
-
-    function normalizedRole() {
-      return hasProfile()
-        ? (profile().role != null
-            ? profile().role
-            : (profile().tipoUsuario != null
-                ? profile().tipoUsuario
-                : (profile().perfil != null ? profile().perfil : '')))
-        : '';
-    }
-
-    function isActiveUser() {
-      return hasProfile() && (
-        profile().ativo == true ||
-        profile().status == 'Ativo' ||
-        profile().status == 'ativo' ||
-        profile().status == 'ACTIVE' ||
-        profile().status == 'active'
-      );
-    }
-
-    function isMaster() {
-      return signedIn() && (
-        (request.auth.token.email != null && (request.auth.token.email == 'master@admin.com' || request.auth.token.email.endsWith('@master.com'))) ||
-        (hasProfile() && normalizedRole() in ['MASTER', 'master', 'SUPER_ADMIN', 'SUPERADMIN', 'Super Administrador', 'SuperAdministrador', 'Super Admin'])
-      );
-    }
-
-    function isStaff() {
-      return isMaster() || (isActiveUser() && normalizedRole() in [
-        'Administrador', 'ADMINISTRADOR', 'ADMIN', 'ADMIN_EMPRESA', 'EMPRESA_ADMIN',
-        'RH', 'Admin RH', 'Gestor', 'Gestor de Seleção', 'Recrutador', 'Recrutador Sênior',
-        'HEADHUNTER', 'Headhunter', 'EMPRESA'
-      ]);
-    }
-
-    function userCompany() {
-      return hasProfile()
-        ? (profile().empresaId != null && profile().empresaId != ""
-            ? profile().empresaId
-            : (profile().companyId != null && profile().companyId != ""
-                ? profile().companyId
-                : null))
-        : null;
-    }
-
-    function dataHasEmpresaId(data) {
-      return data != null && 'empresaId' in data;
-    }
-
-    function dataHasCompanyId(data) {
-      return data != null && 'companyId' in data;
-    }
-
-    function dataCompany(data) {
-      return dataHasEmpresaId(data)
-        ? data.empresaId
-        : (dataHasCompanyId(data) ? data.companyId : null);
-    }
-
-    function sameCompany(data) {
-      return isMaster() || (
-        isStaff() &&
-        userCompany() != null &&
-        dataCompany(data) != null &&
-        dataCompany(data) == userCompany()
-      );
-    }
-
-    function incomingSameCompany() {
-      return isMaster() || (
-        isStaff() &&
-        userCompany() != null &&
-        dataCompany(request.resource.data) != null &&
-        dataCompany(request.resource.data) == userCompany()
-      );
-    }
-
-    // =========================================================================
-    // SYSTEM HEALTH & HEALTH CHECK
-    // =========================================================================
-
-    match /_health/{docId} {
-      allow read: if true;
-    }
-
-    // =========================================================================
-    // USERS & PROFILES
-    // =========================================================================
-
+    // Main collection rules for MAIS RH SaaS
+    // 1. Core collections
     match /usuarios/{userId} {
-      allow read: if true;
-      allow write: if signedIn();
+      allow read, write: if signedIn();
     }
 
     match /users/{userId} {
-      allow read: if true;
-      allow write: if signedIn();
-    }
-
-    // =========================================================================
-    // MASTER ADMIN & PLATFORM MANAGEMENT
-    // =========================================================================
-
-    match /modulos/{moduleId} {
-      allow read: if signedIn();
-      allow write: if isMaster();
-    }
-
-    match /modules/{moduleId} {
-      allow read: if signedIn();
-      allow write: if isMaster();
-    }
-
-    match /planos/{planId} {
-      allow read, write: if true;
-    }
-
-    match /plans/{planId} {
-      allow read, write: if true;
+      allow read, write: if signedIn();
     }
 
     match /empresas/{empresaId} {
-      allow read: if signedIn();
-      allow write: if signedIn();
+      allow read, write: if signedIn();
     }
 
     match /companies/{companyId} {
-      allow read: if signedIn();
-      allow write: if signedIn();
-    }
-
-    match /tenants/{tenantId} {
-      allow read: if signedIn();
-      allow write: if signedIn();
-    }
-
-    match /empresa_modulos/{empresaId} {
-      allow read: if signedIn() && (
-        isMaster() ||
-        empresaId == userCompany() ||
-        (resource != null && resource.data.empresaId == userCompany()) ||
-        (resource != null && resource.data.companyId == userCompany()) ||
-        true
-      );
-      allow write: if signedIn();
-    }
-
-    match /companyModules/{docId} {
       allow read, write: if signedIn();
     }
 
-    match /subscriptions/{subscriptionId} {
-      allow read, write: if signedIn();
-    }
-
-    match /assinaturas/{subscriptionId} {
-      allow read, write: if signedIn();
-    }
-
-    // =========================================================================
-    // JOBS & APPLICATIONS (PUBLIC & TENANT RESTRICTED)
-    // =========================================================================
-
+    // 2. Recruitment & ATS Collections
     match /jobs/{jobId} {
-      allow read: if true;
-      allow create: if signedIn();
-      allow update, delete: if signedIn();
+      allow read, write: if signedIn();
     }
 
-    match /vagas/{jobId} {
-      allow read: if true;
-      allow create: if signedIn();
-      allow update, delete: if signedIn();
+    match /vagas/{vagaId} {
+      allow read, write: if signedIn();
     }
 
-    match /candidaturas/{candidaturaId} {
-      allow read: if true;
-      allow create: if true;
-      allow update, delete: if signedIn();
+    match /candidates/{candidateId} {
+      allow read, write: if signedIn();
     }
-
-    match /applications/{appId} {
-      allow read: if true;
-      allow create: if true;
-      allow update, delete: if signedIn();
-    }
-
-    match /candidate_applications/{applicationId} {
-      allow read: if true;
-      allow create: if true;
-      allow update, delete: if signedIn();
-    }
-
-    match /company_leads/{leadId} {
-      allow create: if true;
-      allow read, update, delete: if signedIn();
-    }
-
-    // =========================================================================
-    // TENANT DATA COLLECTIONS
-    // =========================================================================
 
     match /candidatos/{candidatoId} {
       allow read, write: if signedIn();
     }
 
-    match /candidates/{candidateId} {
+    match /candidate_applications/{applicationId} {
+      allow read, write: if signedIn();
+    }
+
+    match /candidaturas/{applicationId} {
       allow read, write: if signedIn();
     }
 
@@ -247,254 +63,56 @@ service cloud.firestore {
       allow read, write: if signedIn();
     }
 
-    match /agenda/{agendaId} {
-      allow read, write: if signedIn();
-    }
-
     match /contratacoes/{contratacaoId} {
-      allow read: if true;
-      allow write: if signedIn();
-    }
-
-    match /solicitacoes_admissao/{admId} {
       allow read, write: if signedIn();
     }
 
-    match /colaboradores/{colabId} {
+    match /hirings/{hiringId} {
       allow read, write: if signedIn();
     }
 
-    match /historico_colaborador/{histId} {
+    // 3. Departmento Pessoal & Admission Collections
+    match /solicitacoes_admissao/{solicitacaoId} {
       allow read, write: if signedIn();
     }
 
-    match /clientes/{clienteId} {
+    match /admissoes/{admissaoId} {
       allow read, write: if signedIn();
     }
 
-    match /clients/{clientId} {
+    match /colaboradores/{colaboradorId} {
       allow read, write: if signedIn();
     }
 
-    match /funcionarios/{employeeId} {
+    // 4. Headhunter & Billing Collections
+    match /financeiro_cobrancas/{cobrancaId} {
       allow read, write: if signedIn();
     }
 
-    match /employees/{employeeId} {
+    match /headhunter_contratacoes/{contratacaoId} {
       allow read, write: if signedIn();
     }
 
-    match /internal_team/{memberId} {
+    // 5. System Logs & History
+    match /audit_logs/{logId} {
       allow read, write: if signedIn();
     }
 
-    match /documentos/{docId} {
+    match /auditoria/{logId} {
       allow read, write: if signedIn();
     }
 
-    match /documents/{docId} {
+    match /historico/{histId} {
       allow read, write: if signedIn();
     }
 
-    match /assinatura_digital/{docId} {
+    match /notificacoes/{notifId} {
       allow read, write: if signedIn();
     }
 
-    match /beneficios/{benefitId} {
-      allow read, write: if signedIn();
-    }
-
-    match /benefits/{benefitId} {
-      allow read, write: if signedIn();
-    }
-
-    match /solicitacoes_folga/{leaveId} {
-      allow read, write: if signedIn();
-    }
-
-    match /ponto_registros/{entryId} {
-      allow read, write: if signedIn();
-    }
-
-    match /timeEntries/{entryId} {
-      allow read, write: if signedIn();
-    }
-
-    match /escalas_ponto/{escalaId} {
-      allow read, write: if signedIn();
-    }
-
-    match /banco_horas/{bhId} {
-      allow read, write: if signedIn();
-    }
-
-    match /configuracoes_ponto/{configId} {
-      allow read, write: if signedIn();
-    }
-
-    match /settings/{settingId} {
-      allow read, write: if signedIn();
-    }
-
-    match /configuracoes/{settingId} {
-      allow read, write: if signedIn();
-    }
-
-    match /payroll_periods/{periodId} {
-      allow read, write: if signedIn();
-    }
-
-    match /payroll_stubs/{stubId} {
-      allow read, write: if signedIn();
-    }
-
-    match /esocial_events/{eventId} {
-      allow read, write: if signedIn();
-    }
-
-    match /headhunter_clients/{id} {
-      allow read, write: if signedIn();
-    }
-
-    match /clientes_headhunter/{id} {
-      allow read, write: if signedIn();
-    }
-
-    match /financeiro_headhunter/{id} {
-      allow read, write: if signedIn();
-    }
-
-    match /garantias_headhunter/{id} {
-      allow read, write: if signedIn();
-    }
-
-    match /headhunter_leads/{id} {
-      allow read, write: if signedIn();
-    }
-
-    match /headhunter_jobs/{id} {
-      allow read, write: if signedIn();
-    }
-
-    match /headhunter_contracts/{id} {
-      allow read, write: if signedIn();
-    }
-
-    match /headhunter_hirings/{id} {
-      allow read, write: if signedIn();
-    }
-
-    match /headhunter_proposals/{id} {
-      allow read, write: if signedIn();
-    }
-
-    match /headhunter_finance/{id} {
-      allow read, write: if signedIn();
-    }
-
-    match /headhunter_placements/{id} {
-      allow read, write: if signedIn();
-    }
-
-    match /headhunter_candidates/{id} {
-      allow read, write: if signedIn();
-    }
-
-    match /headhunter_interviews/{id} {
-      allow read, write: if signedIn();
-    }
-
-    match /receitas/{id} {
-      allow read, write: if signedIn();
-    }
-
-    match /despesas/{id} {
-      allow read, write: if signedIn();
-    }
-
-    match /comissoes/{id} {
-      allow read, write: if signedIn();
-    }
-
-    match /garantias/{id} {
-      allow read, write: if signedIn();
-    }
-
-    match /historicos_financeiros/{id} {
-      allow read, write: if signedIn();
-    }
-
-    match /financeiro_cobrancas/{id} {
-      allow read, write: if signedIn();
-    }
-
-    match /notifications/{id} {
-      allow read, write: if signedIn();
-    }
-
-    match /notificacoes/{id} {
-      allow read, write: if signedIn();
-    }
-
-    match /consultant_clients/{id} {
-      allow read, write: if signedIn();
-    }
-
-    match /consultant_jobs/{id} {
-      allow read, write: if signedIn();
-    }
-
-    match /consultant_screenings/{id} {
-      allow read, write: if signedIn();
-    }
-
-    match /audit_logs/{id} {
-      allow read, write: if signedIn();
-    }
-
-    match /auditLogs/{id} {
-      allow read, write: if signedIn();
-    }
-
-    match /payroll_audit_logs/{id} {
-      allow read, write: if signedIn();
-    }
-
-    match /systemAlerts/{id} {
-      allow read, write: if signedIn();
-    }
-
-    match /goals/{id} {
-      allow read, write: if signedIn();
-    }
-
-    match /systemBackups/{id} {
-      allow read, write: if signedIn();
-    }
-
-    match /timeClock/{id} {
-      allow read, write: if signedIn();
-    }
-
-    match /payroll/{id} {
-      allow read, write: if signedIn();
-    }
-
-    match /conversations/{id} {
-      allow read, write: if signedIn();
-    }
-
-    match /messages/{id} {
-      allow read, write: if signedIn();
-    }
-
-    // =========================================================================
-    // DEFAULT DENY ALL UNMATCHED PATHS
-    // =========================================================================
-
+    // Fallback for subcollections and remaining collections (authenticated users only)
     match /{document=**} {
-      allow read, write: if isMaster();
+      allow read, write: if signedIn();
     }
   }
 }
-

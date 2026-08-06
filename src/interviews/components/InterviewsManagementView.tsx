@@ -1,4 +1,6 @@
 import React, { useState, useMemo, useEffect } from 'react';
+import { collection, onSnapshot, query } from 'firebase/firestore';
+import { db } from '../../lib/firebase';
 import {
   Calendar,
   Clock,
@@ -68,6 +70,60 @@ export const InterviewsManagementView: React.FC<InterviewsManagementViewProps> =
 
   useEffect(() => {
     let isMounted = true;
+
+    // Real-time listener for entrevistas collection
+    const qEntrevistas = query(collection(db, 'entrevistas'));
+    const unsubscribeFirestore = onSnapshot(
+      qEntrevistas,
+      (snapshot) => {
+        if (!isMounted) return;
+        const firestoreList: Interview[] = snapshot.docs
+          .map((docSnap) => {
+            const data = docSnap.data();
+            const rawStatus = data.status || data.interviewStatus;
+            const normStatus = normalizeInterviewStatus(rawStatus);
+
+            return {
+              id: docSnap.id,
+              candidateId: data.candidateId || data.candidatoId || data.applicationId,
+              candidateName: data.candidateName || data.candidatoNome || 'Candidato',
+              candidateRole: data.jobTitle || data.vagaTitulo || 'Vaga Selecionada',
+              jobId: data.jobId || data.vagaId || '',
+              jobTitle: data.jobTitle || data.vagaTitulo || 'Vaga Selecionada',
+              interviewerName: data.interviewer || data.entrevistador || 'Recrutador RH',
+              date: data.date || data.data || new Date().toISOString().split('T')[0],
+              time: data.time || data.horario || '10:00',
+              type: (data.type === 'Presencial' || data.modalidade === 'Presencial' ? 'Presencial' : data.type === 'Telefone' || data.modalidade === 'Telefone' ? 'Entrevista por Telefone' : 'Online (Google Meet)') as any,
+              meetingLink: data.meetingLink || data.localOuLink || '',
+              location: data.location || '',
+              status: normStatus,
+              feedback: data.feedback,
+              notes: data.notes || '',
+              companyId: data.companyId || data.empresaId
+            } as any;
+          })
+          .filter((item: any) => {
+            if (isMaster || !userCompanyId) return true;
+            return (
+              item.companyId === userCompanyId ||
+              item.empresaId === userCompanyId ||
+              (!item.companyId && !item.empresaId)
+            );
+          });
+
+        setInterviews((prev) => {
+          const map = new Map<string, Interview>();
+          (initialInterviewsList || []).forEach((i) => map.set(i.id, i));
+          prev.forEach((i) => map.set(i.id, i));
+          firestoreList.forEach((i) => map.set(i.id, i));
+          return Array.from(map.values());
+        });
+      },
+      (err) => {
+        console.warn('Aviso ao escutar entrevistas no Firestore:', err);
+      }
+    );
+
     async function loadAllInterviews() {
       try {
         const apps = await JobCandidateService.listAll(userCompanyId);
@@ -100,7 +156,7 @@ export const InterviewsManagementView: React.FC<InterviewsManagementViewProps> =
               interviewerName: a.interview!.interviewer || 'Recrutador RH',
               date: a.interview!.date,
               time: a.interview!.time || '10:00',
-              type: (a.interview!.type === 'Presencial' ? 'Presencial' : a.interview!.type === 'Telefone' ? 'Telefone' : 'Online') as any,
+              type: (a.interview!.type === 'Presencial' ? 'Presencial' : a.interview!.type === 'Telefone' ? 'Entrevista por Telefone' : 'Online (Google Meet)') as any,
               meetingLink: a.interview!.meetingLink,
               location: a.interview!.location,
               status: normStatus,
@@ -120,20 +176,22 @@ export const InterviewsManagementView: React.FC<InterviewsManagementViewProps> =
           interviewerName: r.entrevistadorNome || r.interviewerName || 'Recrutador RH',
           date: r.date || (r.dataHora ? r.dataHora.split('T')[0] : new Date().toISOString().split('T')[0]),
           time: r.time || (r.dataHora && r.dataHora.includes('T') ? r.dataHora.split('T')[1].substring(0, 5) : '10:00'),
-          type: (r.modalidade === 'Presencial' ? 'Presencial' : 'Online') as any,
+          type: (r.modalidade === 'Presencial' ? 'Presencial' : 'Online (Google Meet)') as any,
           meetingLink: r.salaVirtualUrl,
           status: normalizeInterviewStatus(r.status),
           feedback: r.feedback,
           notes: r.pauta
         }));
 
-        const combinedMap = new Map<string, Interview>();
-        (initialInterviewsList || []).forEach(i => combinedMap.set(i.id, i));
-        interviewsFromApps.forEach(i => combinedMap.set(i.id, i));
-        mappedRec.forEach(i => combinedMap.set(i.id, i));
-
         if (isMounted) {
-          setInterviews(Array.from(combinedMap.values()));
+          setInterviews((prev) => {
+            const combinedMap = new Map<string, Interview>();
+            (initialInterviewsList || []).forEach(i => combinedMap.set(i.id, i));
+            prev.forEach(i => combinedMap.set(i.id, i));
+            interviewsFromApps.forEach(i => combinedMap.set(i.id, i));
+            mappedRec.forEach(i => combinedMap.set(i.id, i));
+            return Array.from(combinedMap.values());
+          });
         }
       } catch (err) {
         console.warn('Erro ao carregar lista unificada de entrevistas:', err);
@@ -141,8 +199,11 @@ export const InterviewsManagementView: React.FC<InterviewsManagementViewProps> =
     }
 
     loadAllInterviews();
-    return () => { isMounted = false; };
-  }, [userCompanyId, initialInterviewsList]);
+    return () => {
+      isMounted = false;
+      unsubscribeFirestore();
+    };
+  }, [userCompanyId, isMaster, initialInterviewsList]);
 
   // Modals state
   const [isScheduleModalOpen, setIsScheduleModalOpen] = useState(false);

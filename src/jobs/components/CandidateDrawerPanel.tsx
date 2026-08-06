@@ -41,6 +41,12 @@ import { JobService } from '../../services/JobService';
 import { Button } from '../../shared';
 import { ScheduleInterviewModal } from './ScheduleInterviewModal';
 import { enviarCandidatoParaAdmissaoDP } from '../../departamento-pessoal/services/dpFirestoreService';
+import { useAuth } from '../../auth/context/AuthContext';
+import { 
+  getCompanyCapabilitiesFromFirestore, 
+  normalizeCompanyModules, 
+  normalizeJobOrigin 
+} from '../../utils/companyModules';
 
 interface CandidateDrawerPanelProps {
   candidate: JobCandidateApplication | null;
@@ -148,6 +154,43 @@ export const CandidateDrawerPanel: React.FC<CandidateDrawerPanelProps> = ({
   const [observacaoReprovacao, setObservacaoReprovacao] = useState('');
   const [manterBancoTalentos, setManterBancoTalentos] = useState(true);
   const [isSubmittingReject, setIsSubmittingReject] = useState(false);
+
+  // Auth & Company Modules
+  const { activeModules } = useAuth();
+  const [capabilities, setCapabilities] = useState<{ hasHeadhunter: boolean; hasDP: boolean }>(() => {
+    if (activeModules && Object.keys(activeModules).length > 0) {
+      return normalizeCompanyModules(activeModules);
+    }
+    return { hasHeadhunter: true, hasDP: true };
+  });
+
+  useEffect(() => {
+    let isMounted = true;
+    if (isOpen && normCompanyId) {
+      getCompanyCapabilitiesFromFirestore(normCompanyId)
+        .then((caps) => {
+          if (!isMounted) return;
+          if (activeModules && Object.keys(activeModules).length > 0) {
+            const authCaps = normalizeCompanyModules(activeModules);
+            setCapabilities({
+              hasHeadhunter: caps.hasHeadhunter || authCaps.hasHeadhunter,
+              hasDP: caps.hasDP || authCaps.hasDP,
+            });
+          } else {
+            setCapabilities(caps);
+          }
+        })
+        .catch((err) => {
+          console.warn('Aviso ao carregar capacidades da empresa:', err);
+          if (activeModules && isMounted) {
+            setCapabilities(normalizeCompanyModules(activeModules));
+          }
+        });
+    }
+    return () => {
+      isMounted = false;
+    };
+  }, [isOpen, normCompanyId, activeModules]);
 
   // State for Hire Modal
   const [isHireModalOpen, setIsHireModalOpen] = useState(false);
@@ -307,7 +350,7 @@ export const CandidateDrawerPanel: React.FC<CandidateDrawerPanelProps> = ({
     setIsEvaluationModalOpen(true);
   };
 
-  const handleHireCandidate = () => {
+  const handleHireCandidate = async () => {
     console.log("[HIRE] Botão clicado");
     if (candidate.status === 'Contratado') {
       alert('Candidato já contratado.');
@@ -331,6 +374,32 @@ export const CandidateDrawerPanel: React.FC<CandidateDrawerPanelProps> = ({
     if (!candidate.name) {
       alert('Erro: Nome do candidato não informado.');
       return;
+    }
+
+    // Refresh company capabilities before displaying hire modal
+    let currentCaps = capabilities;
+    try {
+      const fetched = await getCompanyCapabilitiesFromFirestore(normCompanyId);
+      if (fetched) {
+        currentCaps = fetched;
+        setCapabilities(fetched);
+      }
+    } catch (e) {
+      console.warn('Aviso ao atualizar capacidades no handleHireCandidate:', e);
+    }
+
+    // Determine initial destination based on active modules and job origin
+    if (currentCaps.hasHeadhunter && !currentCaps.hasDP) {
+      setHireDestination('headhunter');
+    } else if (currentCaps.hasDP && !currentCaps.hasHeadhunter) {
+      setHireDestination('departamento_pessoal');
+    } else {
+      const normOrigin = normalizeJobOrigin(candidate);
+      if (normOrigin === 'HEADHUNTER') {
+        setHireDestination('headhunter');
+      } else {
+        setHireDestination('departamento_pessoal');
+      }
     }
 
     setCloseOtherCandidates(true);
@@ -357,7 +426,8 @@ export const CandidateDrawerPanel: React.FC<CandidateDrawerPanelProps> = ({
       }
 
       const res = await JobCandidateService.hireCandidate(candidate, jobTitle, {
-        closeOtherCandidates
+        closeOtherCandidates,
+        destination: hireDestination
       });
       console.log("[HIRE] Processo de contratação concluído com resultado:", res);
       if (res.success) {
@@ -607,6 +677,39 @@ export const CandidateDrawerPanel: React.FC<CandidateDrawerPanelProps> = ({
                       )}
                     </button>
                   )}
+                </div>
+              </div>
+            )}
+
+            {/* Indigo Card: Entrevista Agendada (Header Alert Card) */}
+            {(candidate.interview || dbInterviews.length > 0) && candidate.status !== 'Contratado' && (
+              <div className="w-full bg-indigo-50 border border-indigo-200 rounded-2xl p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 shadow-2xs">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-xl bg-indigo-600 text-white flex items-center justify-center shrink-0 font-bold shadow-2xs">
+                    <Calendar className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm font-black text-indigo-950">Entrevista Agendada</span>
+                      <span className="bg-indigo-100 text-indigo-800 text-[10px] font-extrabold px-2 py-0.5 rounded-full border border-indigo-300">
+                        {candidate.interview?.type || dbInterviews[0]?.type || dbInterviews[0]?.modalidade || 'Online'}
+                      </span>
+                    </div>
+                    <p className="text-xs text-indigo-800 font-medium mt-0.5">
+                      Data: <strong className="text-indigo-950">{candidate.interview?.date || dbInterviews[0]?.date || dbInterviews[0]?.data}</strong> às <strong className="text-indigo-950">{candidate.interview?.time || dbInterviews[0]?.time || dbInterviews[0]?.horario}</strong> • Responsável: <strong className="text-indigo-950">{candidate.interview?.interviewer || dbInterviews[0]?.interviewer || dbInterviews[0]?.entrevistador || 'RH'}</strong>
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-2 w-full sm:w-auto">
+                  <button
+                    type="button"
+                    onClick={() => setActiveTab('entrevistas')}
+                    className="w-full sm:w-auto px-3.5 py-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold flex items-center justify-center gap-1.5 shadow-xs transition-all cursor-pointer"
+                  >
+                    <Calendar className="w-3.5 h-3.5" />
+                    <span>Ver Área de Entrevistas</span>
+                  </button>
                 </div>
               </div>
             )}
@@ -1463,6 +1566,9 @@ export const CandidateDrawerPanel: React.FC<CandidateDrawerPanelProps> = ({
         onSave={async (data) => {
           try {
             await JobCandidateService.updateInterview(candidate.id, data, jobTitle);
+            candidate.interview = data;
+            await fetchInterviewsFromDb();
+            setActiveTab('entrevistas');
             await onRefresh();
             alert(`🗓️ Entrevista para ${candidate.name} salva com sucesso para ${data.date} às ${data.time}!`);
           } catch (err: any) {
@@ -1740,29 +1846,39 @@ export const CandidateDrawerPanel: React.FC<CandidateDrawerPanelProps> = ({
                 </p>
 
                 <div className="space-y-2 pt-1">
-                  <label className="flex items-center gap-2 p-2 rounded-xl bg-white border border-teal-200 cursor-pointer text-xs font-bold text-teal-950">
-                    <input
-                      type="radio"
-                      name="hireDest"
-                      value="departamento_pessoal"
-                      checked={hireDestination === 'departamento_pessoal'}
-                      onChange={() => setHireDestination('departamento_pessoal')}
-                      className="text-teal-600 focus:ring-teal-500"
-                    />
-                    <span>RH Interno / Encaminhar para Departamento Pessoal (Fila de Admissão)</span>
-                  </label>
+                  {capabilities.hasDP && (
+                    <label className="flex items-center gap-2 p-2.5 rounded-xl bg-white border border-teal-200 cursor-pointer text-xs font-bold text-teal-950 hover:bg-teal-50/60 transition-colors">
+                      <input
+                        type="radio"
+                        name="hireDest"
+                        value="departamento_pessoal"
+                        checked={hireDestination === 'departamento_pessoal'}
+                        onChange={() => setHireDestination('departamento_pessoal')}
+                        className="text-teal-600 focus:ring-teal-500"
+                      />
+                      <span>RH Interno / Encaminhar para Departamento Pessoal (Fila de Admissão)</span>
+                    </label>
+                  )}
 
-                  <label className="flex items-center gap-2 p-2 rounded-xl bg-white border border-teal-200 cursor-pointer text-xs font-bold text-teal-950">
-                    <input
-                      type="radio"
-                      name="hireDest"
-                      value="headhunter"
-                      checked={hireDestination === 'headhunter'}
-                      onChange={() => setHireDestination('headhunter')}
-                      className="text-teal-600 focus:ring-teal-500"
-                    />
-                    <span>Vaga de Cliente (Headhunter) / Encaminhar para Faturamento / Gestão</span>
-                  </label>
+                  {capabilities.hasHeadhunter && (
+                    <label className="flex items-center gap-2 p-2.5 rounded-xl bg-white border border-teal-200 cursor-pointer text-xs font-bold text-teal-950 hover:bg-teal-50/60 transition-colors">
+                      <input
+                        type="radio"
+                        name="hireDest"
+                        value="headhunter"
+                        checked={hireDestination === 'headhunter'}
+                        onChange={() => setHireDestination('headhunter')}
+                        className="text-teal-600 focus:ring-teal-500"
+                      />
+                      <span>Vaga de Cliente (Headhunter) / Encaminhar para Faturamento / Gestão</span>
+                    </label>
+                  )}
+
+                  {!capabilities.hasDP && !capabilities.hasHeadhunter && (
+                    <p className="text-xs font-medium text-amber-900 bg-amber-50 p-2.5 rounded-xl border border-amber-200">
+                      O candidato será marcado como contratado e registrado no histórico do processo seletivo.
+                    </p>
+                  )}
                 </div>
               </div>
 

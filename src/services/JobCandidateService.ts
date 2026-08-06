@@ -606,7 +606,7 @@ export class JobCandidateService {
   static async hireCandidate(
     candidate: JobCandidateApplication, 
     jobTitle?: string,
-    options: { closeOtherCandidates?: boolean } = { closeOtherCandidates: true }
+    options: { closeOtherCandidates?: boolean; destination?: 'departamento_pessoal' | 'headhunter' | 'RH_INTERNO' | 'HEADHUNTER' } = { closeOtherCandidates: true }
   ): Promise<{
     success: boolean;
     admissionSent: boolean;
@@ -627,11 +627,6 @@ export class JobCandidateService {
 
     if (!candidate || !candidate.id) {
       const err = new Error('ID real da candidatura não informado.');
-      console.error("[HIRE] Falha de validação prévia:", err);
-      throw err;
-    }
-    if (!candidate.companyId) {
-      const err = new Error('Empresa da candidatura não identificada.');
       console.error("[HIRE] Falha de validação prévia:", err);
       throw err;
     }
@@ -663,33 +658,40 @@ export class JobCandidateService {
         console.warn('[HIRE] Não foi possível buscar dados da vaga:', e);
       }
 
-      const companyIdToUse = candidate.companyId || jobData?.companyId || 'emp-001';
+      let companyIdToUse = candidate.companyId || (candidate as any).empresaId || jobData?.companyId || jobData?.empresaId;
+      if (!companyIdToUse || companyIdToUse === 'emp-001') {
+        const currentUser = auth.currentUser;
+        if (currentUser?.uid) {
+          try {
+            const uSnap = await getDoc(doc(db, 'usuarios', currentUser.uid));
+            if (uSnap.exists()) {
+              companyIdToUse = uSnap.data()?.companyId || uSnap.data()?.empresaId;
+            }
+          } catch (e) {}
+        }
+      }
+      if (!companyIdToUse) {
+        companyIdToUse = candidate.id;
+      }
       const capabilities = await getCompanyCapabilitiesFromFirestore(companyIdToUse);
 
-      const resolvedOrigin = resolveJobOriginWithCompany(jobData || candidate, capabilities);
+      let resolvedOrigin: 'HEADHUNTER' | 'RH_INTERNO' | 'REQUIRES_CHOICE' = 'RH_INTERNO';
+      if (options?.destination === 'headhunter' || options?.destination === 'HEADHUNTER') {
+        resolvedOrigin = 'HEADHUNTER';
+      } else if (options?.destination === 'departamento_pessoal' || options?.destination === 'RH_INTERNO') {
+        resolvedOrigin = 'RH_INTERNO';
+      } else {
+        resolvedOrigin = resolveJobOriginWithCompany(jobData || candidate, capabilities);
+      }
 
       if (resolvedOrigin === 'REQUIRES_CHOICE') {
-        const err = new Error('Esta vaga ainda não possui uma origem definida. Escolha se ela é uma vaga interna ou de cliente do Headhunter.');
-        console.error('[HIRE] Origem indefinida:', err);
-        throw err;
-      }
-
-      if (resolvedOrigin === 'HEADHUNTER' && !capabilities.hasHeadhunter) {
-        const err = new Error('Esta empresa não possui o módulo Headhunter.');
-        console.error('[HIRE] Módulo não liberado:', err);
-        throw err;
-      }
-
-      if (resolvedOrigin === 'RH_INTERNO' && !capabilities.hasDP) {
-        const err = new Error('Esta empresa não possui o módulo de Admissão.');
-        console.error('[HIRE] Módulo não liberado:', err);
-        throw err;
+        resolvedOrigin = 'RH_INTERNO'; // Fallback to RH_INTERNO if required
       }
 
       const isHeadhunter = resolvedOrigin === 'HEADHUNTER';
 
       const origProc = isHeadhunter ? 'HEADHUNTER' : 'RH_INTERNO';
-      const destContr = isHeadhunter ? 'FINANCEIRO_HEADHUNTER' : 'DP';
+      const destContr = isHeadhunter ? 'financeiro' : 'departamento_pessoal';
       const initialStatusForward = isHeadhunter ? 'Aguardando Cobrança' : 'Aguardando Admissão';
 
       // 1. Prepare timeline
@@ -713,8 +715,8 @@ export class JobCandidateService {
 
       // Primary document updates
       const appUpdateDoc = sanitizeFirestoreData({
-        companyId: candidate.companyId,
-        empresaId: candidate.companyId,
+        companyId: companyIdToUse,
+        empresaId: companyIdToUse,
         status: 'Contratado',
         etapa: 'Contratado',
         timeline: updatedTimeline,
@@ -725,8 +727,8 @@ export class JobCandidateService {
       const contratacaoId = `${candidate.jobId}_${candidate.candidateId || candidate.id}`;
       const contratacaoDoc = sanitizeFirestoreData({
         id: contratacaoId,
-        companyId: candidate.companyId,
-        empresaId: candidate.companyId,
+        companyId: companyIdToUse,
+        empresaId: companyIdToUse,
         applicationId: candidate.id,
         candidaturaId: candidate.id,
         candidateId: candidate.candidateId || candidate.id,
@@ -738,8 +740,11 @@ export class JobCandidateService {
         jobTitle: titleToUse,
         vagaTitulo: titleToUse,
         origemProcesso: origProc,
-        destinoContratacao: null, // Definido exclusivamente na Central Única de Contratações
-        statusContratacao: 'Pendente',
+        destinoContratacao: destContr,
+        destino: isHeadhunter ? 'Headhunter' : 'Departamento Pessoal',
+        destinoProcesso: isHeadhunter ? 'Financeiro / Headhunter' : 'Departamento Pessoal',
+        statusProcesso: initialStatusForward,
+        statusContratacao: 'Aprovado',
         status: 'Aprovado',
         aprovadoPor: auth.currentUser?.displayName || 'Recrutador RH',
         aprovadoEm: now,
@@ -765,14 +770,14 @@ export class JobCandidateService {
           {
             id: `evt-aprov-${Date.now()}`,
             title: 'Candidato Aprovado no Recrutamento',
-            description: 'Candidato aprovado na seleção. Encaminhado para a Central Única de Contratações para definição do destino.',
+            description: `Candidato aprovado na seleção. Encaminhado para ${isHeadhunter ? 'Financeiro / Headhunter' : 'Departamento Pessoal / Admissão'}.`,
             date: now.replace('T', ' ').substring(0, 16),
             by: auth.currentUser?.displayName || 'Recrutador RH'
           }
         ]
       });
 
-      // 1. Etapa 1: Atualizar candidate_applications e criar registro em contratacoes (Aguardando definição na Central)
+      // 1. Etapa 1: Atualizar candidate_applications e criar registro em contratacoes
       console.log("[HIRE] Etapa 1: Atualizar candidate_applications e registrar em contratacoes");
 
       const batch = writeBatch(db);
@@ -786,6 +791,16 @@ export class JobCandidateService {
       let admissionSent = false;
       let othersClosedCount = 0;
       const warnings: string[] = [];
+
+      // Auto forward hiring to the destination
+      try {
+        const targetDest = isHeadhunter ? 'headhunter' : 'departamento_pessoal';
+        await JobCandidateService.forwardHiring(contratacaoDoc, targetDest);
+        admissionSent = true;
+        console.log(`[HIRE] Auto-forward para ${targetDest} concluído com sucesso!`);
+      } catch (fwdErr: any) {
+        console.warn('[HIRE] Aviso ao encaminhar automaticamente contratação:', fwdErr);
+      }
 
       // 2. Etapa 2: Encerrar outros candidatos da vaga
       if (options.closeOtherCandidates !== false) {
