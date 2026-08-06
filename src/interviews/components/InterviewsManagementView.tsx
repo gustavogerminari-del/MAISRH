@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useEffect } from 'react';
-import { collection, onSnapshot, query } from 'firebase/firestore';
+import { collection, onSnapshot, query, where } from 'firebase/firestore';
 import { db } from '../../lib/firebase';
 import {
   Calendar,
@@ -72,7 +72,9 @@ export const InterviewsManagementView: React.FC<InterviewsManagementViewProps> =
     let isMounted = true;
 
     // Real-time listener for entrevistas collection
-    const qEntrevistas = query(collection(db, 'entrevistas'));
+    const qEntrevistas = (userCompanyId && !isMaster)
+      ? query(collection(db, 'entrevistas'), where('companyId', '==', userCompanyId))
+      : query(collection(db, 'entrevistas'));
     const unsubscribeFirestore = onSnapshot(
       qEntrevistas,
       (snapshot) => {

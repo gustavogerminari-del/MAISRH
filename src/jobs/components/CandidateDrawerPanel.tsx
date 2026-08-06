@@ -363,7 +363,8 @@ export const CandidateDrawerPanel: React.FC<CandidateDrawerPanelProps> = ({
       alert('Erro: ID real da candidatura não informado.');
       return;
     }
-    if (!candidate.companyId) {
+    const effectiveCompanyId = candidate.companyId || (candidate as any).empresaId || propsCompanyId;
+    if (!effectiveCompanyId) {
       alert('Erro: Empresa da candidatura não identificada.');
       return;
     }
