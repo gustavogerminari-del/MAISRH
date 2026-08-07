@@ -125,12 +125,17 @@ export const MasterTenantModal: React.FC<MasterTenantModalProps> = ({
 
       setModules(prev => {
         const next = { ...prev } as Record<string, boolean>;
+        const isNewTenant = !tenant?.id;
+        const hasReleasedData = Object.keys(released).length > 0;
+
         catalog.forEach(mod => {
           if (released[mod.key] !== undefined) {
             next[mod.key] = released[mod.key];
-          } else if (next[mod.key] === undefined) {
-            // Módulo novo no catálogo aparece bloqueado por padrão para empresas antigas
+          } else if (hasReleasedData) {
             next[mod.key] = false;
+          } else {
+            // Nova empresa ou sem registros prévios -> Módulos padrão ativos
+            next[mod.key] = true;
           }
         });
         return next as unknown as TenantModulePermissions;

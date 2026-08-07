@@ -507,7 +507,7 @@ export async function fetchCompanyReleasedModules(empresaId: string): Promise<Re
 
     if (snap.exists()) {
       const data = snap.data();
-      if (data && data.modulos && typeof data.modulos === 'object') {
+      if (data && data.modulos && typeof data.modulos === 'object' && Object.keys(data.modulos).length > 0) {
         return data.modulos as Record<string, boolean>;
       }
     }
@@ -534,10 +534,40 @@ export async function fetchCompanyReleasedModules(empresaId: string): Promise<Re
         return empData.rawTenantData.modules as Record<string, boolean>;
       }
     }
+
+    // Fallback localStorage
+    if (typeof window !== 'undefined') {
+      const rawLocal = localStorage.getItem('mais_rh_master_tenants');
+      if (rawLocal) {
+        const parsed = JSON.parse(rawLocal);
+        if (Array.isArray(parsed)) {
+          const found = parsed.find((t: any) => t.id === empresaId);
+          if (found && found.modules) {
+            return found.modules as Record<string, boolean>;
+          }
+        }
+      }
+    }
   } catch (err) {
     console.warn(`Aviso ao buscar empresa_modulos para empresa ${empresaId}:`, err);
   }
-  return {};
+
+  // Se não houver registro prévio, disponibilizar padrão de ambiente de teste
+  return {
+    vagas: true,
+    headhunter: true,
+    bancoTalentos: true,
+    entrevistas: true,
+    equipeInterna: true,
+    consultorRH: true,
+    feriasBeneficios: true,
+    documentosAssinatura: true,
+    auditoriaLogs: true,
+    relatoriosAvancados: true,
+    siteVagasPersonalizado: true,
+    folha: true,
+    ponto: true
+  };
 }
 
 /**
@@ -551,24 +581,41 @@ export async function saveCompanyReleasedModules(
 
   const path = `${EMPRESA_MODULOS_COLLECTION}/${empresaId}`;
 
+  // 1. Obter estado atual para fusão incremental
+  let existing: Record<string, boolean> = {};
+  try {
+    const existingSnap = await getDoc(doc(db, EMPRESA_MODULOS_COLLECTION, empresaId));
+    if (existingSnap.exists() && existingSnap.data()?.modulos) {
+      existing = existingSnap.data()?.modulos;
+    }
+  } catch (readErr) {
+    console.warn('Erro ao ler módulos existentes antes de salvar:', readErr);
+  }
+
+  const mergedModulos = {
+    ...existing,
+    ...modulos
+  };
+
   console.log('[Salvar módulos empresa]', {
     empresaId,
     path,
     usuarioUid: auth.currentUser?.uid,
     usuarioEmail: auth.currentUser?.email,
-    modulosSelecionados: modulos
+    modulosFinais: mergedModulos
   });
 
+  // 2. Grava no Firestore cliente
   const docRef = doc(db, EMPRESA_MODULOS_COLLECTION, empresaId);
   const data = {
     empresaId,
-    modulos,
+    modulos: mergedModulos,
     updatedAt: serverTimestamp()
   };
 
   await setDoc(docRef, data, { merge: true });
 
-  // Também sincroniza no documento da empresa para integridade
+  // 3. Sincroniza no documento da empresa em 'empresas'
   try {
     const empresaRef = doc(db, 'empresas', empresaId);
     const empSnap = await getDoc(empresaRef);
@@ -577,11 +624,54 @@ export async function saveCompanyReleasedModules(
       await setDoc(empresaRef, {
         rawTenantData: {
           ...(existingData?.rawTenantData || {}),
-          modules: modulos
+          modules: mergedModulos
         }
       }, { merge: true });
     }
   } catch (syncErr) {
     console.warn('Aviso ao sincronizar módulos no doc da empresa:', syncErr);
+  }
+
+  // 4. Sincroniza via API Backend (Server Admin DB)
+  try {
+    await fetch('/api/company/modules', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ empresaId, modulos: mergedModulos })
+    });
+  } catch (apiErr) {
+    console.warn('Aviso na sincronização de módulos via API backend:', apiErr);
+  }
+
+  // 5. Sincroniza localStorage local 'mais_rh_master_tenants'
+  if (typeof window !== 'undefined') {
+    try {
+      const rawLocal = localStorage.getItem('mais_rh_master_tenants');
+      if (rawLocal) {
+        const parsed = JSON.parse(rawLocal);
+        if (Array.isArray(parsed)) {
+          const updated = parsed.map((t: any) => {
+            if (t.id === empresaId) {
+              return {
+                ...t,
+                modules: {
+                  ...(t.modules || {}),
+                  ...mergedModulos
+                }
+              };
+            }
+            return t;
+          });
+          localStorage.setItem('mais_rh_master_tenants', JSON.stringify(updated));
+        }
+      }
+      
+      // Emitir evento global de atualização
+      window.dispatchEvent(new CustomEvent('company_modules_updated', {
+        detail: { empresaId, modulos: mergedModulos }
+      }));
+    } catch (lsErr) {
+      console.warn('Aviso ao atualizar localStorage de tenants:', lsErr);
+    }
   }
 }

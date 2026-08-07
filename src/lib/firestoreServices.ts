@@ -330,6 +330,10 @@ export async function saveEmpresaModuloFirestore(
 
   try {
     await setDoc(docRef, sanitizeFirestoreData(data), { merge: true });
+    
+    // Delegar atualização consolidada para garantir sincronia completa
+    const { saveCompanyReleasedModules } = await import('../services/ModuleCatalogService');
+    await saveCompanyReleasedModules(empresaId, { [moduloId]: ativo });
   } catch (err) {
     console.error('Erro ao salvar permissão de módulo no Firestore:', err);
   }
@@ -338,44 +342,30 @@ export async function saveEmpresaModuloFirestore(
 export async function fetchEmpresaModulosFirestore(empresaId: string): Promise<Record<string, boolean>> {
   if (!empresaId) return {};
   try {
-    const docRef = doc(db, COLLECTIONS.EMPRESA_MODULOS, empresaId);
-    const snap = await getDoc(docRef);
-    if (snap.exists()) {
-      const data = snap.data();
-      if (data && data.modulos && typeof data.modulos === 'object') {
-        return data.modulos as Record<string, boolean>;
-      }
-    }
-
-    const q = query(
-      collection(db, COLLECTIONS.EMPRESA_MODULOS), 
-      where('empresaId', '==', empresaId)
-    );
-    const snapCollection = await getDocs(q);
-    const result: Record<string, boolean> = {};
-    snapCollection.forEach(docSnap => {
-      const data = docSnap.data() as EmpresaModuloDoc;
-      if (data.moduloId) {
-        result[data.moduloId] = data.ativo;
-      }
-    });
-
-    if (Object.keys(result).length > 0) {
+    const { fetchCompanyReleasedModules } = await import('../services/ModuleCatalogService');
+    const result = await fetchCompanyReleasedModules(empresaId);
+    if (result && Object.keys(result).length > 0) {
       return result;
-    }
-    
-    // Check rawTenantData in EMPRESAS
-    const empresaRef = doc(db, COLLECTIONS.EMPRESAS, empresaId);
-    const empSnap = await getDoc(empresaRef);
-    if (empSnap.exists()) {
-      const empData = empSnap.data() as EmpresaFirestoreDoc;
-      return (empData.rawTenantData?.modules as unknown as Record<string, boolean>) || {};
     }
   } catch (err: any) {
     console.warn('Informação de empresa_modulos indisponível no Firestore:', err?.message || err);
   }
 
-  return {};
+  return {
+    vagas: true,
+    headhunter: true,
+    bancoTalentos: true,
+    entrevistas: true,
+    equipeInterna: true,
+    consultorRH: true,
+    feriasBeneficios: true,
+    documentosAssinatura: true,
+    auditoriaLogs: true,
+    relatoriosAvancados: true,
+    siteVagasPersonalizado: true,
+    folha: true,
+    ponto: true
+  };
 }
 
 // ----------------------------------------------------------------------------

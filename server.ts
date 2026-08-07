@@ -17,17 +17,19 @@ const getFirebaseAdmin = () => {
       initAdminApp({
         projectId: projId
       });
+      const targetDb = (firebaseAppletConfig as any)?.firestoreDatabaseId || process.env.VITE_FIREBASE_DATABASE_ID || '(default)';
       console.log('🔥 [Firebase Admin Initialized]', {
         projectId: projId,
-        database: '(default)'
+        database: targetDb
       });
     } catch (err) {
       console.error('❌ [Firebase Admin Init Error]:', err);
     }
   }
+  const dbId = (firebaseAppletConfig as any)?.firestoreDatabaseId || process.env.VITE_FIREBASE_DATABASE_ID;
   return {
     adminAuth: getAdminAuth(),
-    adminDb: getAdminDb()
+    adminDb: dbId ? getAdminDb(dbId) : getAdminDb()
   };
 };
 
@@ -222,6 +224,85 @@ async function startServer() {
         success: false,
         code: err.code || 'internal-error',
         error: err.message || String(err)
+      });
+    }
+  });
+
+  // ENDPOINT DE SALVAMENTO E SINCRONIZAÇÃO DE MÓDULOS DE EMPRESA
+  app.post('/api/company/modules', async (req, res) => {
+    try {
+      const { adminDb } = getFirebaseAdmin();
+      const { empresaId, modulos } = req.body;
+
+      if (!empresaId || !modulos || typeof modulos !== 'object') {
+        return res.status(400).json({ success: false, error: 'empresaId e modulos são obrigatórios.' });
+      }
+
+      const nowIso = new Date().toISOString();
+
+      // 1. Obter módulos existentes
+      const empresaModRef = adminDb.collection('empresa_modulos').doc(empresaId);
+      const snap = await empresaModRef.get();
+      let existingModulos: Record<string, boolean> = {};
+
+      if (snap.exists && snap.data()?.modulos) {
+        existingModulos = snap.data()?.modulos || {};
+      }
+
+      const mergedModules = {
+        ...existingModulos,
+        ...modulos
+      };
+
+      // 2. Gravar em empresa_modulos
+      await empresaModRef.set({
+        empresaId,
+        modulos: mergedModules,
+        updatedAt: nowIso
+      }, { merge: true });
+
+      // 3. Gravar no documento da empresa em 'empresas'
+      const empresaDocRef = adminDb.collection('empresas').doc(empresaId);
+      const empSnap = await empresaDocRef.get();
+      if (empSnap.exists) {
+        const empData = empSnap.data();
+        const raw = empData?.rawTenantData || {};
+        await empresaDocRef.set({
+          rawTenantData: {
+            ...raw,
+            modules: mergedModules
+          }
+        }, { merge: true });
+      }
+
+      // 4. Sincronizar em usuarios e users
+      try {
+        const usuariosSnap = await adminDb.collection('usuarios').where('empresaId', '==', empresaId).get();
+        const batch = adminDb.batch();
+        usuariosSnap.forEach(uDoc => {
+          batch.set(uDoc.ref, { modules: mergedModules, updatedAt: nowIso }, { merge: true });
+        });
+
+        const usersSnap = await adminDb.collection('users').where('empresaId', '==', empresaId).get();
+        usersSnap.forEach(uDoc => {
+          batch.set(uDoc.ref, { modules: mergedModules, updatedAt: nowIso }, { merge: true });
+        });
+
+        await batch.commit();
+      } catch (batchErr) {
+        console.warn('⚠️ [API Company Modules User Sync Notice]:', batchErr);
+      }
+
+      return res.json({
+        success: true,
+        empresaId,
+        modulos: mergedModules
+      });
+    } catch (err: any) {
+      console.error('Erro em /api/company/modules:', err);
+      return res.status(500).json({
+        success: false,
+        error: err?.message || String(err)
       });
     }
   });
@@ -635,6 +716,349 @@ async function startServer() {
       });
     } catch (err: any) {
       console.error('[API BOOTSTRAP MASTER ERR]', err);
+      return res.status(500).json({ success: false, error: err.message || String(err) });
+    }
+  });
+
+  // ENDPOINT DE CRIAÇÃO DO AMBIENTE E DADOS DE TESTE (EMPRESA + ACESSOS + VAGAS + CANDIDATOS)
+  app.post('/api/seed-test-data', async (req, res) => {
+    try {
+      const { adminAuth, adminDb } = getFirebaseAdmin();
+      const nowIso = new Date().toISOString();
+      const todayDate = nowIso.split('T')[0];
+
+      // 1. Empresa Teste
+      const empresaId = 'emp-teste-001';
+      const companyName = 'Empresa Teste RL Tech';
+      const testCompanyDoc = {
+        empresaId,
+        nomeEmpresa: companyName,
+        CNPJ: '12.345.678/0001-90',
+        email: 'empresa.teste@maisrh.com.br',
+        plano: 'Enterprise / Completo',
+        status: 'Ativo',
+        dataCriacao: '2026-01-01',
+        rawTenantData: {
+          id: empresaId,
+          code: 'RLTST',
+          companyName: companyName,
+          tradeName: 'RL Tech Soluções em RH (Ambiente de Testes)',
+          cnpj: '12.345.678/0001-90',
+          ownerName: 'Administrador de Teste',
+          ownerEmail: 'empresa.teste@maisrh.com.br',
+          ownerPhone: '(11) 98888-7777',
+          status: 'Ativo',
+          maxUsers: 50,
+          maxActiveJobs: 100,
+          modules: {
+            vagas: true,
+            headhunter: true,
+            bancoTalentos: true,
+            entrevistas: true,
+            equipeInterna: true,
+            consultorRH: true,
+            feriasBeneficios: true,
+            documentosAssinatura: true,
+            auditoriaLogs: true,
+            relatoriosAvancados: true,
+            siteVagasPersonalizado: true,
+            folha: true,
+            ponto: true
+          },
+          branding: {
+            primaryColor: '#123657',
+            companyDisplayName: 'RL Tech Soluções em RH'
+          },
+          metrics: {
+            activeUsersCount: 5,
+            totalJobsCreated: 12,
+            totalTalentsStored: 45,
+            totalDocumentsSigned: 18,
+            storageUsedMB: 120,
+            lastLoginAt: 'Hoje'
+          },
+          contract: {
+            id: 'ctr-teste-001',
+            contractNumber: 'CTR-2026-TESTE',
+            planName: 'Completo / Enterprise',
+            monthlyFee: 2500,
+            billingCycle: 'Mensal',
+            startDate: '2026-01-01',
+            expirationDate: '2027-12-31',
+            paymentMethod: 'Pix',
+            autoRenew: true
+          },
+          createdAt: '2026-01-01'
+        }
+      };
+
+      await adminDb.collection('empresas').doc(empresaId).set(testCompanyDoc, { merge: true });
+      await adminDb.collection('empresa_modulos').doc(empresaId).set({
+        empresaId,
+        modulos: testCompanyDoc.rawTenantData.modules,
+        updatedAt: nowIso
+      }, { merge: true });
+
+      // 2. Acessos / Usuários de Teste
+      const testAccounts = [
+        {
+          email: 'master@maisrh.com.br',
+          password: 'senha123',
+          nome: 'Super Administrador (Master)',
+          role: 'MASTER',
+          perfil: 'MASTER',
+          tipoUsuario: 'MASTER',
+          empresaId: null,
+          companyName: 'MAIS RH SaaS Global',
+          isMaster: true
+        },
+        {
+          email: 'empresa.teste@maisrh.com.br',
+          password: 'senha123',
+          nome: 'Administrador Empresa Teste',
+          role: 'ADMIN_EMPRESA',
+          perfil: 'Administrador da Empresa',
+          tipoUsuario: 'EMPRESA',
+          empresaId,
+          companyName
+        },
+        {
+          email: 'recrutador.teste@maisrh.com.br',
+          password: 'senha123',
+          nome: 'Recrutador Senior (RH)',
+          role: 'RECRUTADOR',
+          perfil: 'Especialista em Recrutamento',
+          tipoUsuario: 'EMPRESA',
+          empresaId,
+          companyName
+        },
+        {
+          email: 'headhunter.teste@maisrh.com.br',
+          password: 'senha123',
+          nome: 'Consultor Headhunter Senior',
+          role: 'CONSULTOR_RH',
+          perfil: 'Consultor RH / Headhunter',
+          tipoUsuario: 'EMPRESA',
+          empresaId,
+          companyName
+        },
+        {
+          email: 'candidato.teste@gmail.com',
+          password: 'senha123',
+          nome: 'Carlos Eduardo (Candidato Teste)',
+          role: 'CANDIDATO',
+          perfil: 'Candidato',
+          tipoUsuario: 'CANDIDATO',
+          empresaId: null,
+          companyName: ''
+        }
+      ];
+
+      const createdUsers = [];
+
+      for (const acc of testAccounts) {
+        let userRecord: any = null;
+        try {
+          userRecord = await adminAuth.getUserByEmail(acc.email);
+          await adminAuth.updateUser(userRecord.uid, {
+            password: acc.password,
+            displayName: acc.nome,
+            disabled: false
+          });
+        } catch {
+          try {
+            userRecord = await adminAuth.createUser({
+              email: acc.email,
+              password: acc.password,
+              displayName: acc.nome,
+              disabled: false
+            });
+          } catch (cErr: any) {
+            console.warn(`Auth API notice for ${acc.email}:`, cErr?.message || cErr);
+          }
+        }
+
+        const uid = userRecord ? userRecord.uid : (acc.isMaster ? 'cTvCNCMkMnT09mhmfmMgDC6ZI133' : `usr_test_${Buffer.from(acc.email).toString('hex').slice(0, 12)}`);
+
+        const userDocData = {
+          uid,
+          email: acc.email,
+          nome: acc.nome,
+          displayName: acc.nome,
+          role: acc.role,
+          perfil: acc.perfil,
+          tipoUsuario: acc.tipoUsuario,
+          ativo: true,
+          status: 'Ativo',
+          empresaId: acc.empresaId,
+          companyId: acc.empresaId,
+          companyName: acc.companyName,
+          isMaster: !!acc.isMaster,
+          modules: testCompanyDoc.rawTenantData.modules,
+          permissions: [],
+          createdAt: nowIso,
+          updatedAt: nowIso
+        };
+
+        await adminDb.collection('usuarios').doc(uid).set(userDocData, { merge: true });
+        await adminDb.collection('users').doc(uid).set(userDocData, { merge: true });
+
+        createdUsers.push({ email: acc.email, uid, role: acc.role });
+      }
+
+      // 3. Vagas de Teste
+      const testJobs = [
+        {
+          id: 'vaga-teste-001',
+          titulo: 'Desenvolvedor Full Stack Senior (React / Node / TypeScript)',
+          cargo: 'Desenvolvedor Full Stack Senior',
+          departamento: 'Tecnologia da Informação',
+          empresaId,
+          empresaNome: companyName,
+          local: 'São Paulo - SP (Híbrido)',
+          tipo: 'CLT',
+          modalidade: 'Híbrido',
+          faixaSalarial: 'R$ 12.000,00 - R$ 15.000,00',
+          salarioMin: 12000,
+          salarioMax: 15000,
+          status: 'Ativa',
+          descricao: 'Buscamos desenvolvedor Full Stack Senior com experiência em React, Node.js, TypeScript e arquitetura cloud para liderar novos módulos SaaS.',
+          requisitos: ['5+ anos com React/Node.js', 'Experiência com TypeScript e REST/GraphQL', 'Conhecimento em Docker e CI/CD'],
+          beneficios: ['Vale Refeição R$ 50/dia', 'Plano de Saúde Bradesco Top', 'Horário Flexível', 'Auxílio Home Office'],
+          origem: 'Empresa',
+          candidatosInscritos: 8,
+          createdAt: todayDate
+        },
+        {
+          id: 'vaga-teste-002',
+          titulo: 'Analista de Recrutamento e Seleção Senior (Tech Recruiter)',
+          cargo: 'Analista de R&S Senior',
+          departamento: 'Recursos Humanos',
+          empresaId,
+          empresaNome: companyName,
+          local: 'Remoto - Brasil',
+          tipo: 'CLT',
+          modalidade: 'Remoto',
+          faixaSalarial: 'R$ 6.500,00 - R$ 8.000,00',
+          salarioMin: 6500,
+          salarioMax: 8000,
+          status: 'Ativa',
+          descricao: 'Atuação na condução de processos seletivos fim-a-fim para posições estratégicas de TI e Vendas.',
+          requisitos: ['Formação em Psicologia ou RH', 'Experiência comprovada em Tech Recruiting', 'Domínio de hunting no LinkedIn Recruiter'],
+          beneficios: ['Vale Alimentação', 'Seguro de Vida', 'Auxílio Creche'],
+          origem: 'Empresa',
+          candidatosInscritos: 12,
+          createdAt: todayDate
+        },
+        {
+          id: 'vaga-teste-003',
+          titulo: 'Headhunter Senior - Vagas Executivas C-Level',
+          cargo: 'Headhunter Executive',
+          departamento: 'Consultoria e Executive Search',
+          empresaId,
+          empresaNome: companyName,
+          local: 'São Paulo - SP',
+          tipo: 'PJ',
+          modalidade: 'Presencial / Híbrido',
+          faixaSalarial: 'R$ 10.000,00 + Comissões',
+          salarioMin: 10000,
+          salarioMax: 18000,
+          status: 'Ativa',
+          descricao: 'Gestão da carteira de clientes B2B, prospecção e hunting de diretores e gerentes de grande porte.',
+          requisitos: ['Experiência sólida em Executive Search', 'Rede de contatos executivos', 'Inglês fluente'],
+          beneficios: ['Comissionamento até 25% da taxa do contrato', 'Bônus semestral por performance'],
+          origem: 'Headhunter',
+          candidatosInscritos: 5,
+          createdAt: todayDate
+        }
+      ];
+
+      for (const job of testJobs) {
+        await adminDb.collection('vagas').doc(job.id).set(job, { merge: true });
+        await adminDb.collection('jobs').doc(job.id).set(job, { merge: true });
+      }
+
+      // 4. Candidatos de Teste
+      const testCandidates = [
+        {
+          id: 'cand-teste-001',
+          nome: 'Carlos Eduardo Silva',
+          email: 'candidato.teste@gmail.com',
+          telefone: '(11) 99887-6655',
+          cargoAtual: 'Desenvolvedor Full Stack Senior',
+          pretensaoSalarial: 13500,
+          cidade: 'São Paulo',
+          uf: 'SP',
+          empresaId,
+          resumo: 'Engenheiro de Software com 8 anos de experiência em sistemas distribuídos, React, Node.js e TypeScript.',
+          status: 'Em Processo',
+          createdAt: todayDate
+        },
+        {
+          id: 'cand-teste-002',
+          nome: 'Mariana Ferreira Costa',
+          email: 'mariana.costa.recruiter@gmail.com',
+          telefone: '(21) 98765-4321',
+          cargoAtual: 'Specialist Tech Recruiter',
+          pretensaoSalarial: 7500,
+          cidade: 'Rio de Janeiro',
+          uf: 'RJ',
+          empresaId,
+          resumo: 'Psicóloga pós-graduada em Gestão de Pessoas com foco em atração de talentos de tecnologia.',
+          status: 'Qualificado',
+          createdAt: todayDate
+        },
+        {
+          id: 'cand-teste-003',
+          nome: 'Fernanda Lima Oliveira',
+          email: 'fernanda.lima.exec@gmail.com',
+          telefone: '(31) 99123-8899',
+          cargoAtual: 'Gerente de Contas Headhunter',
+          pretensaoSalarial: 12000,
+          cidade: 'Belo Horizonte',
+          uf: 'MG',
+          empresaId,
+          resumo: 'Especialista em hunting executivo para finanças e operações.',
+          status: 'Entrevista Agendada',
+          createdAt: todayDate
+        }
+      ];
+
+      for (const cand of testCandidates) {
+        await adminDb.collection('candidatos').doc(cand.id).set(cand, { merge: true });
+      }
+
+      // 5. Clientes Headhunter
+      const testHeadhunterClient = {
+        id: 'hh-cli-teste-001',
+        empresaId,
+        nomeEmpresa: 'Inovação Digital S.A.',
+        nomeContato: 'Roberto Mendes',
+        emailContato: 'roberto@inovacaodigital.com.br',
+        telefone: '(11) 3344-5566',
+        segmento: 'Tecnologia / Fintech',
+        taxaServico: 18,
+        garantiaDias: 90,
+        status: 'Ativo',
+        createdAt: todayDate
+      };
+      await adminDb.collection('headhunter_clients').doc(testHeadhunterClient.id).set(testHeadhunterClient, { merge: true });
+      await adminDb.collection('consultant_clients').doc(testHeadhunterClient.id).set(testHeadhunterClient, { merge: true });
+
+      return res.json({
+        success: true,
+        message: 'Ambiente de teste e credenciais criados com sucesso!',
+        empresa: {
+          id: empresaId,
+          nome: companyName,
+          cnpj: '12.345.678/0001-90'
+        },
+        usuarios: createdUsers,
+        vagasCriadas: testJobs.length,
+        candidatosCriados: testCandidates.length
+      });
+    } catch (err: any) {
+      console.error('[API SEED TEST DATA ERR]', err);
       return res.status(500).json({ success: false, error: err.message || String(err) });
     }
   });

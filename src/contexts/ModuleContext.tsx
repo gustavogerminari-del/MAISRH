@@ -74,6 +74,22 @@ export const ModuleProvider: React.FC<{ children: React.ReactNode }> = ({ childr
 
   useEffect(() => {
     refreshModules();
+
+    const handleUpdate = () => {
+      refreshModules();
+    };
+
+    if (typeof window !== 'undefined') {
+      window.addEventListener('company_modules_updated', handleUpdate);
+      window.addEventListener('storage', handleUpdate);
+    }
+
+    return () => {
+      if (typeof window !== 'undefined') {
+        window.removeEventListener('company_modules_updated', handleUpdate);
+        window.removeEventListener('storage', handleUpdate);
+      }
+    };
   }, [companyId, user?.id]);
 
   const isModuleEnabled = (moduleKey: string): boolean => {
