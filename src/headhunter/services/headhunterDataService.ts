@@ -7,7 +7,12 @@ import {
 } from 'firebase/firestore';
 import { onAuthStateChanged } from 'firebase/auth';
 import { db, auth } from '../../lib/firebase';
-import { sanitizeFirestoreData } from '../../lib/firestoreUtils';
+import { 
+  sanitizeFirestoreData, 
+  safeFirestoreRead, 
+  safeFirestoreWrite, 
+  OperationType 
+} from '../../lib/firestoreUtils';
 import { 
   HeadhunterClient, 
   HeadhunterLead, 
@@ -28,46 +33,53 @@ let proposalsCache: HeadhunterProposal[] = [];
 let contractsCache: HeadhunterContract[] = [];
 
 export async function syncHeadhunterDataWithFirestore(): Promise<void> {
-  try {
-    let cliSnap = await getDocs(collection(db, COLLECTIONS.CLIENTS));
-    if (cliSnap.empty) {
-      // Fallback check for headhunter_clients legacy
-      const legacySnap = await getDocs(collection(db, 'headhunter_clients'));
-      if (!legacySnap.empty) cliSnap = legacySnap;
-    }
-    clientsCache = cliSnap.docs.map(d => ({ id: d.id, ...d.data() } as HeadhunterClient));
-  } catch (err: any) {
-    if (err?.code !== 'permission-denied') {
-      console.warn('[HEADHUNTER DATA SYNC]', COLLECTIONS.CLIENTS, err?.message);
-    }
-  }
+  const cliRead = await safeFirestoreRead(
+    async () => {
+      let snap = await getDocs(collection(db, COLLECTIONS.CLIENTS));
+      if (snap.empty) {
+        const legacySnap = await getDocs(collection(db, 'headhunter_clients'));
+        if (!legacySnap.empty) snap = legacySnap;
+      }
+      return snap.docs.map(d => ({ id: d.id, ...d.data() } as HeadhunterClient));
+    },
+    OperationType.LIST,
+    COLLECTIONS.CLIENTS,
+    []
+  );
+  if (cliRead.data.length > 0) clientsCache = cliRead.data;
 
-  try {
-    const leadSnap = await getDocs(collection(db, COLLECTIONS.LEADS));
-    leadsCache = leadSnap.docs.map(d => ({ id: d.id, ...d.data() } as HeadhunterLead));
-  } catch (err: any) {
-    if (err?.code !== 'permission-denied') {
-      console.warn('[HEADHUNTER DATA SYNC]', COLLECTIONS.LEADS, err?.message);
-    }
-  }
+  const leadRead = await safeFirestoreRead(
+    async () => {
+      const snap = await getDocs(collection(db, COLLECTIONS.LEADS));
+      return snap.docs.map(d => ({ id: d.id, ...d.data() } as HeadhunterLead));
+    },
+    OperationType.LIST,
+    COLLECTIONS.LEADS,
+    []
+  );
+  if (leadRead.data.length > 0) leadsCache = leadRead.data;
 
-  try {
-    const propSnap = await getDocs(collection(db, COLLECTIONS.PROPOSALS));
-    proposalsCache = propSnap.docs.map(d => ({ id: d.id, ...d.data() } as HeadhunterProposal));
-  } catch (err: any) {
-    if (err?.code !== 'permission-denied') {
-      console.warn('[HEADHUNTER DATA SYNC]', COLLECTIONS.PROPOSALS, err?.message);
-    }
-  }
+  const propRead = await safeFirestoreRead(
+    async () => {
+      const snap = await getDocs(collection(db, COLLECTIONS.PROPOSALS));
+      return snap.docs.map(d => ({ id: d.id, ...d.data() } as HeadhunterProposal));
+    },
+    OperationType.LIST,
+    COLLECTIONS.PROPOSALS,
+    []
+  );
+  if (propRead.data.length > 0) proposalsCache = propRead.data;
 
-  try {
-    const ctrSnap = await getDocs(collection(db, COLLECTIONS.CONTRACTS));
-    contractsCache = ctrSnap.docs.map(d => ({ id: d.id, ...d.data() } as HeadhunterContract));
-  } catch (err: any) {
-    if (err?.code !== 'permission-denied') {
-      console.warn('[HEADHUNTER DATA SYNC]', COLLECTIONS.CONTRACTS, err?.message);
-    }
-  }
+  const ctrRead = await safeFirestoreRead(
+    async () => {
+      const snap = await getDocs(collection(db, COLLECTIONS.CONTRACTS));
+      return snap.docs.map(d => ({ id: d.id, ...d.data() } as HeadhunterContract));
+    },
+    OperationType.LIST,
+    COLLECTIONS.CONTRACTS,
+    []
+  );
+  if (ctrRead.data.length > 0) contractsCache = ctrRead.data;
 }
 
 // Auto-sync on auth state ready
@@ -95,14 +107,21 @@ export class HeadhunterDataService {
       empresaId: companyId
     };
 
-    try {
-      await setDoc(doc(db, COLLECTIONS.CLIENTS, clientToSave.id), sanitizeFirestoreData(clientToSave), { merge: true });
-      clientsCache = [clientToSave, ...clientsCache.filter(c => c.id !== clientToSave.id)];
-      return clientToSave;
-    } catch (e) {
-      console.error('[HEADHUNTER] Erro real ao salvar cliente:', e);
-      throw e;
+    const res = await safeFirestoreWrite(
+      async () => {
+        await setDoc(doc(db, COLLECTIONS.CLIENTS, clientToSave.id), sanitizeFirestoreData(clientToSave), { merge: true });
+        clientsCache = [clientToSave, ...clientsCache.filter(c => c.id !== clientToSave.id)];
+        return clientToSave;
+      },
+      OperationType.WRITE,
+      `${COLLECTIONS.CLIENTS}/${clientToSave.id}`
+    );
+
+    if (!res.success) {
+      throw new Error(`Erro ao salvar cliente no Firestore: ${res.error?.error}`);
     }
+
+    return clientToSave;
   }
 
   static getLeads(companyId?: string): HeadhunterLead[] {
@@ -121,14 +140,21 @@ export class HeadhunterDataService {
       empresaId: companyId
     };
 
-    try {
-      await setDoc(doc(db, COLLECTIONS.LEADS, leadToSave.id), sanitizeFirestoreData(leadToSave), { merge: true });
-      leadsCache = [leadToSave, ...leadsCache.filter(l => l.id !== leadToSave.id)];
-      return leadToSave;
-    } catch (e) {
-      console.error('[HEADHUNTER] Erro real ao salvar lead:', e);
-      throw e;
+    const res = await safeFirestoreWrite(
+      async () => {
+        await setDoc(doc(db, COLLECTIONS.LEADS, leadToSave.id), sanitizeFirestoreData(leadToSave), { merge: true });
+        leadsCache = [leadToSave, ...leadsCache.filter(l => l.id !== leadToSave.id)];
+        return leadToSave;
+      },
+      OperationType.WRITE,
+      `${COLLECTIONS.LEADS}/${leadToSave.id}`
+    );
+
+    if (!res.success) {
+      throw new Error(`Erro ao salvar lead no Firestore: ${res.error?.error}`);
     }
+
+    return leadToSave;
   }
 
   static getProposals(companyId?: string): HeadhunterProposal[] {
@@ -147,14 +173,21 @@ export class HeadhunterDataService {
       empresaId: companyId
     };
 
-    try {
-      await setDoc(doc(db, COLLECTIONS.PROPOSALS, proposalToSave.id), sanitizeFirestoreData(proposalToSave), { merge: true });
-      proposalsCache = [proposalToSave, ...proposalsCache.filter(p => p.id !== proposalToSave.id)];
-      return proposalToSave;
-    } catch (e) {
-      console.error('[HEADHUNTER] Erro real ao salvar proposta:', e);
-      throw e;
+    const res = await safeFirestoreWrite(
+      async () => {
+        await setDoc(doc(db, COLLECTIONS.PROPOSALS, proposalToSave.id), sanitizeFirestoreData(proposalToSave), { merge: true });
+        proposalsCache = [proposalToSave, ...proposalsCache.filter(p => p.id !== proposalToSave.id)];
+        return proposalToSave;
+      },
+      OperationType.WRITE,
+      `${COLLECTIONS.PROPOSALS}/${proposalToSave.id}`
+    );
+
+    if (!res.success) {
+      throw new Error(`Erro ao salvar proposta no Firestore: ${res.error?.error}`);
     }
+
+    return proposalToSave;
   }
 
   static getContracts(companyId?: string): HeadhunterContract[] {
@@ -173,13 +206,20 @@ export class HeadhunterDataService {
       empresaId: companyId
     };
 
-    try {
-      await setDoc(doc(db, COLLECTIONS.CONTRACTS, contractToSave.id), sanitizeFirestoreData(contractToSave), { merge: true });
-      contractsCache = [contractToSave, ...contractsCache.filter(c => c.id !== contractToSave.id)];
-      return contractToSave;
-    } catch (e) {
-      console.error('[HEADHUNTER] Erro real ao salvar contrato:', e);
-      throw e;
+    const res = await safeFirestoreWrite(
+      async () => {
+        await setDoc(doc(db, COLLECTIONS.CONTRACTS, contractToSave.id), sanitizeFirestoreData(contractToSave), { merge: true });
+        contractsCache = [contractToSave, ...contractsCache.filter(c => c.id !== contractToSave.id)];
+        return contractToSave;
+      },
+      OperationType.WRITE,
+      `${COLLECTIONS.CONTRACTS}/${contractToSave.id}`
+    );
+
+    if (!res.success) {
+      throw new Error(`Erro ao salvar contrato no Firestore: ${res.error?.error}`);
     }
+
+    return contractToSave;
   }
 }

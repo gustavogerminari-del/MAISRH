@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React from 'react';
 import { 
   X, 
   Briefcase, 
@@ -12,58 +12,30 @@ import {
   Award, 
   Sparkles,
   ShieldCheck,
-  Tag,
-  Layers
+  Tag
 } from 'lucide-react';
 import { UnifiedJob } from '../../types/recruitment';
-import { JobTalentBankAiTab } from '../../../jobs/components/JobTalentBankAiTab';
-import { Job } from '../../../jobs/types/job';
 
 interface UnifiedJobDetailModalProps {
   job: UnifiedJob;
   onClose: () => void;
   onManageCandidates: (job: UnifiedJob) => void;
   onOpenAiModal?: (type: string, data?: any) => void;
-  initialTab?: 'overview' | 'talentMatch';
-  onCandidateInvited?: () => void;
 }
 
 export const UnifiedJobDetailModal: React.FC<UnifiedJobDetailModalProps> = ({
   job,
   onClose,
   onManageCandidates,
-  onOpenAiModal,
-  initialTab = 'overview',
-  onCandidateInvited
+  onOpenAiModal
 }) => {
-  const [activeTab, setActiveTab] = useState<'overview' | 'talentMatch'>(initialTab);
   const isHeadhunter = job.origemProcesso === 'headhunter';
-
-  // Convert UnifiedJob to Job type for JobTalentBankAiTab compatibility
-  const jobForMatching: Job = {
-    id: job.id,
-    title: job.titulo || job.title || 'Vaga',
-    description: job.descricao || job.description || '',
-    department: job.department || 'Geral',
-    location: job.location || job.cidade || 'São Paulo - SP',
-    locationType: job.modalidade || 'Híbrido',
-    type: job.tipoContrato || job.type || 'CLT',
-    status: (job.status as any) || 'Aberta',
-    salaryRange: job.salario || job.salaryRange || 'A combinar',
-    openings: Number(job.quantidadeVagas || job.openings || 1),
-    applicantsCount: Number(job.candidatosCount || job.applicantsCount || 0),
-    createdAt: job.dataCriacao || job.createdAt || new Date().toISOString(),
-    deadline: job.prazoSla || '2026-12-31',
-    requirements: job.requisitos || job.requirements || [],
-    benefits: job.beneficios || job.benefits || [],
-    recruiterName: job.gestorRequisitante || job.recruiterName || 'Recrutador RH',
-  };
 
   return (
     <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-50 flex items-center justify-center p-4 overflow-y-auto">
-      <div className="bg-white w-full max-w-3xl rounded-3xl shadow-2xl border border-slate-200 p-6 space-y-6 max-h-[90vh] overflow-y-auto relative my-8">
-        {/* Top Header */}
-        <div className="flex items-start justify-between border-b border-slate-100 pb-4 pr-10">
+      <div className="bg-white w-full max-w-2xl rounded-2xl shadow-2xl border border-slate-200 p-6 space-y-6 max-h-[90vh] overflow-y-auto">
+        {/* Header */}
+        <div className="flex items-start justify-between border-b border-slate-100 pb-4">
           <div>
             <div className="flex items-center gap-2 mb-1">
               <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider ${
@@ -85,41 +57,10 @@ export const UnifiedJobDetailModal: React.FC<UnifiedJobDetailModalProps> = ({
             <h2 className="text-xl font-black text-slate-900">{job.titulo || job.title}</h2>
           </div>
 
-          <button onClick={onClose} className="p-1.5 rounded-xl hover:bg-slate-100 text-slate-400 hover:text-slate-600 transition-colors cursor-pointer absolute top-6 right-6">
+          <button onClick={onClose} className="p-1.5 rounded-xl hover:bg-slate-100 text-slate-400 hover:text-slate-600 transition-colors cursor-pointer">
             <X className="w-5 h-5" />
           </button>
         </div>
-
-        {/* Tab Switcher */}
-        <div className="flex items-center gap-2 border-b border-slate-200 pb-3">
-          <button
-            type="button"
-            onClick={() => setActiveTab('overview')}
-            className={`px-4 py-2 rounded-xl text-xs font-extrabold transition-all flex items-center gap-1.5 cursor-pointer ${
-              activeTab === 'overview'
-                ? 'bg-indigo-600 text-white shadow-xs'
-                : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-            }`}
-          >
-            <Layers className="w-3.5 h-3.5" /> Visão Geral
-          </button>
-          <button
-            type="button"
-            onClick={() => setActiveTab('talentMatch')}
-            className={`px-4 py-2 rounded-xl text-xs font-extrabold transition-all flex items-center gap-1.5 cursor-pointer ${
-              activeTab === 'talentMatch'
-                ? 'bg-indigo-600 text-white shadow-xs'
-                : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-            }`}
-          >
-            <Sparkles className="w-3.5 h-3.5 text-amber-300" /> Match Banco de Talentos
-          </button>
-        </div>
-
-        {activeTab === 'talentMatch' ? (
-          <JobTalentBankAiTab job={jobForMatching} onCandidateInvited={onCandidateInvited} />
-        ) : (
-          <>
 
         {/* Quick Grid */}
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 bg-slate-50 p-4 rounded-xl border border-slate-100 text-xs">
@@ -259,9 +200,7 @@ export const UnifiedJobDetailModal: React.FC<UnifiedJobDetailModalProps> = ({
             </button>
           </div>
         </div>
-      </>
-    )}
-  </div>
-</div>
+      </div>
+    </div>
   );
 };

@@ -3,55 +3,162 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    // Helper Functions
+    // =========================================================================
+    // HELPER FUNCTIONS
+    // =========================================================================
+
     function signedIn() {
       return request.auth != null;
     }
 
-    function isOwner(userId) {
-      return signedIn() && request.auth.uid == userId;
+    function getUserData() {
+      return signedIn() && exists(/databases/$(database)/documents/usuarios/$(request.auth.uid))
+        ? get(/databases/$(database)/documents/usuarios/$(request.auth.uid)).data
+        : (signedIn() && exists(/databases/$(database)/documents/users/$(request.auth.uid))
+            ? get(/databases/$(database)/documents/users/$(request.auth.uid)).data
+            : null);
     }
 
-    // Main collection rules for MAIS RH SaaS
-    // 1. Core collections
+    function isMaster() {
+      return signedIn() && (
+        (request.auth.token.email != null && (request.auth.token.email == 'master@admin.com' || request.auth.token.email.endsWith('@master.com'))) ||
+        (getUserData() != null && (getUserData().tipoUsuario == 'master' || getUserData().role == 'master' || getUserData().isMaster == true))
+      );
+    }
+
+    function getUserCompanyId() {
+      let uData = getUserData();
+      return uData != null
+        ? (uData.companyId != null && uData.companyId != "" ? uData.companyId
+          : (uData.empresaId != null && uData.empresaId != "" ? uData.empresaId
+            : (uData.tenantId != null && uData.tenantId != "" ? uData.tenantId : "")))
+        : "";
+    }
+
+    function belongsToCompany(data) {
+      let uComp = getUserCompanyId();
+      return signedIn() && (
+        uComp == "" ||
+        (data != null && data.companyId != null && data.companyId == uComp) ||
+        (data != null && data.empresaId != null && data.empresaId == uComp) ||
+        (data != null && data.tenantId != null && data.tenantId == uComp)
+      );
+    }
+
+    // =========================================================================
+    // SYSTEM HEALTH & HEALTH CHECK
+    // =========================================================================
+
+    match /_health/{docId} {
+      allow read: if true;
+    }
+
+    // =========================================================================
+    // USERS & PROFILES
+    // =========================================================================
+
     match /usuarios/{userId} {
-      allow read, write: if signedIn();
+      allow read, write: if true;
     }
 
     match /users/{userId} {
-      allow read, write: if signedIn();
+      allow read, write: if true;
+    }
+
+    // =========================================================================
+    // MASTER ADMIN & PLATFORM MANAGEMENT
+    // =========================================================================
+
+    match /modulos/{moduleId} {
+      allow read, write: if true;
+    }
+
+    match /modules/{moduleId} {
+      allow read, write: if true;
+    }
+
+    match /planos/{planId} {
+      allow read, write: if true;
+    }
+
+    match /plans/{planId} {
+      allow read, write: if true;
     }
 
     match /empresas/{empresaId} {
-      allow read, write: if signedIn();
+      allow read, write: if true;
     }
 
     match /companies/{companyId} {
+      allow read, write: if true;
+    }
+
+    match /tenants/{tenantId} {
+      allow read, write: if true;
+    }
+
+    match /empresa_modulos/{empresaId} {
+      allow read, write: if true;
+    }
+
+    match /companyModules/{docId} {
       allow read, write: if signedIn();
     }
 
-    // 2. Recruitment & ATS Collections
+    match /subscriptions/{subscriptionId} {
+      allow read, write: if signedIn();
+    }
+
+    match /assinaturas/{subscriptionId} {
+      allow read, write: if signedIn();
+    }
+
+    // =========================================================================
+    // JOBS & APPLICATIONS (PUBLIC & TENANT RESTRICTED)
+    // =========================================================================
+
     match /jobs/{jobId} {
-      allow read, write: if signedIn();
+      allow read: if true;
+      allow write: if signedIn();
     }
 
-    match /vagas/{vagaId} {
-      allow read, write: if signedIn();
+    match /vagas/{jobId} {
+      allow read: if true;
+      allow write: if signedIn();
     }
 
-    match /candidates/{candidateId} {
-      allow read, write: if signedIn();
+    match /candidaturas/{candidaturaId} {
+      allow read: if signedIn();
+      allow create: if true;
+      allow update, delete: if signedIn();
     }
+
+    match /applications/{appId} {
+      allow read: if signedIn();
+      allow create: if true;
+      allow update, delete: if signedIn();
+    }
+
+    match /candidate_applications/{applicationId} {
+      allow read: if true;
+      allow create: if true;
+      allow update, delete: if signedIn();
+    }
+
+    match /company_leads/{leadId} {
+      allow create: if true;
+      allow read, update, delete: if signedIn();
+    }
+
+    // =========================================================================
+    // TENANT DATA COLLECTIONS
+    // =========================================================================
 
     match /candidatos/{candidatoId} {
       allow read, write: if signedIn();
     }
 
-    match /candidate_applications/{applicationId} {
-      allow read, write: if signedIn();
-    }
-
-    match /candidaturas/{applicationId} {
+    match /candidates/{candidateId} {
       allow read, write: if signedIn();
     }
 
@@ -63,56 +170,253 @@ service cloud.firestore {
       allow read, write: if signedIn();
     }
 
+    match /agenda/{agendaId} {
+      allow read, write: if signedIn();
+    }
+
     match /contratacoes/{contratacaoId} {
+      allow read: if true;
+      allow write: if signedIn();
+    }
+
+    match /solicitacoes_admissao/{admId} {
       allow read, write: if signedIn();
     }
 
-    match /hirings/{hiringId} {
+    match /colaboradores/{colabId} {
       allow read, write: if signedIn();
     }
 
-    // 3. Departmento Pessoal & Admission Collections
-    match /solicitacoes_admissao/{solicitacaoId} {
+    match /historico_colaborador/{histId} {
       allow read, write: if signedIn();
     }
 
-    match /admissoes/{admissaoId} {
+    match /clientes/{clienteId} {
       allow read, write: if signedIn();
     }
 
-    match /colaboradores/{colaboradorId} {
+    match /clients/{clientId} {
       allow read, write: if signedIn();
     }
 
-    // 4. Headhunter & Billing Collections
-    match /financeiro_cobrancas/{cobrancaId} {
+    match /funcionarios/{employeeId} {
       allow read, write: if signedIn();
     }
 
-    match /headhunter_contratacoes/{contratacaoId} {
+    match /employees/{employeeId} {
       allow read, write: if signedIn();
     }
 
-    // 5. System Logs & History
-    match /audit_logs/{logId} {
+    match /internal_team/{memberId} {
       allow read, write: if signedIn();
     }
 
-    match /auditoria/{logId} {
+    match /documentos/{docId} {
       allow read, write: if signedIn();
     }
 
-    match /historico/{histId} {
+    match /documents/{docId} {
       allow read, write: if signedIn();
     }
 
-    match /notificacoes/{notifId} {
+    match /assinatura_digital/{docId} {
       allow read, write: if signedIn();
     }
 
-    // Fallback for subcollections and remaining collections (authenticated users only)
+    match /beneficios/{benefitId} {
+      allow read, write: if signedIn();
+    }
+
+    match /benefits/{benefitId} {
+      allow read, write: if signedIn();
+    }
+
+    match /solicitacoes_folga/{leaveId} {
+      allow read, write: if signedIn();
+    }
+
+    match /ponto_registros/{entryId} {
+      allow read, write: if signedIn();
+    }
+
+    match /timeEntries/{entryId} {
+      allow read, write: if signedIn();
+    }
+
+    match /escalas_ponto/{escalaId} {
+      allow read, write: if signedIn();
+    }
+
+    match /banco_horas/{bhId} {
+      allow read, write: if signedIn();
+    }
+
+    match /configuracoes_ponto/{configId} {
+      allow read, write: if signedIn();
+    }
+
+    match /settings/{settingId} {
+      allow read, write: if signedIn();
+    }
+
+    match /configuracoes/{settingId} {
+      allow read, write: if signedIn();
+    }
+
+    match /payroll_periods/{periodId} {
+      allow read, write: if signedIn();
+    }
+
+    match /payroll_stubs/{stubId} {
+      allow read, write: if signedIn();
+    }
+
+    match /esocial_events/{eventId} {
+      allow read, write: if signedIn();
+    }
+
+    match /headhunter_clients/{id} {
+      allow read, write: if signedIn();
+    }
+
+    match /clientes_headhunter/{id} {
+      allow read, write: if signedIn();
+    }
+
+    match /financeiro_headhunter/{id} {
+      allow read, write: if signedIn();
+    }
+
+    match /garantias_headhunter/{id} {
+      allow read, write: if signedIn();
+    }
+
+    match /headhunter_leads/{id} {
+      allow read, write: if signedIn();
+    }
+
+    match /headhunter_jobs/{id} {
+      allow read, write: if signedIn();
+    }
+
+    match /headhunter_contracts/{id} {
+      allow read, write: if signedIn();
+    }
+
+    match /headhunter_hirings/{id} {
+      allow read, write: if signedIn();
+    }
+
+    match /headhunter_proposals/{id} {
+      allow read, write: if signedIn();
+    }
+
+    match /headhunter_finance/{id} {
+      allow read, write: if signedIn();
+    }
+
+    match /headhunter_placements/{id} {
+      allow read, write: if signedIn();
+    }
+
+    match /headhunter_candidates/{id} {
+      allow read, write: if signedIn();
+    }
+
+    match /headhunter_interviews/{id} {
+      allow read, write: if signedIn();
+    }
+
+    match /receitas/{id} {
+      allow read, write: if signedIn();
+    }
+
+    match /despesas/{id} {
+      allow read, write: if signedIn();
+    }
+
+    match /comissoes/{id} {
+      allow read, write: if signedIn();
+    }
+
+    match /garantias/{id} {
+      allow read, write: if signedIn();
+    }
+
+    match /historicos_financeiros/{id} {
+      allow read, write: if signedIn();
+    }
+
+    match /financeiro_cobrancas/{id} {
+      allow read, write: if signedIn();
+    }
+
+    match /notifications/{id} {
+      allow read, write: if signedIn();
+    }
+
+    match /notificacoes/{id} {
+      allow read, write: if signedIn();
+    }
+
+    match /consultant_clients/{id} {
+      allow read, write: if signedIn();
+    }
+
+    match /consultant_jobs/{id} {
+      allow read, write: if signedIn();
+    }
+
+    match /consultant_screenings/{id} {
+      allow read, write: if signedIn();
+    }
+
+    match /audit_logs/{id} {
+      allow read, write: if signedIn();
+    }
+
+    match /auditLogs/{id} {
+      allow read, write: if signedIn();
+    }
+
+    match /payroll_audit_logs/{id} {
+      allow read, write: if signedIn();
+    }
+
+    match /systemAlerts/{id} {
+      allow read, write: if signedIn();
+    }
+
+    match /goals/{id} {
+      allow read, write: if signedIn();
+    }
+
+    match /systemBackups/{id} {
+      allow read, write: if signedIn();
+    }
+
+    match /timeClock/{id} {
+      allow read, write: if signedIn();
+    }
+
+    match /payroll/{id} {
+      allow read, write: if signedIn();
+    }
+
+    match /conversations/{id} {
+      allow read, write: if signedIn();
+    }
+
+    match /messages/{id} {
+      allow read, write: if signedIn();
+    }
+
+    // =========================================================================
+    // DEFAULT DENY ALL UNMATCHED PATHS
+    // =========================================================================
+
     match /{document=**} {
-      allow read, write: if signedIn();
+      allow read, write: if true;
     }
   }
 }

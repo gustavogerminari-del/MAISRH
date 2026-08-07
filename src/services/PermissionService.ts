@@ -1,5 +1,3 @@
-import { MODULE_ALIASES, ResolvedModulesResult } from '../utils/companyModules';
-
 export type SystemRole = 'MASTER' | 'EMPRESA_ADMIN' | 'RH' | 'GESTOR' | 'COLABORADOR';
 
 export type ModuleCategoryKey = 'RECRUTAMENTO' | 'HEADHUNTER' | 'DEPARTAMENTO_PESSOAL' | 'GESTAO';
@@ -93,9 +91,6 @@ export interface AccessCheckOptions {
   userRole?: string;
   isMaster?: boolean;
   companyModules?: CompanyModulesMap;
-  modulesLoaded?: boolean;
-  source?: string;
-  resolvedModules?: ResolvedModulesResult;
   userPermissions?: UserPermissionsMap | string[];
   userId?: string;
   companyId?: string;
@@ -165,10 +160,9 @@ export const ROLE_PERMISSIONS_MAP: Record<SystemRole, string[]> = {
 };
 
 export class PermissionService {
-  private static recentLogs = new Map<string, number>();
-
   /**
    * Identifies if a given role string belongs to a Company Administrator profile.
+   * Recognizes: ADMIN_EMPRESA, ADMIN, ADMINISTRADOR, Administrador, EMPRESA_ADMIN, GESTOR_EMPRESA, EMPRESA
    */
   static isCompanyAdmin(role?: string): boolean {
     if (!role) return false;
@@ -201,9 +195,9 @@ export class PermissionService {
    * Evaluates access based on the Strict Hierarchy:
    * 1. MASTER: total access; ignores company & user restrictions.
    * 2. Base modules (dashboard, configuracoes): allowed for authenticated company users.
-   * 3. LEVEL 1: Check if module is active for the company (companyModules / resolvedModules).
-   * 4. LEVEL 2 (ADMIN_EMPRESA): automatically accesses all active company modules.
-   * 5. LEVEL 2 (USUÁRIO COMUM): requires individual active user permission.
+   * 3. LEVEL 1: Check if module is active for the company (companyModules).
+   * 4. LEVEL 2 (ADMIN_EMPRESA): automatically accesses all active company modules (user.permissions is NOT required).
+   * 5. LEVEL 2 (USUÁRIO COMUM): requires individual active user permission (userHasPermission).
    */
   static checkAccess(
     keyOrAlias: string,
@@ -214,7 +208,7 @@ export class PermissionService {
 
     // 1. MASTER Profile: Total unrestricted access
     if (options.isMaster || this.isMaster(role)) {
-      this.logAccess(options, canonicalKey, true, 'Acesso Master Total Concedido', 'master');
+      this.logAccess(options, canonicalKey, true, 'Acesso Master Total Concedido');
       return { allowed: true };
     }
 
@@ -224,60 +218,40 @@ export class PermissionService {
     }
 
     // 3. LEVEL 1: Check if Company has module active / contracted
-    const resolved = options.resolvedModules;
-    const loaded = resolved ? resolved.loaded : (options.modulesLoaded !== false);
-    const source = resolved ? resolved.source : (options.source || 'empresa_modulos');
-    const modulesMap = resolved ? resolved.modules : (options.companyModules || {});
-
-    const isMapEmpty = Object.keys(modulesMap).length === 0;
-
-    // If modules are not yet loaded or if map is empty and we haven't loaded from DB
-    if (!loaded || (isMapEmpty && options.modulesLoaded === false)) {
-      if (this.isCompanyAdmin(role)) {
-        // ADMIN_EMPRESA should never be blocked while modules are loading
-        return { allowed: true };
-      }
-      this.logAccess(options, canonicalKey, false, 'Módulos da empresa ainda não carregados', source, loaded);
-      return {
-        allowed: false,
-        reason: 'Não foi possível carregar os módulos da empresa.'
-      };
-    }
-
-    const companyAllowed = this.isCompanyModuleActive(canonicalKey, modulesMap);
-
+    const companyAllowed = this.isCompanyModuleActive(canonicalKey, options.companyModules || {});
     if (!companyAllowed) {
-      this.logAccess(options, canonicalKey, false, 'Módulo não contratado pela empresa (Nível 1)', source, loaded);
+      this.logAccess(options, canonicalKey, false, 'Módulo NÃO liberado para a empresa (Nível 1)');
       return {
         allowed: false,
-        reason: `Acesso negado: O módulo '${canonicalKey}' não está ativado na licença da empresa.`
+        reason: `Acesso negado: O módulo '${canonicalKey}' não está ativado na licença da empresa.`,
       };
     }
-
-    this.logAccess(options, canonicalKey, true, 'Módulo liberado para a empresa (Nível 1)', source, loaded);
 
     // 4. LEVEL 2 (ADMIN_EMPRESA): Automatically inherits all active company modules
     if (this.isCompanyAdmin(role)) {
+      this.logAccess(options, canonicalKey, true, 'Acesso liberado para ADMIN_EMPRESA (Nível 2)');
       return { allowed: true };
     }
 
     // 5. LEVEL 2 (USUÁRIO COMUM): Requires individual user permission
     const userAllowed = this.isUserPermissionActive(canonicalKey, options);
     if (!userAllowed) {
+      this.logAccess(options, canonicalKey, false, 'Usuário sem permissão individual ativa (Nível 2)');
       return {
         allowed: false,
-        reason: `Acesso negado: Seu usuário não possui permissão para acessar o módulo '${canonicalKey}'.`
+        reason: `Acesso negado: Seu usuário não possui permissão para acessar o módulo '${canonicalKey}'.`,
       };
     }
 
+    this.logAccess(options, canonicalKey, true, 'Acesso liberado para Usuário Comum (Nível 1 + Nível 2)');
     return { allowed: true };
   }
 
   /**
    * Helper to check Level 1 (Company Module Active)
    */
-  static isCompanyModuleActive(keyOrAlias: string, companyModules: CompanyModulesMap | any): boolean {
-    if (!companyModules || typeof companyModules !== 'object') return false;
+  static isCompanyModuleActive(keyOrAlias: string, companyModules: CompanyModulesMap): boolean {
+    if (!companyModules) return false;
 
     // Direct check
     if (companyModules[keyOrAlias] === true) return true;
@@ -285,13 +259,7 @@ export class PermissionService {
     const canonicalKey = getCanonicalModuleKey(keyOrAlias);
     if (companyModules[canonicalKey] === true) return true;
 
-    // Check MODULE_ALIASES map
-    const aliases = MODULE_ALIASES[canonicalKey] || MODULE_ALIASES[keyOrAlias] || [];
-    for (const alias of aliases) {
-      if (companyModules[alias] === true) return true;
-    }
-
-    // Check PLATFORM_MODULE_CATEGORIES aliases
+    // Check module key and all its aliases in companyModules
     for (const cat of Object.values(PLATFORM_MODULE_CATEGORIES)) {
       const mod = cat.modules.find((m) => m.key === canonicalKey);
       if (mod) {
@@ -377,63 +345,41 @@ export class PermissionService {
   }
 
   /**
-   * Audit Logger for Access Attempts - Single Diagnostic Format
+   * Audit Logger for Access Attempts
    */
   static logAccess(
     options: AccessCheckOptions,
     moduleKey: string,
     granted: boolean,
-    reason: string,
-    source: string = 'empresa_modulos',
-    loaded: boolean = true
+    reason: string
   ): void {
-    const uid = options.userId || 'sessao_ativa';
-    const empresaId = options.companyId || 'empresa_ativa';
-    const canonicalKey = getCanonicalModuleKey(moduleKey);
-    const aliasesChecked = MODULE_ALIASES[canonicalKey] || [canonicalKey];
-    const availableModuleKeys = Object.keys(options.companyModules || {});
+    const logData = {
+      timestamp: new Date().toISOString(),
+      userId: options.userId || 'sessao_ativa',
+      companyId: options.companyId || 'empresa_ativa',
+      module: moduleKey,
+      userRole: options.userRole || 'DESCONHECIDO',
+      granted,
+      reason,
+    };
 
-    const logKey = `${uid}_${empresaId}_${canonicalKey}_${granted}`;
-    const now = Date.now();
-    const lastTime = this.recentLogs.get(logKey) || 0;
-
-    if (now - lastTime > 3000) {
-      this.recentLogs.set(logKey, now);
-      console.log("MODULE RESOLUTION", {
-        uid,
-        empresaId,
-        source,
-        loaded,
-        requestedModule: canonicalKey,
-        aliasesChecked,
-        granted,
-        availableModuleKeys
-      });
+    if (!granted) {
+      console.warn(`🔒 [MODULE_ACCESS_GUARD - BLOQUEADO]`, logData);
     }
   }
 
   /**
-   * Guard for Firestore Writes
+   * Strict Guard for Firestore Writes
    */
   static validateFirestoreWrite(
     moduleKey: string,
-    options?: AccessCheckOptions | string
+    options: AccessCheckOptions
   ): void {
-    if (!options) return;
-    let resolvedOptions: AccessCheckOptions;
-    if (typeof options === 'string') {
-      resolvedOptions = { companyId: options, companyModules: { [moduleKey]: true } };
-    } else {
-      resolvedOptions = options;
-    }
-
-    if (!resolvedOptions.companyModules || Object.keys(resolvedOptions.companyModules).length === 0) {
-      return;
-    }
-
-    const check = this.checkAccess(moduleKey, resolvedOptions);
+    const check = this.checkAccess(moduleKey, options);
     if (!check.allowed) {
-      console.warn(`[FIRESTORE GUARD NOTICE] Gravação no módulo '${moduleKey}': ${check.reason}`);
+      const errorMsg = `[FIRESTORE GUARD ERROR] Gravação bloqueada no módulo '${moduleKey}': ${check.reason}`;
+      console.error(errorMsg);
+      throw new Error(errorMsg);
     }
   }
 

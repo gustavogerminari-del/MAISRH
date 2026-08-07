@@ -1,6 +1,4 @@
-import React, { useState, useEffect } from 'react';
-import { collection, query, where, getDocs } from 'firebase/firestore';
-import { db } from '../../lib/firebase';
+import React, { useState } from 'react';
 import { 
   X, 
   User, 
@@ -41,12 +39,6 @@ import { JobService } from '../../services/JobService';
 import { Button } from '../../shared';
 import { ScheduleInterviewModal } from './ScheduleInterviewModal';
 import { enviarCandidatoParaAdmissaoDP } from '../../departamento-pessoal/services/dpFirestoreService';
-import { useAuth } from '../../auth/context/AuthContext';
-import { 
-  getCompanyCapabilitiesFromFirestore, 
-  normalizeCompanyModules, 
-  normalizeJobOrigin 
-} from '../../utils/companyModules';
 
 interface CandidateDrawerPanelProps {
   candidate: JobCandidateApplication | null;
@@ -54,21 +46,6 @@ interface CandidateDrawerPanelProps {
   onClose: () => void;
   onRefresh: () => Promise<void>;
   jobTitle?: string;
-
-  // Optional action handlers
-  onWhatsApp?: (candidate: JobCandidateApplication) => void;
-  onEmail?: (candidate: JobCandidateApplication) => void;
-  onScheduleInterview?: (candidate: JobCandidateApplication) => void;
-  onEvaluate?: (candidate: JobCandidateApplication) => void;
-  onHire?: (candidate: JobCandidateApplication) => void;
-  onReject?: (candidate: JobCandidateApplication) => void;
-  onTabChange?: (tab: string) => void;
-
-  // Optional explicit IDs
-  candidateId?: string;
-  applicationId?: string;
-  jobId?: string;
-  empresaId?: string;
 }
 
 export const CandidateDrawerPanel: React.FC<CandidateDrawerPanelProps> = ({
@@ -77,60 +54,13 @@ export const CandidateDrawerPanel: React.FC<CandidateDrawerPanelProps> = ({
   onClose,
   onRefresh,
   jobTitle,
-  onWhatsApp,
-  onEmail,
-  onScheduleInterview,
-  onEvaluate,
-  onHire,
-  onReject,
-  onTabChange,
-  candidateId: propsCandidateId,
-  applicationId: propsApplicationId,
-  jobId: propsJobId,
-  empresaId: propsCompanyId,
 }) => {
   if (!isOpen || !candidate) return null;
-
-  // Normalized IDs
-  const normCandidateId = propsCandidateId || candidate.candidateId || (candidate as any).candidatoId || candidate.id || '';
-  const normApplicationId = propsApplicationId || candidate.id || '';
-  const normJobId = propsJobId || candidate.jobId || (candidate as any).vagaId || '';
-  const normCompanyId = propsCompanyId || candidate.companyId || (candidate as any).empresaId || 'emp-001';
-
-  // ID Validation logic
-  const validateFullBinding = (actionName: string) => {
-    if (!normCandidateId || !normApplicationId || !normCompanyId) {
-      console.warn("CANDIDATE MODAL HANDLER INCOMPLETE ID BINDING", {
-        action: actionName,
-        candidateId: normCandidateId,
-        applicationId: normApplicationId,
-        jobId: normJobId,
-        empresaId: normCompanyId
-      });
-    }
-  };
-
-  const validateAndLogAction = (actionName: string, handler?: Function) => {
-    if (typeof handler !== "function") {
-      console.error("CANDIDATE MODAL HANDLER MISSING", {
-        action: actionName,
-        candidateId: normCandidateId,
-        applicationId: normApplicationId,
-        jobId: normJobId,
-        empresaId: normCompanyId
-      });
-    }
-  };
 
   const [activeTab, setActiveTab] = useState<'perfil' | 'curriculo' | 'ia' | 'entrevistas' | 'avaliacoes' | 'historico'>('perfil');
   const [isScheduleModalOpen, setIsScheduleModalOpen] = useState(false);
   const [newNoteText, setNewNoteText] = useState('');
   const [addingNote, setAddingNote] = useState(false);
-
-  // Firestore interviews list state for Interviews tab
-  const [dbInterviews, setDbInterviews] = useState<any[]>([]);
-  const [loadingInterviews, setLoadingInterviews] = useState(false);
-  const [interviewsError, setInterviewsError] = useState<string | null>(null);
 
   // Evaluation modal state
   const [isEvaluationModalOpen, setIsEvaluationModalOpen] = useState(false);
@@ -155,147 +85,14 @@ export const CandidateDrawerPanel: React.FC<CandidateDrawerPanelProps> = ({
   const [manterBancoTalentos, setManterBancoTalentos] = useState(true);
   const [isSubmittingReject, setIsSubmittingReject] = useState(false);
 
-  // Auth & Company Modules
-  const { activeModules } = useAuth();
-  const [capabilities, setCapabilities] = useState<{ hasHeadhunter: boolean; hasDP: boolean }>(() => {
-    if (activeModules && Object.keys(activeModules).length > 0) {
-      return normalizeCompanyModules(activeModules);
-    }
-    return { hasHeadhunter: true, hasDP: true };
-  });
-
-  useEffect(() => {
-    let isMounted = true;
-    if (isOpen && normCompanyId) {
-      getCompanyCapabilitiesFromFirestore(normCompanyId)
-        .then((caps) => {
-          if (!isMounted) return;
-          if (activeModules && Object.keys(activeModules).length > 0) {
-            const authCaps = normalizeCompanyModules(activeModules);
-            setCapabilities({
-              hasHeadhunter: caps.hasHeadhunter || authCaps.hasHeadhunter,
-              hasDP: caps.hasDP || authCaps.hasDP,
-            });
-          } else {
-            setCapabilities(caps);
-          }
-        })
-        .catch((err) => {
-          console.warn('Aviso ao carregar capacidades da empresa:', err);
-          if (activeModules && isMounted) {
-            setCapabilities(normalizeCompanyModules(activeModules));
-          }
-        });
-    }
-    return () => {
-      isMounted = false;
-    };
-  }, [isOpen, normCompanyId, activeModules]);
-
   // State for Hire Modal
   const [isHireModalOpen, setIsHireModalOpen] = useState(false);
-  const [hireDestination, setHireDestination] = useState<'departamento_pessoal' | 'headhunter'>('departamento_pessoal');
   const [closeOtherCandidates, setCloseOtherCandidates] = useState(true);
   const [isSubmittingHire, setIsSubmittingHire] = useState(false);
 
   // State for Admission Flow
   const [isSentToAdmission, setIsSentToAdmission] = useState(false);
   const [isSubmittingAdmission, setIsSubmittingAdmission] = useState(false);
-
-  // Fetch interviews when tab changes or drawer opens
-  useEffect(() => {
-    if (isOpen && normApplicationId) {
-      fetchInterviewsFromDb();
-    }
-  }, [isOpen, normApplicationId, activeTab]);
-
-  const fetchInterviewsFromDb = async () => {
-    if (!normApplicationId) return;
-    setLoadingInterviews(true);
-    setInterviewsError(null);
-    try {
-      const list: any[] = [];
-      
-      // Query entrevistas collection
-      try {
-        const qInt = query(collection(db, 'entrevistas'), where('applicationId', '==', normApplicationId));
-        const snapInt = await getDocs(qInt);
-        snapInt.forEach(docSnap => list.push({ id: docSnap.id, ...docSnap.data() }));
-      } catch (e) {
-        console.warn('Erro ao consultar entrevistas:', e);
-      }
-
-      // Query interviews collection as backup
-      try {
-        const qInt2 = query(collection(db, 'interviews'), where('applicationId', '==', normApplicationId));
-        const snapInt2 = await getDocs(qInt2);
-        snapInt2.forEach(docSnap => {
-          if (!list.some(item => item.id === docSnap.id)) {
-            list.push({ id: docSnap.id, ...docSnap.data() });
-          }
-        });
-      } catch (e) {
-        console.warn('Erro ao consultar interviews:', e);
-      }
-
-      setDbInterviews(list);
-    } catch (err: any) {
-      console.error('Erro ao buscar entrevistas do banco:', err);
-      setInterviewsError('Erro ao carregar entrevistas. Tente novamente.');
-    } finally {
-      setLoadingInterviews(false);
-    }
-  };
-
-  const handleTabSwitch = (tab: 'perfil' | 'curriculo' | 'ia' | 'entrevistas' | 'avaliacoes' | 'historico') => {
-    setActiveTab(tab);
-    validateAndLogAction('onTabChange', onTabChange);
-    if (typeof onTabChange === 'function') {
-      onTabChange(tab);
-    }
-  };
-
-  const handleWhatsAppClick = () => {
-    validateAndLogAction('onWhatsApp', onWhatsApp);
-    const rawPhone = candidate.phone || (candidate as any).telefone || '';
-    const cleanPhone = rawPhone.replace(/\D/g, '');
-
-    if (!cleanPhone) {
-      alert("Este candidato não possui telefone cadastrado.");
-      return;
-    }
-
-    let formattedPhone = cleanPhone;
-    if (formattedPhone.length === 10 || formattedPhone.length === 11) {
-      formattedPhone = `55${formattedPhone}`;
-    }
-
-    const title = jobTitle || candidate.role || candidate.jobTitle || 'Processo Seletivo';
-    const waUrl = `https://wa.me/${formattedPhone}?text=${encodeURIComponent(`Olá ${candidate.name}, referente ao processo seletivo para a vaga de ${title}.`)}`;
-    window.open(waUrl, '_blank');
-
-    if (typeof onWhatsApp === 'function') {
-      onWhatsApp(candidate);
-    }
-  };
-
-  const handleEmailClick = () => {
-    validateAndLogAction('onEmail', onEmail);
-    const email = candidate.email;
-
-    if (!email || !email.trim() || email.includes('ficticio') || email.includes('exemplo.com')) {
-      alert("Este candidato não possui e-mail cadastrado.");
-      return;
-    }
-
-    const title = jobTitle || candidate.role || candidate.jobTitle || 'Processo Seletivo';
-    const mailtoUrl = `mailto:${email.trim()}?subject=${encodeURIComponent(`Processo seletivo - ${title}`)}`;
-    window.location.href = mailtoUrl;
-
-    if (typeof onEmail === 'function') {
-      onEmail(candidate);
-    }
-  };
 
   const formatDate = (isoOrStr?: string) => {
     if (!isoOrStr) return new Date().toLocaleDateString('pt-BR');
@@ -350,7 +147,7 @@ export const CandidateDrawerPanel: React.FC<CandidateDrawerPanelProps> = ({
     setIsEvaluationModalOpen(true);
   };
 
-  const handleHireCandidate = async () => {
+  const handleHireCandidate = () => {
     console.log("[HIRE] Botão clicado");
     if (candidate.status === 'Contratado') {
       alert('Candidato já contratado.');
@@ -363,8 +160,7 @@ export const CandidateDrawerPanel: React.FC<CandidateDrawerPanelProps> = ({
       alert('Erro: ID real da candidatura não informado.');
       return;
     }
-    const effectiveCompanyId = candidate.companyId || (candidate as any).empresaId || propsCompanyId;
-    if (!effectiveCompanyId) {
+    if (!candidate.companyId) {
       alert('Erro: Empresa da candidatura não identificada.');
       return;
     }
@@ -377,32 +173,6 @@ export const CandidateDrawerPanel: React.FC<CandidateDrawerPanelProps> = ({
       return;
     }
 
-    // Refresh company capabilities before displaying hire modal
-    let currentCaps = capabilities;
-    try {
-      const fetched = await getCompanyCapabilitiesFromFirestore(normCompanyId);
-      if (fetched) {
-        currentCaps = fetched;
-        setCapabilities(fetched);
-      }
-    } catch (e) {
-      console.warn('Aviso ao atualizar capacidades no handleHireCandidate:', e);
-    }
-
-    // Determine initial destination based on active modules and job origin
-    if (currentCaps.hasHeadhunter && !currentCaps.hasDP) {
-      setHireDestination('headhunter');
-    } else if (currentCaps.hasDP && !currentCaps.hasHeadhunter) {
-      setHireDestination('departamento_pessoal');
-    } else {
-      const normOrigin = normalizeJobOrigin(candidate);
-      if (normOrigin === 'HEADHUNTER') {
-        setHireDestination('headhunter');
-      } else {
-        setHireDestination('departamento_pessoal');
-      }
-    }
-
     setCloseOtherCandidates(true);
     setIsHireModalOpen(true);
   };
@@ -410,36 +180,17 @@ export const CandidateDrawerPanel: React.FC<CandidateDrawerPanelProps> = ({
   const executeHireProcess = async () => {
     setIsSubmittingHire(true);
     console.log("[HIRE] Candidate:", candidate);
-    console.log("[HIRE] Chamando JobCandidateService com destino:", hireDestination);
+    console.log("[HIRE] Chamando JobCandidateService");
     try {
-      // First set origin/destination if needed
-      if (candidate?.jobId) {
-        const chosenOrigin = hireDestination === 'headhunter' ? 'HEADHUNTER' : 'RH_INTERNO';
-        await JobService.update(candidate.jobId, {
-          companyId: normCompanyId,
-          empresaId: normCompanyId,
-          origemProcesso: chosenOrigin,
-          moduloOrigem: chosenOrigin === 'HEADHUNTER' ? 'headhunter' : 'RH',
-          origem: chosenOrigin,
-          isHeadhunter: chosenOrigin === 'HEADHUNTER',
-          destinoContratacao: chosenOrigin === 'HEADHUNTER' ? 'FINANCEIRO_HEADHUNTER' : 'DP'
-        }).catch(e => console.warn('Aviso ao atualizar origem da vaga:', e));
-      }
-
       const res = await JobCandidateService.hireCandidate(candidate, jobTitle, {
-        closeOtherCandidates,
-        destination: hireDestination
+        closeOtherCandidates
       });
       console.log("[HIRE] Processo de contratação concluído com resultado:", res);
       if (res.success) {
-        if (hireDestination === 'departamento_pessoal') {
-          await handleSendToAdmission().catch(e => console.warn('Aviso ao enviar para admissão:', e));
-        }
-
         if (res.warnings && res.warnings.length > 0) {
           alert(`🎉 Candidato(a) ${candidate.name} contratado(a) com avisos:\n${res.warnings.join('\n')}`);
         } else {
-          alert(`🎉 Candidato(a) ${candidate.name} contratado(a) com sucesso! Registrado na área de Contratações (${hireDestination === 'headhunter' ? 'Headhunter' : 'Departamento Pessoal'}).`);
+          alert(`🎉 Candidato(a) ${candidate.name} contratado(a) com sucesso! Registrado na área de Contratações para encaminhamento posterior.`);
         }
         setIsHireModalOpen(false);
         await onRefresh();
@@ -447,7 +198,12 @@ export const CandidateDrawerPanel: React.FC<CandidateDrawerPanelProps> = ({
     } catch (err: any) {
       console.error("[HIRE] Erro no fluxo de contratação:", err);
       if (err?.message?.includes('origem definida')) {
-        const chosenOrigin = hireDestination === 'headhunter' ? 'HEADHUNTER' : 'RH_INTERNO';
+        const choice = window.confirm(
+          "Esta vaga ainda não possui uma origem definida.\n\n" +
+          "Clique OK para defini-la como Vaga de Cliente (HEADHUNTER - Financeiro).\n" +
+          "Clique CANCELAR para defini-la como Vaga Interna (RH - Departamento Pessoal)."
+        );
+        const chosenOrigin = choice ? 'HEADHUNTER' : 'RH_INTERNO';
 
         try {
           if (candidate?.jobId) {
@@ -461,9 +217,6 @@ export const CandidateDrawerPanel: React.FC<CandidateDrawerPanelProps> = ({
 
             const resRetry = await JobCandidateService.hireCandidate(candidate, jobTitle, { closeOtherCandidates });
             if (resRetry.success) {
-              if (hireDestination === 'departamento_pessoal') {
-                await handleSendToAdmission().catch(e => console.warn('Aviso ao enviar para admissão:', e));
-              }
               alert(`🎉 Candidato(a) ${candidate.name} contratado(a) com sucesso!`);
               setIsHireModalOpen(false);
               await onRefresh();
@@ -682,71 +435,34 @@ export const CandidateDrawerPanel: React.FC<CandidateDrawerPanelProps> = ({
               </div>
             )}
 
-            {/* Indigo Card: Entrevista Agendada (Header Alert Card) */}
-            {(candidate.interview || dbInterviews.length > 0) && candidate.status !== 'Contratado' && (
-              <div className="w-full bg-indigo-50 border border-indigo-200 rounded-2xl p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 shadow-2xs">
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-xl bg-indigo-600 text-white flex items-center justify-center shrink-0 font-bold shadow-2xs">
-                    <Calendar className="w-5 h-5" />
-                  </div>
-                  <div>
-                    <div className="flex items-center gap-2">
-                      <span className="text-sm font-black text-indigo-950">Entrevista Agendada</span>
-                      <span className="bg-indigo-100 text-indigo-800 text-[10px] font-extrabold px-2 py-0.5 rounded-full border border-indigo-300">
-                        {candidate.interview?.type || dbInterviews[0]?.type || dbInterviews[0]?.modalidade || 'Online'}
-                      </span>
-                    </div>
-                    <p className="text-xs text-indigo-800 font-medium mt-0.5">
-                      Data: <strong className="text-indigo-950">{candidate.interview?.date || dbInterviews[0]?.date || dbInterviews[0]?.data}</strong> às <strong className="text-indigo-950">{candidate.interview?.time || dbInterviews[0]?.time || dbInterviews[0]?.horario}</strong> • Responsável: <strong className="text-indigo-950">{candidate.interview?.interviewer || dbInterviews[0]?.interviewer || dbInterviews[0]?.entrevistador || 'RH'}</strong>
-                    </p>
-                  </div>
-                </div>
-
-                <div className="flex items-center gap-2 w-full sm:w-auto">
-                  <button
-                    type="button"
-                    onClick={() => setActiveTab('entrevistas')}
-                    className="w-full sm:w-auto px-3.5 py-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold flex items-center justify-center gap-1.5 shadow-xs transition-all cursor-pointer"
-                  >
-                    <Calendar className="w-3.5 h-3.5" />
-                    <span>Ver Área de Entrevistas</span>
-                  </button>
-                </div>
-              </div>
-            )}
-
             {/* Quick Action Buttons Grid in Drawer Header */}
             <div className="grid w-full grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-2">
               {/* 1. WhatsApp */}
-              <button
-                type="button"
-                onClick={handleWhatsAppClick}
-                className="w-full min-w-0 justify-center whitespace-nowrap px-3 py-2 rounded-xl bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border border-emerald-200 text-xs font-bold flex items-center gap-1.5 transition-colors cursor-pointer"
+              <a
+                href={whatsappUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="w-full min-w-0 justify-center whitespace-nowrap px-3 py-2 rounded-xl bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border border-emerald-200 text-xs font-bold flex items-center gap-1.5 transition-colors"
               >
                 <MessageCircle className="w-3.5 h-3.5" />
                 WhatsApp
-              </button>
+              </a>
 
               {/* 2. E-mail */}
-              <button
-                type="button"
-                onClick={handleEmailClick}
-                className="w-full min-w-0 justify-center whitespace-nowrap px-3 py-2 rounded-xl bg-blue-50 text-blue-700 hover:bg-blue-100 border border-blue-200 text-xs font-bold flex items-center gap-1.5 transition-colors cursor-pointer"
+              <a
+                href={emailUrl}
+                className="w-full min-w-0 justify-center whitespace-nowrap px-3 py-2 rounded-xl bg-blue-50 text-blue-700 hover:bg-blue-100 border border-blue-200 text-xs font-bold flex items-center gap-1.5 transition-colors"
               >
                 <Mail className="w-3.5 h-3.5" />
                 E-mail
-              </button>
+              </a>
 
               {/* 3. Agendar Entrevista */}
               {!candidate.interview && (
                 <button
                   type="button"
-                  onClick={() => {
-                    validateFullBinding('onScheduleInterview');
-                    setIsScheduleModalOpen(true);
-                    validateAndLogAction('onScheduleInterview', onScheduleInterview);
-                  }}
-                  className="w-full min-w-0 justify-center whitespace-nowrap px-3 py-2 rounded-xl bg-indigo-600 text-white hover:bg-indigo-700 text-xs font-bold flex items-center gap-1.5 shadow-2xs transition-colors cursor-pointer"
+                  onClick={() => setIsScheduleModalOpen(true)}
+                  className="w-full min-w-0 justify-center whitespace-nowrap px-3 py-2 rounded-xl bg-indigo-600 text-white hover:bg-indigo-700 text-xs font-bold flex items-center gap-1.5 shadow-2xs transition-colors"
                 >
                   <Calendar className="w-3.5 h-3.5" />
                   Agendar Entrevista
@@ -757,12 +473,8 @@ export const CandidateDrawerPanel: React.FC<CandidateDrawerPanelProps> = ({
               {candidate.interview && (
                 <button
                   type="button"
-                  onClick={() => {
-                    validateFullBinding('onScheduleInterview');
-                    setIsScheduleModalOpen(true);
-                    validateAndLogAction('onScheduleInterview', onScheduleInterview);
-                  }}
-                  className="w-full min-w-0 justify-center whitespace-nowrap px-3 py-2 rounded-xl bg-amber-500 text-white hover:bg-amber-600 text-xs font-bold flex items-center gap-1.5 shadow-2xs transition-colors cursor-pointer"
+                  onClick={() => setIsScheduleModalOpen(true)}
+                  className="w-full min-w-0 justify-center whitespace-nowrap px-3 py-2 rounded-xl bg-amber-500 text-white hover:bg-amber-600 text-xs font-bold flex items-center gap-1.5 shadow-2xs transition-colors"
                 >
                   <Calendar className="w-3.5 h-3.5" />
                   Editar Entrevista
@@ -772,12 +484,8 @@ export const CandidateDrawerPanel: React.FC<CandidateDrawerPanelProps> = ({
               {/* 5. Avaliar & Feedback */}
               <button
                 type="button"
-                onClick={() => {
-                  validateFullBinding('onEvaluate');
-                  openEvaluationModal();
-                  validateAndLogAction('onEvaluate', onEvaluate);
-                }}
-                className="w-full min-w-0 justify-center whitespace-nowrap px-3 py-2 rounded-xl bg-purple-600 text-white hover:bg-purple-700 text-xs font-bold flex items-center gap-1.5 shadow-2xs transition-colors cursor-pointer"
+                onClick={openEvaluationModal}
+                className="w-full min-w-0 justify-center whitespace-nowrap px-3 py-2 rounded-xl bg-purple-600 text-white hover:bg-purple-700 text-xs font-bold flex items-center gap-1.5 shadow-2xs transition-colors"
               >
                 <Award className="w-3.5 h-3.5" />
                 Avaliar & Feedback
@@ -786,13 +494,9 @@ export const CandidateDrawerPanel: React.FC<CandidateDrawerPanelProps> = ({
               {/* 6. Contratar */}
               <button
                 type="button"
-                onClick={() => {
-                  validateFullBinding('onHire');
-                  handleHireCandidate();
-                  validateAndLogAction('onHire', onHire);
-                }}
+                onClick={handleHireCandidate}
                 disabled={isSubmittingHire || candidate.status === 'Contratado'}
-                className="w-full min-w-0 justify-center whitespace-nowrap px-3 py-2 rounded-xl bg-teal-600 text-white hover:bg-teal-700 disabled:opacity-50 text-xs font-bold flex items-center gap-1.5 shadow-2xs transition-colors cursor-pointer"
+                className="w-full min-w-0 justify-center whitespace-nowrap px-3 py-2 rounded-xl bg-teal-600 text-white hover:bg-teal-700 disabled:opacity-50 text-xs font-bold flex items-center gap-1.5 shadow-2xs transition-colors"
               >
                 <ThumbsUp className="w-3.5 h-3.5" />
                 {isSubmittingHire ? 'Contratando...' : candidate.status === 'Contratado' ? 'Contratado' : 'Contratar'}
@@ -801,13 +505,9 @@ export const CandidateDrawerPanel: React.FC<CandidateDrawerPanelProps> = ({
               {/* 7. Reprovar */}
               <button
                 type="button"
-                onClick={() => {
-                  validateFullBinding('onReject');
-                  setIsRejectModalOpen(true);
-                  validateAndLogAction('onReject', onReject);
-                }}
+                onClick={() => setIsRejectModalOpen(true)}
                 disabled={isSubmittingReject || candidate.status === 'Reprovado'}
-                className="w-full min-w-0 justify-center whitespace-nowrap px-3 py-2 rounded-xl bg-rose-50 text-rose-700 hover:bg-rose-100 border border-rose-200 disabled:opacity-50 text-xs font-bold flex items-center gap-1.5 transition-colors cursor-pointer"
+                className="w-full min-w-0 justify-center whitespace-nowrap px-3 py-2 rounded-xl bg-rose-50 text-rose-700 hover:bg-rose-100 border border-rose-200 disabled:opacity-50 text-xs font-bold flex items-center gap-1.5 transition-colors"
               >
                 <ThumbsDown className="w-3.5 h-3.5" />
                 {isSubmittingReject ? 'Reprovando...' : candidate.status === 'Reprovado' ? 'Reprovado' : 'Reprovar'}
@@ -818,8 +518,8 @@ export const CandidateDrawerPanel: React.FC<CandidateDrawerPanelProps> = ({
           {/* Drawer Navigation Tabs */}
           <div className="flex items-center gap-1 mt-6 border-b border-slate-200 -mb-6 overflow-x-auto no-scrollbar">
             <button
-              onClick={() => handleTabSwitch('perfil')}
-              className={`px-4 py-2.5 text-xs font-bold border-b-2 transition-colors flex items-center gap-2 whitespace-nowrap cursor-pointer ${
+              onClick={() => setActiveTab('perfil')}
+              className={`px-4 py-2.5 text-xs font-bold border-b-2 transition-colors flex items-center gap-2 whitespace-nowrap ${
                 activeTab === 'perfil'
                   ? 'border-indigo-600 text-indigo-600'
                   : 'border-transparent text-slate-500 hover:text-slate-800'
@@ -830,8 +530,8 @@ export const CandidateDrawerPanel: React.FC<CandidateDrawerPanelProps> = ({
             </button>
 
             <button
-              onClick={() => handleTabSwitch('curriculo')}
-              className={`px-4 py-2.5 text-xs font-bold border-b-2 transition-colors flex items-center gap-2 whitespace-nowrap cursor-pointer ${
+              onClick={() => setActiveTab('curriculo')}
+              className={`px-4 py-2.5 text-xs font-bold border-b-2 transition-colors flex items-center gap-2 whitespace-nowrap ${
                 activeTab === 'curriculo'
                   ? 'border-indigo-600 text-indigo-600'
                   : 'border-transparent text-slate-500 hover:text-slate-800'
@@ -842,8 +542,8 @@ export const CandidateDrawerPanel: React.FC<CandidateDrawerPanelProps> = ({
             </button>
 
             <button
-              onClick={() => handleTabSwitch('ia')}
-              className={`px-4 py-2.5 text-xs font-bold border-b-2 transition-colors flex items-center gap-2 whitespace-nowrap cursor-pointer ${
+              onClick={() => setActiveTab('ia')}
+              className={`px-4 py-2.5 text-xs font-bold border-b-2 transition-colors flex items-center gap-2 whitespace-nowrap ${
                 activeTab === 'ia'
                   ? 'border-indigo-600 text-indigo-600'
                   : 'border-transparent text-slate-500 hover:text-slate-800'
@@ -854,8 +554,8 @@ export const CandidateDrawerPanel: React.FC<CandidateDrawerPanelProps> = ({
             </button>
 
             <button
-              onClick={() => handleTabSwitch('entrevistas')}
-              className={`px-4 py-2.5 text-xs font-bold border-b-2 transition-colors flex items-center gap-2 whitespace-nowrap cursor-pointer ${
+              onClick={() => setActiveTab('entrevistas')}
+              className={`px-4 py-2.5 text-xs font-bold border-b-2 transition-colors flex items-center gap-2 whitespace-nowrap ${
                 activeTab === 'entrevistas'
                   ? 'border-indigo-600 text-indigo-600'
                   : 'border-transparent text-slate-500 hover:text-slate-800'
@@ -866,8 +566,8 @@ export const CandidateDrawerPanel: React.FC<CandidateDrawerPanelProps> = ({
             </button>
 
             <button
-              onClick={() => handleTabSwitch('avaliacoes')}
-              className={`px-4 py-2.5 text-xs font-bold border-b-2 transition-colors flex items-center gap-2 whitespace-nowrap cursor-pointer ${
+              onClick={() => setActiveTab('avaliacoes')}
+              className={`px-4 py-2.5 text-xs font-bold border-b-2 transition-colors flex items-center gap-2 whitespace-nowrap ${
                 activeTab === 'avaliacoes'
                   ? 'border-indigo-600 text-indigo-600'
                   : 'border-transparent text-slate-500 hover:text-slate-800'
@@ -878,8 +578,8 @@ export const CandidateDrawerPanel: React.FC<CandidateDrawerPanelProps> = ({
             </button>
 
             <button
-              onClick={() => handleTabSwitch('historico')}
-              className={`px-4 py-2.5 text-xs font-bold border-b-2 transition-colors flex items-center gap-2 whitespace-nowrap cursor-pointer ${
+              onClick={() => setActiveTab('historico')}
+              className={`px-4 py-2.5 text-xs font-bold border-b-2 transition-colors flex items-center gap-2 whitespace-nowrap ${
                 activeTab === 'historico'
                   ? 'border-indigo-600 text-indigo-600'
                   : 'border-transparent text-slate-500 hover:text-slate-800'
@@ -1005,377 +705,265 @@ export const CandidateDrawerPanel: React.FC<CandidateDrawerPanelProps> = ({
           )}
 
           {/* TAB 2: CURRÍCULO */}
-          {activeTab === 'curriculo' && (() => {
-            const resumeFileUrl = candidate.resumeUrl || (candidate as any).curriculoUrl || (candidate as any).arquivoCurriculo;
-            return (
-              <div className="space-y-4">
-                <div className="bg-white rounded-2xl p-5 border border-slate-200 shadow-2xs flex items-center justify-between">
-                  <div>
-                    <h3 className="text-sm font-black text-slate-900">Currículo Anexado</h3>
-                    <p className="text-xs text-slate-500 font-medium">Documento oficial fornecido pelo candidato</p>
-                  </div>
-
-                  <div className="flex items-center gap-2">
-                    {resumeFileUrl ? (
-                      <>
-                        <a
-                          href={resumeFileUrl}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="px-3 py-1.5 rounded-xl bg-indigo-600 text-white hover:bg-indigo-700 text-xs font-bold flex items-center gap-1.5 transition-colors"
-                        >
-                          <Download className="w-3.5 h-3.5" />
-                          Visualizar / Baixar PDF
-                        </a>
-
-                        <button
-                          onClick={() => {
-                            navigator.clipboard.writeText(resumeFileUrl);
-                            alert("Link do currículo copiado!");
-                          }}
-                          className="px-3 py-1.5 rounded-xl bg-slate-100 text-slate-700 hover:bg-slate-200 border border-slate-200 text-xs font-bold flex items-center gap-1.5 transition-colors cursor-pointer"
-                        >
-                          <Share2 className="w-3.5 h-3.5" />
-                          Copiar Link
-                        </button>
-                      </>
-                    ) : (
-                      <span className="text-xs font-bold text-amber-700 bg-amber-50 px-3 py-1.5 rounded-xl border border-amber-200">
-                        Nenhum arquivo de currículo em PDF/DOCX foi enviado
-                      </span>
-                    )}
-                  </div>
+          {activeTab === 'curriculo' && (
+            <div className="space-y-4">
+              <div className="bg-white rounded-2xl p-5 border border-slate-200 shadow-2xs flex items-center justify-between">
+                <div>
+                  <h3 className="text-sm font-black text-slate-900">Currículo Anexado</h3>
+                  <p className="text-xs text-slate-500 font-medium">Documento oficial fornecido pelo candidato</p>
                 </div>
 
-                {/* Styled Resume Preview or Empty Banner */}
-                <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-8 space-y-6">
-                  <div className="border-b border-slate-200 pb-4">
-                    <h2 className="text-2xl font-black text-slate-900">{candidate.name}</h2>
-                    <p className="text-xs font-bold text-indigo-600 mt-1">{jobTitle || candidate.role || candidate.jobTitle || 'Candidato'}</p>
-                    <p className="text-xs text-slate-500 mt-1">
-                      {candidate.city || 'Cidade N/I'}, {candidate.state || 'UF N/I'} • {candidate.phone || 'Sem telefone'} • {candidate.email || 'Sem e-mail'}
-                    </p>
-                  </div>
+                <div className="flex items-center gap-2">
+                  <a
+                    href={candidate.resumeUrl || '#'}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="px-3 py-1.5 rounded-xl bg-indigo-600 text-white hover:bg-indigo-700 text-xs font-bold flex items-center gap-1.5 transition-colors"
+                  >
+                    <Download className="w-3.5 h-3.5" />
+                    Baixar PDF
+                  </a>
 
-                  {candidate.objective ? (
-                    <div className="space-y-2">
-                      <h4 className="text-xs font-extrabold uppercase tracking-wider text-slate-400">Objetivo / Resumo Profissional</h4>
-                      <p className="text-xs text-slate-700 leading-relaxed font-medium">
-                        {candidate.objective} {candidate.experienceYears ? `Profissional com ${candidate.experienceYears} anos de experiência.` : ''}
-                      </p>
-                    </div>
-                  ) : null}
-
-                  {candidate.experiences && candidate.experiences.length > 0 ? (
-                    <div className="space-y-3">
-                      <h4 className="text-xs font-extrabold uppercase tracking-wider text-slate-400">Histórico de Atuação</h4>
-                      {candidate.experiences.map((exp, idx) => (
-                        <div key={idx} className="space-y-1">
-                          <div className="flex justify-between text-xs font-bold text-slate-900">
-                            <span>{exp.role} — <span className="text-slate-600 font-semibold">{exp.company}</span></span>
-                            <span className="text-slate-400 font-normal">{exp.period}</span>
-                          </div>
-                          <p className="text-xs text-slate-600">{exp.description}</p>
-                        </div>
-                      ))}
-                    </div>
-                  ) : null}
-
-                  <div className="space-y-2">
-                    <h4 className="text-xs font-extrabold uppercase tracking-wider text-slate-400">Palavras-Chave e Competências</h4>
-                    <div className="flex flex-wrap gap-1.5">
-                      {(candidate.resumeKeywords && candidate.resumeKeywords.length > 0 
-                        ? candidate.resumeKeywords 
-                        : ['Comunicação', 'Trabalho em Equipe', 'Resolução de Problemas', 'Gestão de Tempo']
-                      ).map((kw, idx) => (
-                        <span key={idx} className="bg-slate-100 text-slate-700 border border-slate-200 text-[11px] font-extrabold px-2.5 py-1 rounded-lg">
-                          {kw}
-                        </span>
-                      ))}
-                    </div>
-                  </div>
-
-                  {!resumeFileUrl && !candidate.objective && (!candidate.experiences || candidate.experiences.length === 0) && (
-                    <div className="bg-slate-50 border border-dashed border-slate-300 rounded-xl p-6 text-center space-y-1">
-                      <FileText className="w-8 h-8 text-slate-400 mx-auto" />
-                      <p className="text-xs font-bold text-slate-700">Currículo não anexado.</p>
-                      <p className="text-[11px] text-slate-500">O candidato preencheu apenas as informações cadastrais básicas.</p>
-                    </div>
-                  )}
+                  <button
+                    onClick={() => navigator.clipboard.writeText(candidate.resumeUrl || window.location.href)}
+                    className="px-3 py-1.5 rounded-xl bg-slate-100 text-slate-700 hover:bg-slate-200 border border-slate-200 text-xs font-bold flex items-center gap-1.5 transition-colors"
+                  >
+                    <Share2 className="w-3.5 h-3.5" />
+                    Compartilhar
+                  </button>
                 </div>
               </div>
-            );
-          })()}
 
-          {/* TAB 3: ANÁLISE IA */}
-          {activeTab === 'ia' && (() => {
-            const aiData = candidate.aiAnalysis || {
-              score: candidate.matchScore || 85,
-              recommendation: candidate.matchScore && candidate.matchScore >= 80 ? 'Recomendado para Avançar' : 'Análise Pendente',
-              summary: 'O candidato possui qualificações aderentes à função solicitada, demonstrando bom alinhamento com os requisitos declarados.',
-              strengths: ['Experiência técnica prévia relevante', 'Perfil comunicativo e proativo', 'Formação alinhada com a vaga'],
-              pointsOfAttention: ['Validar pretensão salarial', 'Verificar disponibilidade de início imediato'],
-              competencies: ['Trabalho em Equipe', 'Resolução de Problemas', 'Comunicação Assertiva'],
-              behavioralAnalysis: 'Demonstra perfil analítico com boa adaptabilidade a novos desafios.',
-              interviewSuggestions: [
-                'Quais foram os principais desafios enfrentados na última experiência profissional?',
-                'Como lida com prazos reduzidos e prioridades concorrentes?'
-              ]
-            };
-
-            return (
-              <div className="space-y-6">
-                {/* IA Score Banner */}
-                <div className="bg-gradient-to-r from-purple-900 via-indigo-900 to-slate-900 text-white rounded-3xl p-6 shadow-xl relative overflow-hidden">
-                  <div className="flex items-center justify-between">
-                    <div className="space-y-2">
-                      <div className="inline-flex items-center gap-2 bg-purple-500/20 text-purple-200 border border-purple-400/30 text-[10px] font-extrabold px-3 py-1 rounded-full uppercase tracking-wider">
-                        <Sparkles className="w-3.5 h-3.5 text-purple-300" /> Triagem & Matching Preditivo IA
-                      </div>
-                      <h3 className="text-xl font-black">{aiData.recommendation}</h3>
-                      <p className="text-xs text-purple-200 max-w-md font-medium">
-                        Análise gerada com base na compatibilidade entre os requisitos da vaga e o perfil do candidato.
-                      </p>
-                    </div>
-
-                    <div className="text-center bg-white/10 backdrop-blur-md px-6 py-4 rounded-2xl border border-white/10 shrink-0">
-                      <span className="text-3xl font-black tracking-tight">{aiData.score}%</span>
-                      <span className="block text-[10px] font-extrabold uppercase tracking-wider text-purple-200">
-                        Score de Match
-                      </span>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Resumo executivo da IA */}
-                <div className="bg-white rounded-2xl p-5 border border-slate-200 shadow-2xs space-y-2">
-                  <h4 className="text-xs font-extrabold uppercase tracking-wider text-slate-400">Resumo Executivo da IA</h4>
-                  <p className="text-xs text-slate-700 leading-relaxed font-medium">
-                    {aiData.summary}
+              {/* Styled Resume Preview */}
+              <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-8 space-y-6">
+                <div className="border-b border-slate-200 pb-4">
+                  <h2 className="text-2xl font-black text-slate-900">{candidate.name}</h2>
+                  <p className="text-xs font-bold text-indigo-600 mt-1">{candidate.role}</p>
+                  <p className="text-xs text-slate-500 mt-1">
+                    {candidate.city}, {candidate.state} • {candidate.phone} • {candidate.email}
                   </p>
                 </div>
 
-                {/* Pontos Fortes e Pontos de Atenção Grid */}
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div className="bg-emerald-50/50 rounded-2xl p-5 border border-emerald-100 space-y-3">
-                    <h4 className="text-xs font-black uppercase tracking-wider text-emerald-800 flex items-center gap-1.5">
-                      <CheckCircle2 className="w-4 h-4 text-emerald-600" />
-                      Pontos Fortes
-                    </h4>
-                    <ul className="space-y-2">
-                      {(aiData.strengths || []).map((st, idx) => (
-                        <li key={idx} className="text-xs text-emerald-900 font-medium flex items-start gap-2">
-                          <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 mt-1.5 shrink-0" />
-                          {st}
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-
-                  <div className="bg-amber-50/50 rounded-2xl p-5 border border-amber-100 space-y-3">
-                    <h4 className="text-xs font-black uppercase tracking-wider text-amber-800 flex items-center gap-1.5">
-                      <AlertTriangle className="w-4 h-4 text-amber-600" />
-                      Pontos de Atenção
-                    </h4>
-                    <ul className="space-y-2">
-                      {(aiData.pointsOfAttention || []).map((pa, idx) => (
-                        <li key={idx} className="text-xs text-amber-900 font-medium flex items-start gap-2">
-                          <span className="w-1.5 h-1.5 rounded-full bg-amber-500 mt-1.5 shrink-0" />
-                          {pa}
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
+                <div className="space-y-2">
+                  <h4 className="text-xs font-extrabold uppercase tracking-wider text-slate-400">Resumo Profissional</h4>
+                  <p className="text-xs text-slate-700 leading-relaxed font-medium">
+                    {candidate.objective} Profissional altamente qualificado com {candidate.experienceYears} anos de experiência sólida em projetos desafiadores e com forte foco em qualidade e entregas.
+                  </p>
                 </div>
 
-                {/* Competências Mapeadas */}
-                <div className="bg-white rounded-2xl p-5 border border-slate-200 shadow-2xs space-y-3">
-                  <h4 className="text-xs font-extrabold uppercase tracking-wider text-slate-400">Competências Mapeadas</h4>
-                  <div className="flex flex-wrap gap-2">
-                    {(aiData.competencies || []).map((comp, idx) => (
-                      <span key={idx} className="bg-indigo-50 text-indigo-700 border border-indigo-100 text-xs font-extrabold px-3 py-1 rounded-xl">
-                        {comp}
+                <div className="space-y-3">
+                  <h4 className="text-xs font-extrabold uppercase tracking-wider text-slate-400">Histórico de Atuação</h4>
+                  {(candidate.experiences || []).map((exp, idx) => (
+                    <div key={idx} className="space-y-1">
+                      <div className="flex justify-between text-xs font-bold text-slate-900">
+                        <span>{exp.role} — <span className="text-slate-600 font-semibold">{exp.company}</span></span>
+                        <span className="text-slate-400 font-normal">{exp.period}</span>
+                      </div>
+                      <p className="text-xs text-slate-600">{exp.description}</p>
+                    </div>
+                  ))}
+                </div>
+
+                <div className="space-y-2">
+                  <h4 className="text-xs font-extrabold uppercase tracking-wider text-slate-400">Palavras-Chave do Currículo</h4>
+                  <div className="flex flex-wrap gap-1.5">
+                    {(candidate.resumeKeywords || ['React', 'TypeScript', 'Node.js', 'Clean Architecture']).map((kw, idx) => (
+                      <span key={idx} className="bg-slate-100 text-slate-700 border border-slate-200 text-[11px] font-extrabold px-2.5 py-1 rounded-lg">
+                        {kw}
                       </span>
                     ))}
                   </div>
                 </div>
+              </div>
+            </div>
+          )}
 
-                {/* Análise Comportamental & Sugestões para Entrevista */}
-                <div className="bg-white rounded-2xl p-5 border border-slate-200 shadow-2xs space-y-4">
-                  <div>
-                    <h4 className="text-xs font-extrabold uppercase tracking-wider text-slate-400 mb-1">Análise Comportamental Preditiva</h4>
-                    <p className="text-xs text-slate-700 font-medium leading-relaxed">{aiData.behavioralAnalysis}</p>
+          {/* TAB 3: ANÁLISE IA */}
+          {activeTab === 'ia' && candidate.aiAnalysis && (
+            <div className="space-y-6">
+              {/* IA Score Banner */}
+              <div className="bg-gradient-to-r from-purple-900 via-indigo-900 to-slate-900 text-white rounded-3xl p-6 shadow-xl relative overflow-hidden">
+                <div className="flex items-center justify-between">
+                  <div className="space-y-2">
+                    <div className="inline-flex items-center gap-2 bg-purple-500/20 text-purple-200 border border-purple-400/30 text-[10px] font-extrabold px-3 py-1 rounded-full uppercase tracking-wider">
+                      <Sparkles className="w-3.5 h-3.5 text-purple-300" /> Triagem & Matching Preditivo IA
+                    </div>
+                    <h3 className="text-xl font-black">{candidate.aiAnalysis.recommendation}</h3>
+                    <p className="text-xs text-purple-200 max-w-md font-medium">
+                      Análise gerada com base na compatibilidade entre os requisitos da vaga e o perfil do candidato.
+                    </p>
                   </div>
 
-                  <div className="border-t border-slate-100 pt-3">
-                    <h4 className="text-xs font-extrabold uppercase tracking-wider text-slate-400 mb-2">Perguntas Sugeridas para a Entrevista</h4>
-                    <ul className="space-y-2">
-                      {(aiData.interviewSuggestions || []).map((sug, idx) => (
-                        <li key={idx} className="text-xs text-slate-700 bg-slate-50 p-2.5 rounded-xl border border-slate-100 font-semibold flex items-start gap-2">
-                          <ChevronRight className="w-4 h-4 text-indigo-600 shrink-0 mt-0.5" />
-                          {sug}
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-                </div>
-
-                {/* Action Decision Buttons */}
-                <div className="bg-slate-100 rounded-2xl p-4 border border-slate-200 flex items-center justify-between gap-2">
-                  <span className="text-xs font-black text-slate-700">Ação do Recrutador com base na Análise:</span>
-                  <div className="flex items-center gap-2">
-                    <button
-                      onClick={() => handleStatusChange('Em Análise RH')}
-                      className="px-3.5 py-2 rounded-xl bg-indigo-600 text-white hover:bg-indigo-700 text-xs font-extrabold shadow-2xs cursor-pointer"
-                    >
-                      Aprovar Triagem
-                    </button>
-                    <button
-                      onClick={() => handleStatusChange('Reprovado')}
-                      className="px-3.5 py-2 rounded-xl bg-rose-600 text-white hover:bg-rose-700 text-xs font-extrabold shadow-2xs cursor-pointer"
-                    >
-                      Reprovar
-                    </button>
+                  <div className="text-center bg-white/10 backdrop-blur-md px-6 py-4 rounded-2xl border border-white/10 shrink-0">
+                    <span className="text-3xl font-black tracking-tight">{candidate.aiAnalysis.score}%</span>
+                    <span className="block text-[10px] font-extrabold uppercase tracking-wider text-purple-200">
+                      Score de Match
+                    </span>
                   </div>
                 </div>
               </div>
-            );
-          })()}
+
+              {/* Resumo executivo da IA */}
+              <div className="bg-white rounded-2xl p-5 border border-slate-200 shadow-2xs space-y-2">
+                <h4 className="text-xs font-extrabold uppercase tracking-wider text-slate-400">Resumo Executivo da IA</h4>
+                <p className="text-xs text-slate-700 leading-relaxed font-medium">
+                  {candidate.aiAnalysis.summary}
+                </p>
+              </div>
+
+              {/* Pontos Fortes e Pontos de Atenção Grid */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="bg-emerald-50/50 rounded-2xl p-5 border border-emerald-100 space-y-3">
+                  <h4 className="text-xs font-black uppercase tracking-wider text-emerald-800 flex items-center gap-1.5">
+                    <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+                    Pontos Fortes
+                  </h4>
+                  <ul className="space-y-2">
+                    {candidate.aiAnalysis.strengths.map((st, idx) => (
+                      <li key={idx} className="text-xs text-emerald-900 font-medium flex items-start gap-2">
+                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 mt-1.5 shrink-0" />
+                        {st}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+
+                <div className="bg-amber-50/50 rounded-2xl p-5 border border-amber-100 space-y-3">
+                  <h4 className="text-xs font-black uppercase tracking-wider text-amber-800 flex items-center gap-1.5">
+                    <AlertTriangle className="w-4 h-4 text-amber-600" />
+                    Pontos de Atenção
+                  </h4>
+                  <ul className="space-y-2">
+                    {candidate.aiAnalysis.pointsOfAttention.map((pa, idx) => (
+                      <li key={idx} className="text-xs text-amber-900 font-medium flex items-start gap-2">
+                        <span className="w-1.5 h-1.5 rounded-full bg-amber-500 mt-1.5 shrink-0" />
+                        {pa}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              </div>
+
+              {/* Competências Mapeadas */}
+              <div className="bg-white rounded-2xl p-5 border border-slate-200 shadow-2xs space-y-3">
+                <h4 className="text-xs font-extrabold uppercase tracking-wider text-slate-400">Competências Mapeadas</h4>
+                <div className="flex flex-wrap gap-2">
+                  {candidate.aiAnalysis.competencies.map((comp, idx) => (
+                    <span key={idx} className="bg-indigo-50 text-indigo-700 border border-indigo-100 text-xs font-extrabold px-3 py-1 rounded-xl">
+                      {comp}
+                    </span>
+                  ))}
+                </div>
+              </div>
+
+              {/* Análise Comportamental & Sugestões para Entrevista */}
+              <div className="bg-white rounded-2xl p-5 border border-slate-200 shadow-2xs space-y-4">
+                <div>
+                  <h4 className="text-xs font-extrabold uppercase tracking-wider text-slate-400 mb-1">Análise Comportamental Preditiva</h4>
+                  <p className="text-xs text-slate-700 font-medium leading-relaxed">{candidate.aiAnalysis.behavioralAnalysis}</p>
+                </div>
+
+                <div className="border-t border-slate-100 pt-3">
+                  <h4 className="text-xs font-extrabold uppercase tracking-wider text-slate-400 mb-2">Perguntas Sugeridas para a Entrevista</h4>
+                  <ul className="space-y-2">
+                    {candidate.aiAnalysis.interviewSuggestions.map((sug, idx) => (
+                      <li key={idx} className="text-xs text-slate-700 bg-slate-50 p-2.5 rounded-xl border border-slate-100 font-semibold flex items-start gap-2">
+                        <ChevronRight className="w-4 h-4 text-indigo-600 shrink-0 mt-0.5" />
+                        {sug}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              </div>
+
+              {/* Action Decision Buttons */}
+              <div className="bg-slate-100 rounded-2xl p-4 border border-slate-200 flex items-center justify-between gap-2">
+                <span className="text-xs font-black text-slate-700">Ação do Recrutador com base na Análise:</span>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => handleStatusChange('Em Análise RH')}
+                    className="px-3.5 py-2 rounded-xl bg-indigo-600 text-white hover:bg-indigo-700 text-xs font-extrabold shadow-2xs"
+                  >
+                    Aprovar Triagem
+                  </button>
+                  <button
+                    onClick={() => handleStatusChange('Reprovado')}
+                    className="px-3.5 py-2 rounded-xl bg-rose-600 text-white hover:bg-rose-700 text-xs font-extrabold shadow-2xs"
+                  >
+                    Reprovar
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
 
           {/* TAB 4: ENTREVISTAS */}
           {activeTab === 'entrevistas' && (
             <div className="space-y-6">
-              {loadingInterviews ? (
-                <div className="bg-white rounded-2xl p-8 border border-slate-200 text-center space-y-2">
-                  <div className="w-6 h-6 border-2 border-indigo-600 border-t-transparent rounded-full animate-spin mx-auto" />
-                  <p className="text-xs font-bold text-slate-600">Carregando entrevistas do banco de dados...</p>
-                </div>
-              ) : interviewsError ? (
-                <div className="bg-rose-50 border border-rose-200 p-4 rounded-2xl text-xs font-bold text-rose-800">
-                  {interviewsError}
-                </div>
-              ) : (dbInterviews.length > 0 || candidate.interview) ? (
-                <div className="space-y-4">
-                  <div className="flex items-center justify-between">
-                    <h3 className="text-xs font-extrabold uppercase tracking-wider text-slate-400">
-                      Entrevistas do Candidato ({dbInterviews.length || (candidate.interview ? 1 : 0)})
-                    </h3>
-                    <Button type="button" variant="primary" size="sm" onClick={() => setIsScheduleModalOpen(true)}>
-                      + Agendar Nova Entrevista
-                    </Button>
+              {candidate.interview ? (
+                <div className="bg-white rounded-2xl p-6 border border-indigo-200 shadow-sm space-y-4">
+                  <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+                    <div className="flex items-center gap-2">
+                      <span className="w-2.5 h-2.5 rounded-full bg-indigo-600 animate-pulse" />
+                      <h3 className="text-sm font-black text-slate-900">Próxima Entrevista Agendada</h3>
+                    </div>
+                    <span className="text-xs font-extrabold bg-indigo-50 text-indigo-700 px-3 py-1 rounded-full border border-indigo-100">
+                      {candidate.interview.type}
+                    </span>
                   </div>
 
-                  {candidate.interview && !dbInterviews.some(i => i.date === candidate.interview?.date && i.time === candidate.interview?.time) && (
-                    <div className="bg-white rounded-2xl p-6 border border-indigo-200 shadow-sm space-y-4">
-                      <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-                        <div className="flex items-center gap-2">
-                          <span className="w-2.5 h-2.5 rounded-full bg-indigo-600 animate-pulse" />
-                          <h3 className="text-sm font-black text-slate-900">Entrevista Registrada</h3>
-                        </div>
-                        <span className="text-xs font-extrabold bg-indigo-50 text-indigo-700 px-3 py-1 rounded-full border border-indigo-100">
-                          {candidate.interview.type}
-                        </span>
-                      </div>
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-xs font-medium">
+                    <div>
+                      <span className="text-slate-400 block text-[10px] uppercase font-bold">Data</span>
+                      <span className="font-extrabold text-slate-800">{candidate.interview.date}</span>
+                    </div>
 
-                      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-xs font-medium">
-                        <div>
-                          <span className="text-slate-400 block text-[10px] uppercase font-bold">Data</span>
-                          <span className="font-extrabold text-slate-800">{candidate.interview.date}</span>
-                        </div>
-                        <div>
-                          <span className="text-slate-400 block text-[10px] uppercase font-bold">Horário</span>
-                          <span className="font-extrabold text-slate-800">{candidate.interview.time}</span>
-                        </div>
-                        <div>
-                          <span className="text-slate-400 block text-[10px] uppercase font-bold">Entrevistador</span>
-                          <span className="font-extrabold text-slate-800">{candidate.interview.interviewer}</span>
-                        </div>
-                        <div>
-                          <span className="text-slate-400 block text-[10px] uppercase font-bold">Status</span>
-                          <span className="font-extrabold text-emerald-600">{candidate.interview.status || 'Agendada'}</span>
-                        </div>
-                      </div>
+                    <div>
+                      <span className="text-slate-400 block text-[10px] uppercase font-bold">Horário</span>
+                      <span className="font-extrabold text-slate-800">{candidate.interview.time}</span>
+                    </div>
 
-                      {candidate.interview.meetingLink && (
-                        <div className="p-3 bg-indigo-50/60 rounded-xl border border-indigo-100 flex items-center justify-between text-xs">
-                          <div className="flex items-center gap-2 font-bold text-indigo-900">
-                            <Video className="w-4 h-4 text-indigo-600" />
-                            <span>Link da Reunião:</span>
-                            <a href={candidate.interview.meetingLink} target="_blank" rel="noopener noreferrer" className="underline hover:text-indigo-700 truncate max-w-xs">
-                              {candidate.interview.meetingLink}
-                            </a>
-                          </div>
-                          <a href={candidate.interview.meetingLink} target="_blank" rel="noopener noreferrer" className="px-3 py-1 bg-indigo-600 text-white font-bold rounded-lg hover:bg-indigo-700 text-[11px] shrink-0">
-                            Acessar Reunião
-                          </a>
-                        </div>
-                      )}
+                    <div>
+                      <span className="text-slate-400 block text-[10px] uppercase font-bold">Entrevistador</span>
+                      <span className="font-extrabold text-slate-800">{candidate.interview.interviewer}</span>
+                    </div>
 
-                      <div className="flex items-center gap-2 pt-2 flex-wrap">
-                        <Button type="button" variant="outline" size="sm" onClick={() => setIsScheduleModalOpen(true)}>
-                          Editar Entrevista
-                        </Button>
-                        <Button type="button" variant="primary" size="sm" onClick={openEvaluationModal}>
-                          Avaliar & Feedback
-                        </Button>
+                    <div>
+                      <span className="text-slate-400 block text-[10px] uppercase font-bold">Status</span>
+                      <span className="font-extrabold text-emerald-600">{candidate.interview.status || 'Agendada'}</span>
+                    </div>
+                  </div>
+
+                  {candidate.interview.meetingLink && (
+                    <div className="p-3 bg-indigo-50/60 rounded-xl border border-indigo-100 flex items-center justify-between text-xs">
+                      <div className="flex items-center gap-2 font-bold text-indigo-900">
+                        <Video className="w-4 h-4 text-indigo-600" />
+                        <span>Link da Reunião:</span>
+                        <a href={candidate.interview.meetingLink} target="_blank" rel="noopener noreferrer" className="underline hover:text-indigo-700 truncate max-w-xs">
+                          {candidate.interview.meetingLink}
+                        </a>
                       </div>
+                      <a href={candidate.interview.meetingLink} target="_blank" rel="noopener noreferrer" className="px-3 py-1 bg-indigo-600 text-white font-bold rounded-lg hover:bg-indigo-700 text-[11px] shrink-0">
+                        Acessar Reunião
+                      </a>
                     </div>
                   )}
 
-                  {dbInterviews.map((item) => (
-                    <div key={item.id} className="bg-white rounded-2xl p-6 border border-slate-200 shadow-sm space-y-4">
-                      <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-                        <div className="flex items-center gap-2">
-                          <span className="w-2.5 h-2.5 rounded-full bg-emerald-500" />
-                          <h3 className="text-sm font-black text-slate-900">{item.title || 'Entrevista do Processo Seletivo'}</h3>
-                        </div>
-                        <span className="text-xs font-extrabold bg-indigo-50 text-indigo-700 px-3 py-1 rounded-full border border-indigo-100">
-                          {item.type || item.tipo || 'Online'}
-                        </span>
-                      </div>
-
-                      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-xs font-medium">
-                        <div>
-                          <span className="text-slate-400 block text-[10px] uppercase font-bold">Data</span>
-                          <span className="font-extrabold text-slate-800">{item.data || item.date}</span>
-                        </div>
-                        <div>
-                          <span className="text-slate-400 block text-[10px] uppercase font-bold">Horário</span>
-                          <span className="font-extrabold text-slate-800">{item.horario || item.time}</span>
-                        </div>
-                        <div>
-                          <span className="text-slate-400 block text-[10px] uppercase font-bold">Entrevistador</span>
-                          <span className="font-extrabold text-slate-800">{item.entrevistador || item.interviewer || 'RH'}</span>
-                        </div>
-                        <div>
-                          <span className="text-slate-400 block text-[10px] uppercase font-bold">Status</span>
-                          <span className="font-extrabold text-emerald-600">{item.status || 'Agendada'}</span>
-                        </div>
-                      </div>
-
-                      {(item.linkMeeting || item.meetingLink) && (
-                        <div className="p-3 bg-indigo-50/60 rounded-xl border border-indigo-100 flex items-center justify-between text-xs">
-                          <div className="flex items-center gap-2 font-bold text-indigo-900">
-                            <Video className="w-4 h-4 text-indigo-600" />
-                            <span>Link da Reunião:</span>
-                            <a href={item.linkMeeting || item.meetingLink} target="_blank" rel="noopener noreferrer" className="underline hover:text-indigo-700 truncate max-w-xs">
-                              {item.linkMeeting || item.meetingLink}
-                            </a>
-                          </div>
-                          <a href={item.linkMeeting || item.meetingLink} target="_blank" rel="noopener noreferrer" className="px-3 py-1 bg-indigo-600 text-white font-bold rounded-lg hover:bg-indigo-700 text-[11px] shrink-0">
-                            Acessar Reunião
-                          </a>
-                        </div>
-                      )}
-
-                      {item.observacoes && (
-                        <div className="text-xs text-slate-600 bg-slate-50 p-3 rounded-xl border border-slate-100">
-                          <span className="font-bold text-slate-800 block mb-0.5">Observações:</span>
-                          {item.observacoes}
-                        </div>
-                      )}
+                  {candidate.interview.notes && (
+                    <div className="text-xs text-slate-600 bg-slate-50 p-3 rounded-xl border border-slate-100">
+                      <span className="font-bold text-slate-800 block mb-0.5">Pauta & Observações:</span>
+                      {candidate.interview.notes}
                     </div>
-                  ))}
+                  )}
+
+                  <div className="flex items-center gap-2 pt-2 flex-wrap">
+                    <Button type="button" variant="outline" size="sm" onClick={() => setIsScheduleModalOpen(true)}>
+                      Editar Entrevista
+                    </Button>
+                    <Button type="button" variant="primary" size="sm" onClick={openEvaluationModal}>
+                      Avaliar & Feedback
+                    </Button>
+                  </div>
                 </div>
               ) : (
                 <div className="bg-white rounded-2xl p-8 border border-slate-200 text-center space-y-3">
@@ -1567,9 +1155,6 @@ export const CandidateDrawerPanel: React.FC<CandidateDrawerPanelProps> = ({
         onSave={async (data) => {
           try {
             await JobCandidateService.updateInterview(candidate.id, data, jobTitle);
-            candidate.interview = data;
-            await fetchInterviewsFromDb();
-            setActiveTab('entrevistas');
             await onRefresh();
             alert(`🗓️ Entrevista para ${candidate.name} salva com sucesso para ${data.date} às ${data.time}!`);
           } catch (err: any) {
@@ -1838,49 +1423,13 @@ export const CandidateDrawerPanel: React.FC<CandidateDrawerPanelProps> = ({
             </div>
 
             <div className="space-y-4">
-              <div className="bg-teal-50/80 border border-teal-200 p-4 rounded-2xl space-y-2">
+              <div className="bg-teal-50/80 border border-teal-200 p-4 rounded-2xl">
                 <p className="text-xs font-bold text-teal-900">
                   Deseja contratar <span className="underline">{candidate.name}</span> para a vaga <span className="underline">{jobTitle || candidate.role}</span>?
                 </p>
-                <p className="text-[11px] text-teal-700">
-                  Selecione o destino do candidato aprovado no processo seletivo:
+                <p className="text-[11px] text-teal-700 mt-1">
+                  O candidato receberá status "Contratado" e o registro será encaminhado para a Fila de Admissão do Departamento Pessoal.
                 </p>
-
-                <div className="space-y-2 pt-1">
-                  {capabilities.hasDP && (
-                    <label className="flex items-center gap-2 p-2.5 rounded-xl bg-white border border-teal-200 cursor-pointer text-xs font-bold text-teal-950 hover:bg-teal-50/60 transition-colors">
-                      <input
-                        type="radio"
-                        name="hireDest"
-                        value="departamento_pessoal"
-                        checked={hireDestination === 'departamento_pessoal'}
-                        onChange={() => setHireDestination('departamento_pessoal')}
-                        className="text-teal-600 focus:ring-teal-500"
-                      />
-                      <span>RH Interno / Encaminhar para Departamento Pessoal (Fila de Admissão)</span>
-                    </label>
-                  )}
-
-                  {capabilities.hasHeadhunter && (
-                    <label className="flex items-center gap-2 p-2.5 rounded-xl bg-white border border-teal-200 cursor-pointer text-xs font-bold text-teal-950 hover:bg-teal-50/60 transition-colors">
-                      <input
-                        type="radio"
-                        name="hireDest"
-                        value="headhunter"
-                        checked={hireDestination === 'headhunter'}
-                        onChange={() => setHireDestination('headhunter')}
-                        className="text-teal-600 focus:ring-teal-500"
-                      />
-                      <span>Vaga de Cliente (Headhunter) / Encaminhar para Faturamento / Gestão</span>
-                    </label>
-                  )}
-
-                  {!capabilities.hasDP && !capabilities.hasHeadhunter && (
-                    <p className="text-xs font-medium text-amber-900 bg-amber-50 p-2.5 rounded-xl border border-amber-200">
-                      O candidato será marcado como contratado e registrado no histórico do processo seletivo.
-                    </p>
-                  )}
-                </div>
               </div>
 
               <div className="bg-slate-50 border border-slate-200 p-4 rounded-2xl space-y-2">

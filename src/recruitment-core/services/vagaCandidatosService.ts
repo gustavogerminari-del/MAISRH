@@ -13,7 +13,7 @@ import {
   serverTimestamp
 } from 'firebase/firestore';
 import { db } from '../../lib/firebase';
-import { sanitizeFirestoreData } from '../../lib/firestoreUtils';
+import { sanitizeFirestoreData, safeFirestoreWrite, safeFirestoreRead, OperationType } from '../../lib/firestoreUtils';
 import { UnifiedCandidate, ProcessStage, UnifiedInterview } from '../types/recruitment';
 
 export interface CandidaturaDoc {
@@ -279,25 +279,25 @@ export class VagaCandidatosService {
           id: candidateId || docSnap.id,
           candidaturaId: docSnap.id,
           empresaId: candData.empresaId || empresaId,
-          nome: candidateProfile?.nome || (candidateProfile as any)?.name || (candData as any).name || (candData as any).nome || 'Candidato Sem Nome',
-          email: candidateProfile?.email || (candData as any).email || 'email@exemplo.com',
-          telefone: candidateProfile?.telefone || (candidateProfile as any)?.phone || (candData as any).phone || (candData as any).telefone || '(00) 00000-0000',
-          fotoUrl: candidateProfile?.fotoUrl || candidateProfile?.avatar || (candData as any).photo || (candData as any).avatar,
-          cidade: candidateProfile?.cidade || candidateProfile?.location || (candData as any).city || (candData as any).cidade || 'Não informada',
-          cargoAtual: candidateProfile?.cargoAtual || candidateProfile?.role || (candData as any).role || 'Profissional',
-          cargoPretendido: candidateProfile?.cargoPretendido || (candData as any).role || 'Vaga Aberta',
-          escolaridade: candidateProfile?.escolaridade || (candData as any).education || 'Superior Completo',
-          experienciaAnos: candidateProfile?.experienciaAnos || (candData as any).experienceYears || 3,
-          pretensaoSalarial: candidateProfile?.pretensaoSalarial || (candData as any).salaryExpectation,
+          nome: candidateProfile?.nome || (candidateProfile as any)?.name || 'Candidato Sem Nome',
+          email: candidateProfile?.email || 'email@exemplo.com',
+          telefone: candidateProfile?.telefone || (candidateProfile as any)?.phone || '(00) 00000-0000',
+          fotoUrl: candidateProfile?.fotoUrl || candidateProfile?.avatar,
+          cidade: candidateProfile?.cidade || candidateProfile?.location || 'Não informada',
+          cargoAtual: candidateProfile?.cargoAtual || candidateProfile?.role || 'Profissional',
+          cargoPretendido: candidateProfile?.cargoPretendido || 'Vaga Aberta',
+          escolaridade: candidateProfile?.escolaridade || 'Superior Completo',
+          experienciaAnos: candidateProfile?.experienciaAnos || 3,
+          pretensaoSalarial: candidateProfile?.pretensaoSalarial,
           competencias: candidateProfile?.competencias || [],
           status: candData.status === 'Contratado' ? 'Contratado' : candData.status === 'Reprovado' ? 'Indisponível' : 'Em Processo',
-          etapaAtual: candData.etapa || (candData as any).status || 'Inscrito',
-          dataCandidatura: candData.createdAt || (candData as any).appliedDate || new Date().toISOString(),
-          matchIaPercent: candData.matchIa || candidateProfile?.matchIaPercent || (candData as any).compatibilityScore || 85,
-          triagemIaScore: candData.matchIa || candidateProfile?.triagemIaScore || (candData as any).compatibilityScore || 85,
+          etapaAtual: candData.etapa || 'Inscrito',
+          dataCandidatura: candData.createdAt || new Date().toISOString(),
+          matchIaPercent: candData.matchIa || candidateProfile?.matchIaPercent || 85,
+          triagemIaScore: candData.matchIa || candidateProfile?.triagemIaScore || 85,
           triagemIaParecer: candData.triagemIaParecer || candidateProfile?.triagemIaParecer || 'Candidato qualificado.',
           source: (candData.origem as any) || candidateProfile?.source || 'Portal de Vagas',
-          curriculoUrl: candidateProfile?.curriculoUrl || candidateProfile?.resumeUrl || (candData as any).resumeUrl || (candData as any).curriculoUrl,
+          curriculoUrl: candidateProfile?.curriculoUrl || candidateProfile?.resumeUrl,
           curriculoTexto: candidateProfile?.curriculoTexto,
           linhaDoTempo: candidateProfile?.linhaDoTempo || [
             { data: candData.createdAt || new Date().toISOString(), titulo: 'Candidatou-se', detalhe: 'Inscrição efetuada na vaga' }
@@ -350,11 +350,13 @@ export class VagaCandidatosService {
       updatedAt: now
     };
 
-    try {
-      await setDoc(docRef, sanitizeFirestoreData(candidaturaObj), { merge: true });
-    } catch (err) {
-      console.error('Erro ao salvar candidatura no Firestore:', err);
-    }
+    await safeFirestoreWrite(
+      async () => {
+        await setDoc(docRef, sanitizeFirestoreData(candidaturaObj), { merge: true });
+      },
+      OperationType.WRITE,
+      `candidaturas/${docId}`
+    );
 
     return docId;
   }
@@ -363,17 +365,19 @@ export class VagaCandidatosService {
    * Move stage of a candidate
    */
   static async moveStage(candidaturaId: string, candidateId: string, newStage: ProcessStage): Promise<void> {
-    try {
-      if (candidaturaId && !candidaturaId.startsWith('candproc-')) {
-        const docRef = doc(db, 'candidaturas', candidaturaId);
-        await updateDoc(docRef, {
-          etapa: newStage,
-          status: newStage === 'Contratado' ? 'Contratado' : newStage === 'Reprovado' ? 'Reprovado' : 'Em Análise',
-          updatedAt: new Date().toISOString()
-        });
-      }
-    } catch (err) {
-      console.warn('Firestore update stage note:', err);
+    if (candidaturaId && !candidaturaId.startsWith('candproc-')) {
+      const docRef = doc(db, 'candidaturas', candidaturaId);
+      await safeFirestoreWrite(
+        async () => {
+          await updateDoc(docRef, {
+            etapa: newStage,
+            status: newStage === 'Contratado' ? 'Contratado' : newStage === 'Reprovado' ? 'Reprovado' : 'Em Análise',
+            updatedAt: new Date().toISOString()
+          });
+        },
+        OperationType.UPDATE,
+        `candidaturas/${candidaturaId}`
+      );
     }
   }
 
@@ -381,25 +385,32 @@ export class VagaCandidatosService {
    * Add team annotation/note to a candidate profile
    */
   static async addAnnotation(candidateId: string, autor: string, texto: string): Promise<void> {
-    try {
-      if (!candidateId.startsWith('cand-')) {
-        const candRef = doc(db, 'candidatos', candidateId);
-        const candSnap = await getDoc(candRef);
-        if (candSnap.exists()) {
-          const existingNotes = candSnap.data().anotacoes || [];
-          const newNote = {
-            id: `note-${Date.now()}`,
-            autor,
-            data: new Date().toISOString().replace('T', ' ').substring(0, 16),
-            texto
-          };
-          await updateDoc(candRef, {
-            anotacoes: [newNote, ...existingNotes]
-          });
-        }
+    if (!candidateId.startsWith('cand-')) {
+      const candRef = doc(db, 'candidatos', candidateId);
+      const candRead = await safeFirestoreRead(
+        async () => getDoc(candRef),
+        OperationType.GET,
+        `candidatos/${candidateId}`,
+        null
+      );
+      if (candRead.data && candRead.data.exists()) {
+        const existingNotes = candRead.data.data().anotacoes || [];
+        const newNote = {
+          id: `note-${Date.now()}`,
+          autor,
+          data: new Date().toISOString().replace('T', ' ').substring(0, 16),
+          texto
+        };
+        await safeFirestoreWrite(
+          async () => {
+            await updateDoc(candRef, {
+              anotacoes: [newNote, ...existingNotes]
+            });
+          },
+          OperationType.UPDATE,
+          `candidatos/${candidateId}`
+        );
       }
-    } catch (err) {
-      console.warn('Erro ao salvar anotação:', err);
     }
   }
 }

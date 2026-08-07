@@ -195,13 +195,6 @@ function MainAppContent() {
 
     try {
       await JobService.create(newJob);
-      const isMaster = user?.role === 'Super Administrador' || user?.role === 'MASTER' || user?.tipoUsuario === 'MASTER' || user?.isMaster === true;
-      const userCompanyId = isMaster ? undefined : (user?.empresaId || user?.companyId || user?.tenantId);
-      const reloaded = await JobService.list(userCompanyId);
-      if (reloaded && reloaded.length > 0) {
-        setJobs(reloaded);
-        return;
-      }
     } catch (err) {
       console.warn('Erro ao salvar nova vaga no Firestore:', err);
     }

@@ -14,7 +14,6 @@ import { Candidate } from '../types/rh';
 import { INITIAL_CANDIDATES } from '../data/initialData';
 import { AuditService } from './AuditService';
 
-const PRIMARY_COLLECTION = 'candidates';
 const COLLECTION_NAME = 'candidates';
 const APPLICATIONS_COLLECTION = 'applications';
 
@@ -33,116 +32,38 @@ export interface ApplicationDoc {
 }
 
 export class CandidateService {
-  static async getByEmail(email: string, companyId?: string): Promise<Candidate | null> {
-    if (!email) return null;
-    const normEmail = email.toLowerCase().trim();
-    try {
-      const candidatesRef = collection(db, PRIMARY_COLLECTION);
-      const q = companyId 
-        ? query(candidatesRef, where('email', '==', normEmail), where('companyId', '==', companyId))
-        : query(candidatesRef, where('email', '==', normEmail));
-      const snap = await getDocs(q);
-      if (!snap.empty) {
-        const d = snap.docs[0];
-        return { ...(d.data() as Candidate), id: d.id };
-      }
-    } catch (err: any) {
-      console.error("FLOW ERROR in CandidateService.getByEmail:", {
-        email: normEmail,
-        companyId,
-        code: err?.code,
-        message: err?.message
-      });
-      throw err;
-    }
-    return null;
-  }
-
-  static async createOrGetByEmail(data: Partial<Candidate> & { companyId: string }): Promise<Candidate> {
-    if (!data.email || !data.name) {
-      throw new Error('Nome e e-mail do candidato são obrigatórios.');
-    }
-    if (!data.companyId) {
-      throw new Error('Não foi possível identificar a empresa do candidato.');
-    }
-    const normEmail = data.email.toLowerCase().trim();
-    const existing = await this.getByEmail(normEmail, data.companyId);
-
-    if (existing) {
-      return existing;
-    }
-
-    return this.create({
-      ...data,
-      email: normEmail
-    });
-  }
-
   static async create(candidateData: Partial<Candidate> & { companyId?: string }): Promise<Candidate> {
+    const id = candidateData.id || `cand-${Date.now()}`;
     const user = auth.currentUser;
     const now = new Date().toISOString().split('T')[0];
-    const companyId = candidateData.companyId || (candidateData as any).empresaId;
+    const companyId = candidateData.companyId || 'emp-001';
 
-    if (!companyId) {
-      throw new Error('Não foi possível identificar a empresa do candidato.');
-    }
-
-    const name = candidateData.name || (candidateData as any).nome;
-    const email = candidateData.email ? candidateData.email.toLowerCase().trim() : '';
-
-    if (!name || !email) {
-      throw new Error('Nome e e-mail do candidato são obrigatórios.');
-    }
-
-    // Reuse existing candidate if email exists to avoid duplication
-    let id = candidateData.id;
-    if (email) {
-      const existing = await this.getByEmail(email, companyId);
-      if (existing) {
-        id = existing.id;
-      }
-    }
-    if (!id) {
-      id = `cand-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
-    }
-
-    const candidate: Record<string, any> = {
+    const candidate: Candidate & { companyId: string; createdBy: string; createdAt: string; updatedAt: string } = {
       id,
-      name,
-      nome: name,
-      email,
-      phone: candidateData.phone || (candidateData as any).telefone || '',
-      telefone: candidateData.phone || (candidateData as any).telefone || '',
-      role: candidateData.role || (candidateData as any).cargoAtual || '',
-      cargoAtual: candidateData.role || (candidateData as any).cargoAtual || '',
-      location: candidateData.location || (candidateData as any).cidade || '',
-      cidade: candidateData.location || (candidateData as any).cidade || '',
-      experienceYears: Number(candidateData.experienceYears) || 0,
-      experienciaAnos: Number(candidateData.experienceYears) || 0,
-      skills: candidateData.skills || [],
+      name: candidateData.name || 'Novo Candidato',
+      email: candidateData.email || 'candidato@email.com',
+      phone: candidateData.phone || '(11) 99999-9999',
+      role: candidateData.role || 'Desenvolvedor',
+      location: candidateData.location || 'São Paulo - SP',
+      experienceYears: candidateData.experienceYears || 3,
+      skills: candidateData.skills || ['React', 'TypeScript'],
       status: candidateData.status || 'Em Processo',
-      currentJobId: candidateData.currentJobId || (candidateData as any).vagaId || '',
-      vagaId: candidateData.currentJobId || (candidateData as any).vagaId || '',
+      currentJobId: candidateData.currentJobId || 'vaga-1',
       currentStageId: candidateData.currentStageId || 'triagem',
-      rating: candidateData.rating || 0,
-      notes: candidateData.notes || '',
+      rating: candidateData.rating || 4,
+      notes: candidateData.notes || 'Candidato promissor',
       avatar: candidateData.avatar || '',
       appliedDate: candidateData.appliedDate || now,
-      source: (candidateData.source && ['LinkedIn', 'Indicação', 'Site Institucional', 'Gupy', 'Outro'].includes(candidateData.source) ? candidateData.source : 'Site Institucional') as any,
-      salaryExpectation: candidateData.salaryExpectation || '',
-      resumeUrl: candidateData.resumeUrl || (candidateData as any).curriculoUrl || '',
-      curriculoUrl: candidateData.resumeUrl || (candidateData as any).curriculoUrl || '',
+      source: candidateData.source || 'LinkedIn',
+      salaryExpectation: candidateData.salaryExpectation || 'A combinar',
       companyId,
-      empresaId: companyId,
       createdBy: user?.uid || 'system',
       createdAt: now,
       updatedAt: new Date().toISOString()
     };
 
     try {
-      const sanitized = sanitizeFirestoreData(candidate);
-      await setDoc(doc(db, PRIMARY_COLLECTION, id), sanitized, { merge: true });
-
+      await setDoc(doc(db, COLLECTION_NAME, id), sanitizeFirestoreData(candidate), { merge: true });
       await AuditService.log({
         action: 'CREATE',
         description: `Candidato ${candidate.name} cadastrado no Banco de Talentos`,
@@ -150,43 +71,19 @@ export class CandidateService {
         targetEntity: 'Candidato',
         companyId
       });
-    } catch (err: any) {
-      console.error('FLOW ERROR in CandidateService.create:', {
-        candidateId: id,
-        companyId,
-        code: err?.code,
-        message: err?.message
-      });
-      throw err;
+    } catch (err) {
+      console.warn('Erro ao salvar candidato no Firestore:', err);
     }
 
-    return candidate as unknown as Candidate;
+    return candidate;
   }
 
   static async update(id: string, data: Partial<Candidate>): Promise<void> {
-    let cId = (data as any).companyId || (data as any).empresaId;
-    if (!cId) {
-      try {
-        const snap = await getDoc(doc(db, PRIMARY_COLLECTION, id));
-        if (snap.exists()) {
-          const docData = snap.data();
-          cId = docData.companyId || docData.empresaId;
-        }
-      } catch (e) {
-        console.warn('Aviso ao consultar candidato no Banco de Talentos para obter empresaId:', e);
-      }
-    }
-    cId = cId || 'emp-001';
-
     try {
-      const updateData = sanitizeFirestoreData({
+      await setDoc(doc(db, COLLECTION_NAME, id), sanitizeFirestoreData({
         ...data,
-        companyId: cId,
-        empresaId: cId,
         updatedAt: new Date().toISOString()
-      });
-
-      await setDoc(doc(db, PRIMARY_COLLECTION, id), updateData, { merge: true });
+      }), { merge: true });
 
       await AuditService.log({
         action: 'UPDATE',
@@ -194,32 +91,22 @@ export class CandidateService {
         moduleName: 'Banco de Talentos',
         targetEntity: 'Candidato'
       });
-    } catch (err: any) {
-      console.error('FLOW ERROR in CandidateService.update:', {
-        candidateId: id,
-        code: err?.code,
-        message: err?.message
-      });
-      throw err;
+    } catch (err) {
+      console.warn('Erro ao atualizar candidato no Firestore:', err);
     }
   }
 
   static async delete(id: string): Promise<void> {
     try {
-      await deleteDoc(doc(db, PRIMARY_COLLECTION, id));
+      await deleteDoc(doc(db, COLLECTION_NAME, id));
       await AuditService.log({
         action: 'DELETE',
         description: `Candidato ${id} excluído do Banco de Talentos`,
         moduleName: 'Banco de Talentos',
         targetEntity: 'Candidato'
       });
-    } catch (err: any) {
-      console.error('FLOW ERROR in CandidateService.delete:', {
-        candidateId: id,
-        code: err?.code,
-        message: err?.message
-      });
-      throw err;
+    } catch (err) {
+      console.warn('Erro ao excluir candidato no Firestore:', err);
     }
   }
 
@@ -227,11 +114,10 @@ export class CandidateService {
     try {
       const snap = await getDoc(doc(db, COLLECTION_NAME, id));
       if (snap.exists()) {
-        return { ...(snap.data() as Candidate), id: snap.id };
+        return snap.data() as Candidate;
       }
-    } catch (err: any) {
-      console.error('FLOW ERROR in CandidateService.getById:', { candidateId: id, code: err?.code, message: err?.message });
-      throw err;
+    } catch (err) {
+      console.warn('Erro em CandidateService.getById:', err);
     }
     return null;
   }
@@ -246,17 +132,15 @@ export class CandidateService {
         ? query(collection(db, COLLECTION_NAME), where('companyId', '==', companyId))
         : collection(db, COLLECTION_NAME);
       const snap = await getDocs(q);
-      const list: Candidate[] = [];
-      snap.forEach(d => list.push({ ...(d.data() as Candidate), id: d.id }));
-      return list;
-    } catch (err: any) {
-      console.error('CANDIDATE LIST ERROR in CandidateService.list:', {
-        companyId,
-        code: err?.code,
-        message: err?.message
-      });
-      throw err;
+      if (!snap.empty) {
+        const list: Candidate[] = [];
+        snap.forEach(d => list.push(d.data() as Candidate));
+        return list;
+      }
+    } catch (err) {
+      console.warn('Erro em CandidateService.list:', err);
     }
+    return INITIAL_CANDIDATES;
   }
 
   static async search(term: string, companyId?: string): Promise<Candidate[]> {
@@ -266,7 +150,7 @@ export class CandidateService {
       c.name.toLowerCase().includes(lower) || 
       c.email.toLowerCase().includes(lower) ||
       (c.role && c.role.toLowerCase().includes(lower)) ||
-      (c.skills && c.skills.some(s => s.toLowerCase().includes(lower)))
+      c.skills.some(s => s.toLowerCase().includes(lower))
     );
   }
 
@@ -286,18 +170,15 @@ export class CandidateService {
 
   // CANDIDATURAS
   static async createApplication(app: Partial<ApplicationDoc>): Promise<ApplicationDoc> {
-    if (!app.companyId || !app.jobId || !app.candidateId) {
-      throw new Error('companyId, jobId e candidateId são obrigatórios para registrar a candidatura.');
-    }
     const id = app.id || `app-${Date.now()}`;
     const user = auth.currentUser;
     const now = new Date().toISOString();
 
     const applicationDoc: ApplicationDoc = {
       id,
-      companyId: app.companyId,
-      jobId: app.jobId,
-      candidateId: app.candidateId,
+      companyId: app.companyId || 'emp-001',
+      jobId: app.jobId || 'vaga-1',
+      candidateId: app.candidateId || 'cand-1',
       stage: app.stage || 'triagem',
       rating: app.rating || 3,
       notes: app.notes || '',
@@ -309,9 +190,8 @@ export class CandidateService {
 
     try {
       await setDoc(doc(db, APPLICATIONS_COLLECTION, id), sanitizeFirestoreData(applicationDoc), { merge: true });
-    } catch (err: any) {
-      console.error('FLOW ERROR em CandidateService.createApplication:', { id, code: err?.code, message: err?.message });
-      throw err;
+    } catch (err) {
+      console.warn('Erro ao salvar candidatura no Firestore:', err);
     }
 
     return applicationDoc;
@@ -322,11 +202,11 @@ export class CandidateService {
       const q = query(collection(db, APPLICATIONS_COLLECTION), where('jobId', '==', jobId));
       const snap = await getDocs(q);
       const list: ApplicationDoc[] = [];
-      snap.forEach(d => list.push({ ...(d.data() as ApplicationDoc), id: d.id }));
+      snap.forEach(d => list.push(d.data() as ApplicationDoc));
       return list;
-    } catch (err: any) {
-      console.error('FLOW ERROR em CandidateService.getApplicationsForJob:', { jobId, code: err?.code, message: err?.message });
-      throw err;
+    } catch (err) {
+      console.warn('Erro ao buscar candidaturas no Firestore:', err);
+      return [];
     }
   }
 }

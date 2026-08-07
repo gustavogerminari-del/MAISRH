@@ -482,24 +482,20 @@ export const UnifiedContratacoesView: React.FC<UnifiedContratacoesViewProps> = (
   // Real-time Firestore subscription to 'contratacoes', 'solicitacoes_admissao', and 'financeiro_cobrancas'
   useEffect(() => {
     setLoading(true);
-    const q = query(collection(db, 'contratacoes'));
+    let q;
+    if (isMaster || !activeCompanyId) {
+      q = query(collection(db, 'contratacoes'));
+    } else {
+      q = query(collection(db, 'contratacoes'), where('companyId', '==', activeCompanyId));
+    }
 
     const unsubscribeHirings = onSnapshot(
       q,
       (snapshot) => {
-        const list = snapshot.docs
-          .map(docSnap => ({
-            id: docSnap.id,
-            ...docSnap.data()
-          }))
-          .filter((item: any) => {
-            if (isMaster || !activeCompanyId) return true;
-            return (
-              item.companyId === activeCompanyId ||
-              item.empresaId === activeCompanyId ||
-              (!item.companyId && !item.empresaId)
-            );
-          });
+        const list = snapshot.docs.map(docSnap => ({
+          id: docSnap.id,
+          ...docSnap.data()
+        }));
         setFirestoreHirings(list);
         setLoading(false);
       },

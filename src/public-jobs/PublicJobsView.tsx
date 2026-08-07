@@ -31,7 +31,6 @@ import { JobCandidateService } from '../services/JobCandidateService';
 import { CandidateService } from '../services/CandidateService';
 import { JobService } from '../services/JobService';
 import { formatFirestoreDate } from '../lib/firestoreUtils';
-import { normalizeJobStatus } from '../jobs/utils/jobUtils';
 
 export interface PublicJobsViewProps {
   jobs?: Job[];
@@ -57,8 +56,10 @@ export const PublicJobsView: React.FC<PublicJobsViewProps> = ({
 
   React.useEffect(() => {
     JobService.listPublicJobs().then(res => {
-      setFetchedPublicJobs(res || []);
-    }).catch(err => console.error('Aviso ao buscar vagas públicas:', err));
+      if (res && res.length > 0) {
+        setFetchedPublicJobs(res);
+      }
+    }).catch(err => console.warn('Aviso ao buscar vagas públicas:', err));
   }, []);
 
   // Map internal system jobs + mock jobs into unified public jobs list
@@ -73,10 +74,14 @@ export const PublicJobsView: React.FC<PublicJobsViewProps> = ({
 
     const customJobsMapped: PublicJob[] = Array.from(allSourceJobsMap.values())
       .filter(j => {
-        const isPublic = (j.publicada === true || (j as any).publicado === true || j.publicada !== false) && j.ativo !== false;
-        if (!isPublic) return false;
-        const normStatus = normalizeJobStatus(j.status);
-        return normStatus === 'aberta';
+        const rawStatus = String(j.status || '').trim().toLowerCase();
+        const isArchived = j.archived === true || j.isArchived === true || rawStatus === 'arquivada' || rawStatus === 'arquivo';
+        if (isArchived) return false;
+        if (rawStatus === 'pausada' || rawStatus === 'fechada' || rawStatus === 'rascunho' || rawStatus === 'draft' || rawStatus === 'closed' || rawStatus === 'paused') {
+          return false;
+        }
+        if ((j as any).publicada === false) return false;
+        return rawStatus === 'aberta' || rawStatus === 'ativa' || rawStatus === 'open' || (!j.status && (j as any).publicada !== false);
       })
       .map(j => {
         const title = j.title || j.titulo || 'Vaga em Aberto';
@@ -140,75 +145,57 @@ export const PublicJobsView: React.FC<PublicJobsViewProps> = ({
       }
     }
 
-    const targetJobId = payload.jobId;
-
-    if (!targetJobId) {
-      throw new Error('Não foi possível identificar a vaga selecionada.');
-    }
-
+    const targetJobId = payload.jobId || 'pub-job-001';
     const targetJob = (jobs || []).find(j => j.id === targetJobId);
+    const targetCompanyId = (targetJob as any)?.empresaId || (targetJob as any)?.companyId || 'emp-001';
 
-    if (!targetJob) {
-      throw new Error('A vaga selecionada não foi encontrada.');
+    // 1. Create candidate in Talent Bank (candidates collection)
+    let candidateRecord;
+    try {
+      candidateRecord = await CandidateService.create({
+        name: payload.fullName,
+        email: payload.email,
+        phone: payload.phone,
+        role: payload.interestArea || targetJob?.title || 'Candidato',
+        location: payload.cityState || 'São Paulo - SP',
+        experienceYears: Number(payload.experienceYears) || 1,
+        skills: ['Comunicação', payload.interestArea || 'Geral'],
+        status: 'Em Processo',
+        currentJobId: targetJobId,
+        currentStageId: 'inscritos',
+        rating: 5,
+        notes: payload.coverNote ? `[Portal]: ${payload.coverNote}` : 'Candidatura enviada via Portal Público MAIS RH',
+        avatar: '',
+        source: 'Site Institucional',
+        resumeUrl: fileUrl,
+        salaryExpectation: 'A combinar',
+        companyId: targetCompanyId,
+      });
+    } catch (err) {
+      console.warn('⚠️ Erro ao salvar candidato no Banco de Talentos:', err);
     }
-
-    const targetCompanyId = (targetJob as any).empresaId || (targetJob as any).companyId;
-
-    if (!targetCompanyId) {
-      throw new Error('A vaga selecionada não possui empresa vinculada.');
-    }
-
-    // 1. Create or get candidate in Talent Bank (candidates collection)
-    const candidateRecord = await CandidateService.createOrGetByEmail({
-      name: payload.fullName,
-      email: payload.email,
-      phone: payload.phone,
-      role: payload.interestArea || targetJob.title || (targetJob as any).titulo || 'Candidato',
-      location: payload.cityState || 'São Paulo - SP',
-      experienceYears: Number(payload.experienceYears) || 1,
-      skills: ['Comunicação', payload.interestArea || 'Geral'],
-      status: 'Em Processo',
-      currentJobId: targetJobId,
-      currentStageId: 'inscritos',
-      rating: 5,
-      notes: payload.coverNote ? `[Portal]: ${payload.coverNote}` : 'Candidatura enviada via Portal Público MAIS RH',
-      avatar: '',
-      source: 'Site Institucional',
-      resumeUrl: fileUrl,
-      salaryExpectation: 'A combinar',
-      companyId: targetCompanyId,
-    });
-
-    if (!candidateRecord?.id) {
-      throw new Error('Não foi possível registrar ou recuperar o perfil do candidato.');
-    }
-
-    const candidateId = candidateRecord.id;
 
     // 2. Persist directly to Firestore candidate_applications collection
-    await JobCandidateService.create({
-      jobId: targetJobId,
-      vagaId: targetJobId,
-      companyId: targetCompanyId,
-      empresaId: targetCompanyId,
-      candidateId: candidateId,
-      candidatoId: candidateId,
-      jobTitle: targetJob.title || (targetJob as any).titulo || 'Vaga',
-      name: payload.fullName,
-      email: payload.email,
-      phone: payload.phone,
-      role: payload.interestArea || targetJob.title || 'Candidato',
-      city: payload.cityState?.split(',')[0]?.trim() || 'São Paulo',
-      state: payload.cityState?.split(',')[1]?.trim() || 'SP',
-      experienceYears: Number(payload.experienceYears) || 1,
-      education: payload.educationLevel || 'Superior Completo',
-      resumeUrl: fileUrl,
-      status: 'inscricao' as any,
-      etapa: 'inscricao',
-      source: 'portal',
-      origem: 'portal',
-      notes: payload.coverNote ? [payload.coverNote] : [`Candidatura enviada via Portal Público MAIS RH`],
-    });
+    try {
+      await JobCandidateService.create({
+        jobId: targetJobId,
+        companyId: targetCompanyId,
+        candidateId: candidateRecord?.id || `cand-${Date.now()}`,
+        name: payload.fullName,
+        email: payload.email,
+        phone: payload.phone,
+        role: payload.interestArea || targetJob?.title || 'Candidato',
+        city: payload.cityState?.split(',')[0]?.trim() || 'São Paulo',
+        state: payload.cityState?.split(',')[1]?.trim() || 'SP',
+        experienceYears: Number(payload.experienceYears) || 1,
+        education: payload.educationLevel || 'Superior Completo',
+        resumeUrl: fileUrl,
+        status: 'Novos',
+        notes: payload.coverNote ? [payload.coverNote] : [`Candidatura enviada via Portal Público MAIS RH`],
+      });
+    } catch (err) {
+      console.warn('⚠️ Erro ao registrar candidatura no Firestore:', err);
+    }
 
     // 3. Callback for local React state
     if (onApplyCandidate) {

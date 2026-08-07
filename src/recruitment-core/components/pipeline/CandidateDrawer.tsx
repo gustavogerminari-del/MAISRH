@@ -34,7 +34,6 @@ import { ProcessStage, UnifiedJob } from '../../types/recruitment';
 import { enviarCandidatoParaAdmissaoDP } from '../../../departamento-pessoal/services/dpFirestoreService';
 import { JobCandidateService } from '../../../services/JobCandidateService';
 import { JobService } from '../../../services/JobService';
-import { getCompanyCapabilitiesFromFirestore } from '../../../utils/companyModules';
 
 interface CandidateDrawerProps {
   candidate: CandidateWithProcess;
@@ -119,41 +118,19 @@ export const CandidateDrawer: React.FC<CandidateDrawerProps> = ({
     };
 
     try {
-      const isHeadhunterJob = job.origemProcesso === 'HEADHUNTER' || (job as any).isHeadhunter === true || (job as any).moduloOrigem === 'headhunter';
-      const defaultDest = isHeadhunterJob ? 'headhunter' : 'departamento_pessoal';
-      const res = await JobCandidateService.hireCandidate(candApp, job.titulo, {
-        closeOtherCandidates: true,
-        destination: defaultDest
-      });
+      const res = await JobCandidateService.hireCandidate(candApp, job.titulo);
       if (res.success) {
         onMoveStage(candidate.id, 'Contratado');
         alert(`Parabéns! ${candidate.nome} foi contratado(a) com sucesso! Registrado na Central Única de Contratações.`);
       }
     } catch (err: any) {
       if (err?.message?.includes('origem definida')) {
-        let chosenOrigin: 'HEADHUNTER' | 'RH_INTERNO' = 'RH_INTERNO';
-        try {
-          const compCaps = await getCompanyCapabilitiesFromFirestore(candApp.companyId);
-          if (compCaps.hasHeadhunter && !compCaps.hasDP) {
-            chosenOrigin = 'HEADHUNTER';
-          } else if (compCaps.hasDP && !compCaps.hasHeadhunter) {
-            chosenOrigin = 'RH_INTERNO';
-          } else {
-            const choice = window.confirm(
-              "Esta vaga ainda não possui uma origem definida.\n\n" +
-              "Clique OK para defini-la como Vaga de Cliente (HEADHUNTER - Financeiro).\n" +
-              "Clique CANCELAR para defini-la como Vaga Interna (RH - Departamento Pessoal)."
-            );
-            chosenOrigin = choice ? 'HEADHUNTER' : 'RH_INTERNO';
-          }
-        } catch (capsErr) {
-          const choice = window.confirm(
-            "Esta vaga ainda não possui uma origem definida.\n\n" +
-            "Clique OK para defini-la como Vaga de Cliente (HEADHUNTER - Financeiro).\n" +
-            "Clique CANCELAR para defini-la como Vaga Interna (RH - Departamento Pessoal)."
-          );
-          chosenOrigin = choice ? 'HEADHUNTER' : 'RH_INTERNO';
-        }
+        const choice = window.confirm(
+          "Esta vaga ainda não possui uma origem definida.\n\n" +
+          "Clique OK para defini-la como Vaga de Cliente (HEADHUNTER - Financeiro).\n" +
+          "Clique CANCELAR para defini-la como Vaga Interna (RH - Departamento Pessoal)."
+        );
+        const chosenOrigin = choice ? 'HEADHUNTER' : 'RH_INTERNO';
 
         try {
           await JobService.update(job.id, {

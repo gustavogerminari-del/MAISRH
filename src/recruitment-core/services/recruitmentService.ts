@@ -8,7 +8,12 @@ import {
   where 
 } from 'firebase/firestore';
 import { db } from '../../lib/firebase';
-import { sanitizeFirestoreData } from '../../lib/firestoreUtils';
+import { 
+  sanitizeFirestoreData, 
+  safeFirestoreRead, 
+  safeFirestoreWrite, 
+  OperationType 
+} from '../../lib/firestoreUtils';
 import { 
   UnifiedJob, 
   UnifiedCandidate, 
@@ -20,10 +25,9 @@ import {
   ProcessStage 
 } from '../types/recruitment';
 
-import { normalizeJobData } from '../../jobs/utils/jobUtils';
-
 const COLLECTIONS = {
-  JOBS: 'jobs',
+  JOBS_PRIMARY: 'vagas',
+  JOBS_SECONDARY: 'jobs',
   CANDIDATES: 'candidatos',
   PROCESSES: 'candidaturas',
   INTERVIEWS: 'entrevistas',
@@ -46,46 +50,90 @@ export async function syncRecruitmentWithFirestore(): Promise<void> {
   try {
     const jobMap = new Map<string, UnifiedJob>();
 
+    // Load from 'vagas'
+    const vagasRead = await safeFirestoreRead(
+      async () => {
+        const snap = await getDocs(collection(db, COLLECTIONS.JOBS_PRIMARY));
+        return snap.docs.map(d => ({ id: d.id, ...d.data() } as UnifiedJob));
+      },
+      OperationType.LIST,
+      COLLECTIONS.JOBS_PRIMARY,
+      []
+    );
+    vagasRead.data.forEach(j => jobMap.set(j.id, j));
+
     // Load from 'jobs'
-    try {
-      const snap = await getDocs(collection(db, COLLECTIONS.JOBS));
-      snap.docs.forEach(d => {
-        const raw = { id: d.id, ...d.data() };
-        const norm = normalizeJobData(raw);
-        jobMap.set(d.id, norm as UnifiedJob);
-      });
-    } catch (e) {
-      console.warn('Sync jobs note:', e);
-    }
+    const jobsRead = await safeFirestoreRead(
+      async () => {
+        const snap = await getDocs(collection(db, COLLECTIONS.JOBS_SECONDARY));
+        return snap.docs.map(d => ({ id: d.id, ...d.data() } as UnifiedJob));
+      },
+      OperationType.LIST,
+      COLLECTIONS.JOBS_SECONDARY,
+      []
+    );
+    jobsRead.data.forEach(j => {
+      if (!jobMap.has(j.id)) jobMap.set(j.id, j);
+    });
 
     if (jobMap.size > 0) {
       jobsCache = Array.from(jobMap.values());
     }
 
-    const candSnap = await getDocs(collection(db, COLLECTIONS.CANDIDATES));
-    if (!candSnap.empty) {
-      candidatesCache = candSnap.docs.map(d => ({ id: d.id, ...d.data() } as UnifiedCandidate));
-    }
+    const candsRead = await safeFirestoreRead(
+      async () => {
+        const snap = await getDocs(collection(db, COLLECTIONS.CANDIDATES));
+        return snap.docs.map(d => ({ id: d.id, ...d.data() } as UnifiedCandidate));
+      },
+      OperationType.LIST,
+      COLLECTIONS.CANDIDATES,
+      []
+    );
+    if (candsRead.data.length > 0) candidatesCache = candsRead.data;
 
-    const intSnap = await getDocs(collection(db, COLLECTIONS.INTERVIEWS));
-    if (!intSnap.empty) {
-      interviewsCache = intSnap.docs.map(d => ({ id: d.id, ...d.data() } as UnifiedInterview));
-    }
+    const intsRead = await safeFirestoreRead(
+      async () => {
+        const snap = await getDocs(collection(db, COLLECTIONS.INTERVIEWS));
+        return snap.docs.map(d => ({ id: d.id, ...d.data() } as UnifiedInterview));
+      },
+      OperationType.LIST,
+      COLLECTIONS.INTERVIEWS,
+      []
+    );
+    if (intsRead.data.length > 0) interviewsCache = intsRead.data;
 
-    const ageSnap = await getDocs(collection(db, COLLECTIONS.AGENDA));
-    if (!ageSnap.empty) {
-      agendaCache = ageSnap.docs.map(d => ({ id: d.id, ...d.data() } as UnifiedAgendaEvent));
-    }
+    const ageRead = await safeFirestoreRead(
+      async () => {
+        const snap = await getDocs(collection(db, COLLECTIONS.AGENDA));
+        return snap.docs.map(d => ({ id: d.id, ...d.data() } as UnifiedAgendaEvent));
+      },
+      OperationType.LIST,
+      COLLECTIONS.AGENDA,
+      []
+    );
+    if (ageRead.data.length > 0) agendaCache = ageRead.data;
 
-    const hirSnap = await getDocs(collection(db, COLLECTIONS.HIRINGS));
-    if (!hirSnap.empty) {
-      hiringsCache = hirSnap.docs.map(d => ({ id: d.id, ...d.data() } as UnifiedHiring));
-    }
+    const hirRead = await safeFirestoreRead(
+      async () => {
+        const snap = await getDocs(collection(db, COLLECTIONS.HIRINGS));
+        return snap.docs.map(d => ({ id: d.id, ...d.data() } as UnifiedHiring));
+      },
+      OperationType.LIST,
+      COLLECTIONS.HIRINGS,
+      []
+    );
+    if (hirRead.data.length > 0) hiringsCache = hirRead.data;
 
-    const procSnap = await getDocs(collection(db, COLLECTIONS.PROCESSES));
-    if (!procSnap.empty) {
-      processesCache = procSnap.docs.map(d => ({ id: d.id, ...d.data() } as UnifiedCandidateProcess));
-    }
+    const procRead = await safeFirestoreRead(
+      async () => {
+        const snap = await getDocs(collection(db, COLLECTIONS.PROCESSES));
+        return snap.docs.map(d => ({ id: d.id, ...d.data() } as UnifiedCandidateProcess));
+      },
+      OperationType.LIST,
+      COLLECTIONS.PROCESSES,
+      []
+    );
+    if (procRead.data.length > 0) processesCache = procRead.data;
 
     isInitialized = true;
   } catch (err) {
@@ -138,13 +186,18 @@ export class RecruitmentService {
     // Update Cache
     jobsCache = [newJob, ...jobsCache.filter(j => j.id !== id)];
 
-    // Persist to Firestore collection
-    try {
-      const sanitized = sanitizeFirestoreData(newJob);
-      await setDoc(doc(db, COLLECTIONS.JOBS, id), sanitized, { merge: true });
-    } catch (err) {
-      console.error('Erro ao salvar vaga no Firestore:', err);
-    }
+    // Persist to both Firestore collections
+    const sanitized = sanitizeFirestoreData(newJob);
+    await safeFirestoreWrite(
+      async () => {
+        await Promise.all([
+          setDoc(doc(db, COLLECTIONS.JOBS_PRIMARY, id), sanitized, { merge: true }),
+          setDoc(doc(db, COLLECTIONS.JOBS_SECONDARY, id), sanitized, { merge: true })
+        ]);
+      },
+      OperationType.WRITE,
+      `${COLLECTIONS.JOBS_PRIMARY}/${id}`
+    );
 
     return newJob;
   }
@@ -159,11 +212,16 @@ export class RecruitmentService {
 
   static async deleteJob(jobId: string): Promise<void> {
     jobsCache = jobsCache.filter(j => j.id !== jobId);
-    try {
-      await deleteDoc(doc(db, COLLECTIONS.JOBS, jobId));
-    } catch (err) {
-      console.error('Erro ao remover vaga do Firestore:', err);
-    }
+    await safeFirestoreWrite(
+      async () => {
+        await Promise.all([
+          deleteDoc(doc(db, COLLECTIONS.JOBS_PRIMARY, jobId)),
+          deleteDoc(doc(db, COLLECTIONS.JOBS_SECONDARY, jobId))
+        ]);
+      },
+      OperationType.DELETE,
+      `${COLLECTIONS.JOBS_PRIMARY}/${jobId}`
+    );
   }
 
   // CANDIDATES
@@ -182,11 +240,13 @@ export class RecruitmentService {
 
     candidatesCache = [newCandidate, ...candidatesCache.filter(c => c.id !== id)];
 
-    try {
-      await setDoc(doc(db, COLLECTIONS.CANDIDATES, id), sanitizeFirestoreData(newCandidate), { merge: true });
-    } catch (err) {
-      console.error('Erro ao salvar candidato no Firestore:', err);
-    }
+    await safeFirestoreWrite(
+      async () => {
+        await setDoc(doc(db, COLLECTIONS.CANDIDATES, id), sanitizeFirestoreData(newCandidate), { merge: true });
+      },
+      OperationType.WRITE,
+      `${COLLECTIONS.CANDIDATES}/${id}`
+    );
 
     return newCandidate;
   }
@@ -201,11 +261,13 @@ export class RecruitmentService {
 
   static async deleteCandidate(candidateId: string): Promise<void> {
     candidatesCache = candidatesCache.filter(c => c.id !== candidateId);
-    try {
-      await deleteDoc(doc(db, COLLECTIONS.CANDIDATES, candidateId));
-    } catch (err) {
-      console.error('Erro ao remover candidato do Firestore:', err);
-    }
+    await safeFirestoreWrite(
+      async () => {
+        await deleteDoc(doc(db, COLLECTIONS.CANDIDATES, candidateId));
+      },
+      OperationType.DELETE,
+      `${COLLECTIONS.CANDIDATES}/${candidateId}`
+    );
   }
 
   static async linkCandidateToJob(candidateId: string, jobId: string, origem: OrigemProcesso = 'recrutamento_interno'): Promise<void> {

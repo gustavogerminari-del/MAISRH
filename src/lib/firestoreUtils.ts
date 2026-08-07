@@ -47,8 +47,69 @@ export function handleFirestoreError(error: unknown, operationType: OperationTyp
     operationType,
     path
   };
-  console.error('Firestore Error: ', JSON.stringify(errInfo));
-  throw new Error(JSON.stringify(errInfo));
+  console.error('[Firestore Error Details]:', JSON.stringify(errInfo, null, 2));
+  throw new Error(`[Firestore Error] Operação: ${operationType} | Path: ${path || 'N/A'} | Motivo: ${errInfo.error}`);
+}
+
+/**
+ * Safely executes a Firestore write operation (setDoc, updateDoc, deleteDoc, etc.)
+ * with automatic data sanitization and unified error handling layer.
+ */
+export async function safeFirestoreWrite<T>(
+  operationFn: () => Promise<T>,
+  operationType: OperationType,
+  path: string
+): Promise<{ success: boolean; result?: T; error?: FirestoreErrorInfo }> {
+  try {
+    const result = await operationFn();
+    return { success: true, result };
+  } catch (err: any) {
+    const errInfo: FirestoreErrorInfo = {
+      error: err instanceof Error ? err.message : String(err),
+      authInfo: {
+        userId: auth?.currentUser?.uid || null,
+        email: auth?.currentUser?.email || null,
+        emailVerified: auth?.currentUser?.emailVerified || null,
+        isAnonymous: auth?.currentUser?.isAnonymous || null,
+        tenantId: auth?.currentUser?.tenantId || null,
+      },
+      operationType,
+      path,
+    };
+    console.error(`[Firestore Write Failed] [${operationType.toUpperCase()}] Collection/Path: ${path}`, errInfo);
+    return { success: false, error: errInfo };
+  }
+}
+
+/**
+ * Safely executes a Firestore read operation (getDoc, getDocs, query, etc.)
+ * with unified error handling and fallback return value.
+ */
+export async function safeFirestoreRead<T>(
+  operationFn: () => Promise<T>,
+  operationType: OperationType,
+  path: string,
+  fallbackValue: T
+): Promise<{ data: T; success: boolean; error?: FirestoreErrorInfo }> {
+  try {
+    const data = await operationFn();
+    return { data, success: true };
+  } catch (err: any) {
+    const errInfo: FirestoreErrorInfo = {
+      error: err instanceof Error ? err.message : String(err),
+      authInfo: {
+        userId: auth?.currentUser?.uid || null,
+        email: auth?.currentUser?.email || null,
+        emailVerified: auth?.currentUser?.emailVerified || null,
+        isAnonymous: auth?.currentUser?.isAnonymous || null,
+        tenantId: auth?.currentUser?.tenantId || null,
+      },
+      operationType,
+      path,
+    };
+    console.error(`[Firestore Read Failed] [${operationType.toUpperCase()}] Collection/Path: ${path}`, errInfo);
+    return { data: fallbackValue, success: false, error: errInfo };
+  }
 }
 
 /**

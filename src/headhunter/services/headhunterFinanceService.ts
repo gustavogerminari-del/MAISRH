@@ -9,7 +9,12 @@ import {
 } from 'firebase/firestore';
 import { onAuthStateChanged } from 'firebase/auth';
 import { db, auth } from '../../lib/firebase';
-import { sanitizeFirestoreData } from '../../lib/firestoreUtils';
+import { 
+  sanitizeFirestoreData, 
+  safeFirestoreRead, 
+  safeFirestoreWrite, 
+  OperationType 
+} from '../../lib/firestoreUtils';
 import { 
   HeadhunterReceita, 
   HeadhunterExpense, 
@@ -37,49 +42,57 @@ let garantiasCache: HeadhunterGarantia[] = [];
 
 // Sync function with Firestore
 export async function syncHeadhunterFinanceWithFirestore(): Promise<void> {
-  try {
-    let recSnap = await getDocs(collection(db, COLLECTIONS.RECEITAS));
-    if (recSnap.empty) {
-      const altSnap = await getDocs(collection(db, 'financeiro_headhunter'));
-      if (!altSnap.empty) recSnap = altSnap;
-    }
-    receitasCache = recSnap.docs.map(d => ({ id: d.id, ...d.data() } as HeadhunterReceita));
-  } catch (err: any) {
-    if (err?.code !== 'permission-denied') {
-      console.warn('[HEADHUNTER FINANCE SYNC]', COLLECTIONS.RECEITAS, err?.message);
-    }
-  }
+  const recRead = await safeFirestoreRead(
+    async () => {
+      let recSnap = await getDocs(collection(db, COLLECTIONS.RECEITAS));
+      if (recSnap.empty) {
+        const altSnap = await getDocs(collection(db, 'financeiro_headhunter'));
+        if (!altSnap.empty) recSnap = altSnap;
+      }
+      return recSnap.docs.map(d => ({ id: d.id, ...d.data() } as HeadhunterReceita));
+    },
+    OperationType.LIST,
+    COLLECTIONS.RECEITAS,
+    []
+  );
+  if (recRead.data.length > 0) receitasCache = recRead.data;
 
-  try {
-    const despSnap = await getDocs(collection(db, COLLECTIONS.DESPESAS));
-    despesasCache = despSnap.docs.map(d => ({ id: d.id, ...d.data() } as HeadhunterExpense));
-  } catch (err: any) {
-    if (err?.code !== 'permission-denied') {
-      console.warn('[HEADHUNTER FINANCE SYNC]', COLLECTIONS.DESPESAS, err?.message);
-    }
-  }
+  const despRead = await safeFirestoreRead(
+    async () => {
+      const despSnap = await getDocs(collection(db, COLLECTIONS.DESPESAS));
+      return despSnap.docs.map(d => ({ id: d.id, ...d.data() } as HeadhunterExpense));
+    },
+    OperationType.LIST,
+    COLLECTIONS.DESPESAS,
+    []
+  );
+  if (despRead.data.length > 0) despesasCache = despRead.data;
 
-  try {
-    const comSnap = await getDocs(collection(db, COLLECTIONS.COMISSOES));
-    comissoesCache = comSnap.docs.map(d => ({ id: d.id, ...d.data() } as HeadhunterCommission));
-  } catch (err: any) {
-    if (err?.code !== 'permission-denied') {
-      console.warn('[HEADHUNTER FINANCE SYNC]', COLLECTIONS.COMISSOES, err?.message);
-    }
-  }
+  const comRead = await safeFirestoreRead(
+    async () => {
+      const comSnap = await getDocs(collection(db, COLLECTIONS.COMISSOES));
+      return comSnap.docs.map(d => ({ id: d.id, ...d.data() } as HeadhunterCommission));
+    },
+    OperationType.LIST,
+    COLLECTIONS.COMISSOES,
+    []
+  );
+  if (comRead.data.length > 0) comissoesCache = comRead.data;
 
-  try {
-    let garSnap = await getDocs(collection(db, COLLECTIONS.GARANTIAS));
-    if (garSnap.empty) {
-      const altGar = await getDocs(collection(db, 'garantias_headhunter'));
-      if (!altGar.empty) garSnap = altGar;
-    }
-    garantiasCache = garSnap.docs.map(d => ({ id: d.id, ...d.data() } as HeadhunterGarantia));
-  } catch (err: any) {
-    if (err?.code !== 'permission-denied') {
-      console.warn('[HEADHUNTER FINANCE SYNC]', COLLECTIONS.GARANTIAS, err?.message);
-    }
-  }
+  const garRead = await safeFirestoreRead(
+    async () => {
+      let garSnap = await getDocs(collection(db, COLLECTIONS.GARANTIAS));
+      if (garSnap.empty) {
+        const altGar = await getDocs(collection(db, 'garantias_headhunter'));
+        if (!altGar.empty) garSnap = altGar;
+      }
+      return garSnap.docs.map(d => ({ id: d.id, ...d.data() } as HeadhunterGarantia));
+    },
+    OperationType.LIST,
+    COLLECTIONS.GARANTIAS,
+    []
+  );
+  if (garRead.data.length > 0) garantiasCache = garRead.data;
 }
 
 // Auto-sync on auth state ready
@@ -112,14 +125,21 @@ export class HeadhunterFinanceService {
       criadoEm: receita.criadoEm || new Date().toISOString().split('T')[0]
     };
 
-    try {
-      await setDoc(doc(db, COLLECTIONS.RECEITAS, id), sanitizeFirestoreData(newReceita), { merge: true });
-      receitasCache = [newReceita, ...receitasCache.filter(r => r.id !== id)];
-      return newReceita;
-    } catch (err) {
-      console.error('[HEADHUNTER] Erro real ao salvar receita:', err);
-      throw err;
+    const res = await safeFirestoreWrite(
+      async () => {
+        await setDoc(doc(db, COLLECTIONS.RECEITAS, id), sanitizeFirestoreData(newReceita), { merge: true });
+        receitasCache = [newReceita, ...receitasCache.filter(r => r.id !== id)];
+        return newReceita;
+      },
+      OperationType.WRITE,
+      `${COLLECTIONS.RECEITAS}/${id}`
+    );
+
+    if (!res.success) {
+      throw new Error(`Erro ao salvar receita no Firestore: ${res.error?.error}`);
     }
+
+    return newReceita;
   }
 
   static async registrarPagamentoReceita(receitaId: string, valorPago: number, formaPagamento: string, dataPagamento: string, observacoes?: string): Promise<HeadhunterReceita | null> {
@@ -198,14 +218,21 @@ export class HeadhunterFinanceService {
       criadoEm: expense.criadoEm || new Date().toISOString().split('T')[0]
     };
 
-    try {
-      await setDoc(doc(db, COLLECTIONS.DESPESAS, id), sanitizeFirestoreData(newExpense), { merge: true });
-      despesasCache = [newExpense, ...despesasCache.filter(d => d.id !== id)];
-      return newExpense;
-    } catch (err) {
-      console.error('[HEADHUNTER] Erro real ao salvar despesa:', err);
-      throw err;
+    const res = await safeFirestoreWrite(
+      async () => {
+        await setDoc(doc(db, COLLECTIONS.DESPESAS, id), sanitizeFirestoreData(newExpense), { merge: true });
+        despesasCache = [newExpense, ...despesasCache.filter(d => d.id !== id)];
+        return newExpense;
+      },
+      OperationType.WRITE,
+      `${COLLECTIONS.DESPESAS}/${id}`
+    );
+
+    if (!res.success) {
+      throw new Error(`Erro ao salvar despesa no Firestore: ${res.error?.error}`);
     }
+
+    return newExpense;
   }
 
   // COMISSÕES
@@ -228,14 +255,21 @@ export class HeadhunterFinanceService {
       criadoEm: commission.criadoEm || new Date().toISOString().split('T')[0]
     };
 
-    try {
-      await setDoc(doc(db, COLLECTIONS.COMISSOES, id), sanitizeFirestoreData(newCom), { merge: true });
-      comissoesCache = [newCom, ...comissoesCache.filter(c => c.id !== id)];
-      return newCom;
-    } catch (err) {
-      console.error('[HEADHUNTER] Erro real ao salvar comissão:', err);
-      throw err;
+    const res = await safeFirestoreWrite(
+      async () => {
+        await setDoc(doc(db, COLLECTIONS.COMISSOES, id), sanitizeFirestoreData(newCom), { merge: true });
+        comissoesCache = [newCom, ...comissoesCache.filter(c => c.id !== id)];
+        return newCom;
+      },
+      OperationType.WRITE,
+      `${COLLECTIONS.COMISSOES}/${id}`
+    );
+
+    if (!res.success) {
+      throw new Error(`Erro ao salvar comissão no Firestore: ${res.error?.error}`);
     }
+
+    return newCom;
   }
 
   static async liberarComissao(commissionId: string, observacao?: string): Promise<HeadhunterCommission | null> {

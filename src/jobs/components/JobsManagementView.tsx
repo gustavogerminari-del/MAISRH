@@ -11,7 +11,7 @@ import {
   Lock,
 } from 'lucide-react';
 import { Job, JobFilterParams, JobStatus } from '../types/job';
-import { normalizeJobStatus, normalizeJobOrigin, normalizeJobData } from '../utils/jobUtils';
+import { normalizeJobStatus, normalizeJobData } from '../utils/jobUtils';
 import { JobCard } from './JobCard';
 import { JobDetailModal } from './JobDetailModal';
 import { JobFormModal } from './JobFormModal';
@@ -51,7 +51,7 @@ export const JobsManagementView: React.FC<JobsManagementViewProps> = ({
       ? rawJobs
       : rawJobs.filter((j: any) => {
           const cId = j.companyId || j.empresaId || j.tenantId;
-          return !cId || cId === userCompanyId;
+          return !cId || cId === userCompanyId || cId === 'emp-001';
         });
 
     return list.map(j => normalizeJobData(j));
@@ -124,31 +124,32 @@ export const JobsManagementView: React.FC<JobsManagementViewProps> = ({
       // Filter by Origem
       let matchesOrigem = true;
       const origFilter = filters.origem || 'Todas';
-      const normOrigin = normalizeJobOrigin(job.origem || job.origemProcesso || job.tipoProcesso);
+      const isHead = job.isHeadhunter || (job as any).projetoHeadhunter || job.origemProcesso === 'headhunter';
+      const hasClient = Boolean((job as any).clienteNome || (job as any).clienteId);
+
+      if (!mostrarFiltroHeadhunter && isHead) {
+        return false;
+      }
 
       if (origFilter === 'Internas') {
-        matchesOrigem = normOrigin === 'interna';
+        matchesOrigem = !isHead && !hasClient && job.origemProcesso !== 'recrutamento_cliente';
       } else if (origFilter === 'Clientes') {
-        matchesOrigem = normOrigin === 'cliente';
+        matchesOrigem = job.origemProcesso === 'recrutamento_cliente' || (hasClient && !isHead);
       } else if (origFilter === 'Headhunter') {
-        matchesOrigem = normOrigin === 'headhunter';
+        matchesOrigem = mostrarFiltroHeadhunter && isHead;
       }
 
       // Filter by Status
       let matchesStatus = true;
       const stFilter = filters.status;
-      const normStatus = normalizeJobStatus(job.status);
-
       if (stFilter === 'Abertas') {
-        matchesStatus = normStatus === 'aberta';
+        matchesStatus = job.status === 'Aberta' || job.status === 'ativa';
       } else if (stFilter === 'Em andamento') {
-        matchesStatus = normStatus === 'em_andamento';
+        matchesStatus = job.status === 'Em andamento';
       } else if (stFilter === 'Concluídas') {
-        matchesStatus = normStatus === 'concluida';
-      } else if (stFilter === 'Canceladas') {
-        matchesStatus = normStatus === 'cancelada';
+        matchesStatus = job.status === 'Concluída' || job.status === 'Fechada';
       } else if (stFilter !== 'Todas') {
-        matchesStatus = normStatus === String(stFilter).toLowerCase();
+        matchesStatus = job.status === stFilter;
       }
 
       return matchesSearch && matchesDept && matchesType && matchesOrigem && matchesStatus;
@@ -157,7 +158,7 @@ export const JobsManagementView: React.FC<JobsManagementViewProps> = ({
 
   const handleSaveJob = async (jobData: any, existingId?: string) => {
     let updatedList: Job[] = [];
-    const resolvedCompanyId = userCompanyId || (user as any)?.companyId || (user as any)?.empresaId;
+    const resolvedCompanyId = userCompanyId || (user as any)?.companyId || (user as any)?.empresaId || 'emp-001';
     
     if (existingId) {
       updatedList = jobs.map((j) => (j.id === existingId ? normalizeJobData({ ...j, ...jobData }) : j));
@@ -177,19 +178,6 @@ export const JobsManagementView: React.FC<JobsManagementViewProps> = ({
       setJobs(updatedList);
       logger.info(`Nova vaga criada: ${newJob.title}`, 'JobsManagement');
     }
-
-    // Refetch latest jobs directly from Firestore jobs collection
-    try {
-      const freshJobs = await JobService.list(isMaster ? undefined : userCompanyId);
-      if (freshJobs && freshJobs.length > 0) {
-        setJobs(freshJobs.map(j => normalizeJobData(j)));
-      }
-    } catch (e) {
-      console.warn('Erro ao atualizar lista de vagas do Firestore:', e);
-    }
-
-    // Clear incompatible filters so new job appears immediately
-    setFilters(prev => ({ ...prev, status: 'Todas', origem: 'Todas', searchTerm: '' }));
 
     if (onUpdateJobs) {
       onUpdateJobs(updatedList);

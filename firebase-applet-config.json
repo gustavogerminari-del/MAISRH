@@ -1,11 +1,12 @@
 {
-  "projectId": "rl-rh-f0127",
-  "appId": "1:358497169485:web:51e85f3c6c7288a8ec2c04",
-  "apiKey": "AIzaSyB71WTHiF_Ak55riuIXmISUGv4ubiO6ECI",
-  "authDomain": "rl-rh-f0127.firebaseapp.com",
-  "storageBucket": "rl-rh-f0127.firebasestorage.app",
-  "messagingSenderId": "358497169485",
-  "measurementId": "G-T48N23BX4E",
-  "oAuthClientId": "",
+  "projectId": "total-parsec-l98sv",
+  "appId": "1:506821236224:web:0799664aba0f7307886ae5",
+  "apiKey": "AIzaSyC6jAnpOitgfHOpFSIhpBUVCf6OO17GAgQ",
+  "authDomain": "total-parsec-l98sv.firebaseapp.com",
+  "firestoreDatabaseId": "ai-studio-maisrh-52669bee-e2a4-42a8-8651-40151de9194d",
+  "storageBucket": "total-parsec-l98sv.firebasestorage.app",
+  "messagingSenderId": "506821236224",
+  "measurementId": "",
+  "oAuthClientId": "506821236224-e6o2b0igcrd0vbpoqhbk58v10koe7noa.apps.googleusercontent.com",
   "recaptchaSiteKey": ""
 }

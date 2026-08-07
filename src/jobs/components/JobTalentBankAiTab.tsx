@@ -31,7 +31,6 @@ import { CandidateService } from '../../services/CandidateService';
 import { JobCandidateService, JobCandidateApplication } from '../../services/JobCandidateService';
 import { useAuth } from '../../auth';
 import { Button } from '../../shared';
-import { calculateCandidateJobMatch } from '../utils/jobUtils';
 
 export interface TalentBankMatchResult {
   candidateId: string;
@@ -89,7 +88,6 @@ export const JobTalentBankAiTab: React.FC<JobTalentBankAiTabProps> = ({
 
   // Action status message
   const [toastMessage, setToastMessage] = useState<string | null>(null);
-  const [loadError, setLoadError] = useState<string | null>(null);
 
   // Filters
   const [searchTerm, setSearchTerm] = useState('');
@@ -102,7 +100,6 @@ export const JobTalentBankAiTab: React.FC<JobTalentBankAiTabProps> = ({
   // Load candidates and existing job applications
   const loadTalentData = async () => {
     setLoading(true);
-    setLoadError(null);
     try {
       const candidatesList = await CandidateService.list(companyId);
       const applicationsList = job?.id
@@ -112,14 +109,8 @@ export const JobTalentBankAiTab: React.FC<JobTalentBankAiTabProps> = ({
       setTalentCandidates(candidatesList);
       setExistingApplications(applicationsList);
 
-      const invitedIds = new Set(applicationsList.map((app) => app.candidateId || (app as any).candidatoId));
+      const invitedIds = new Set(applicationsList.map((app) => app.candidateId));
       setInvitedCandidateIds(invitedIds);
-
-      if (candidatesList.length === 0) {
-        setMatchResults([]);
-        setLoading(false);
-        return;
-      }
 
       // Run AI matching if job is available
       if (job) {
@@ -150,11 +141,8 @@ export const JobTalentBankAiTab: React.FC<JobTalentBankAiTabProps> = ({
         }));
         setMatchResults(fallbackMatches);
       }
-    } catch (err: any) {
+    } catch (err) {
       console.error('Erro ao carregar banco de talentos:', err);
-      setLoadError(err?.message || 'Falha ao consultar candidatos reais no Banco de Talentos.');
-      setTalentCandidates([]);
-      setMatchResults([]);
     } finally {
       setLoading(false);
     }
@@ -164,19 +152,13 @@ export const JobTalentBankAiTab: React.FC<JobTalentBankAiTabProps> = ({
     loadTalentData();
   }, [job?.id, companyId]);
 
-  // Execute AI Matching call with deterministic local fallback
+  // Execute AI Matching call
   const runAiMatching = async (candidates: Candidate[], currentJob: Job) => {
-    if (!candidates || candidates.length === 0) {
-      setMatchResults([]);
-      return;
-    }
     setLoading(true);
     setAnalyzingProgress(15);
     const interval = setInterval(() => {
       setAnalyzingProgress((prev) => (prev < 90 ? prev + 15 : prev));
     }, 250);
-
-    let fetchedMatches: TalentBankMatchResult[] = [];
 
     try {
       const response = await fetch('/api/ai/talent-bank-match', {
@@ -190,59 +172,40 @@ export const JobTalentBankAiTab: React.FC<JobTalentBankAiTabProps> = ({
       });
 
       const resData = await response.json();
-      if (resData.success && resData.data?.matches) {
-        fetchedMatches = resData.data.matches
-          .map((m: any) => {
-            const matchedCand = candidates.find((c) => c.id === m.candidateId || c.name === m.candidateName);
-            if (!matchedCand) return null;
-            return {
-              ...m,
-              candidateRef: matchedCand,
-            };
-          })
-          .filter(Boolean);
-      }
-    } catch (err) {
-      console.warn('IA indisponível. Executando cálculo de compatibilidade determinístico local:', err);
-    } finally {
       clearInterval(interval);
       setAnalyzingProgress(100);
 
-      // Deterministic fallback if API produced no matches
-      if (fetchedMatches.length === 0 && candidates.length > 0) {
-        fetchedMatches = candidates.map((cand) => {
-          const match = calculateCandidateJobMatch(currentJob, cand);
-          const isHigh = match.score >= 80;
-          const isMed = match.score >= 60;
+      if (resData.success && resData.data?.matches) {
+        const matches: TalentBankMatchResult[] = resData.data.matches.map((m: any) => {
+          const matchedCand = candidates.find((c) => c.id === m.candidateId || c.name === m.candidateName);
           return {
-            candidateId: cand.id,
-            candidateName: cand.name,
-            compatibilityScore: match.score,
-            compatibilityLevel: isHigh ? 'Muito compatível' : isMed ? 'Compatível' : 'Baixa compatibilidade',
-            motivos: [match.summary],
-            pontosFortes: match.matchedSkills.length > 0 ? match.matchedSkills : (cand.skills || []),
-            pontosAtencao: match.missingSkills,
-            analiseCurriculo: {
-              experienciaProfissional: `${cand.experienceYears || 0} anos de experiência`,
-              empresasAnteriores: [],
-              tempoExperiencia: `${cand.experienceYears || 0} anos`,
-              formacao: (cand as any).education || 'Ensino Superior',
-              cursos: [],
-              habilidadesTecnicas: cand.skills || [],
-              competenciasComportamentais: [],
-              localizacao: cand.location || '',
-              pretensaoSalarial: cand.salaryExpectation || 'A combinar',
-              compatibilidadeComVaga: match.summary
+            ...m,
+            candidateRef: matchedCand || {
+              id: m.candidateId || `cand-${Date.now()}`,
+              name: m.candidateName,
+              email: 'candidato@email.com',
+              phone: '(11) 99999-8888',
+              role: m.analiseCurriculo?.experienciaProfissional || 'Profissional',
+              location: m.analiseCurriculo?.localizacao || 'São Paulo, SP',
+              experienceYears: parseInt(m.analiseCurriculo?.tempoExperiencia) || 3,
+              skills: m.analiseCurriculo?.habilidadesTecnicas || [],
+              status: 'Ativo',
+              rating: 5,
+              notes: m.analiseCurriculo?.compatibilidadeComVaga || '',
+              avatar: '',
+              appliedDate: new Date().toISOString().split('T')[0],
+              source: 'LinkedIn',
             },
-            recomendacao: isHigh ? 'Recomendado para Triagem' : 'Perfil em Análise (Cálculo Básico)',
-            candidateRef: cand
           };
         });
+
+        // Sort by compatibility score descending
+        matches.sort((a, b) => b.compatibilityScore - a.compatibilityScore);
+        setMatchResults(matches);
       }
-
-      fetchedMatches.sort((a, b) => b.compatibilityScore - a.compatibilityScore);
-      setMatchResults(fetchedMatches);
-
+    } catch (err) {
+      console.error('Erro na análise da IA:', err);
+    } finally {
       setLoading(false);
       setTimeout(() => setAnalyzingProgress(0), 500);
     }
@@ -569,23 +532,6 @@ export const JobTalentBankAiTab: React.FC<JobTalentBankAiTabProps> = ({
             <p className="text-xs font-extrabold text-slate-700">
               Mapeando candidatos do Banco de Talentos com a vaga...
             </p>
-          </div>
-        ) : loadError ? (
-          <div className="bg-rose-50 rounded-3xl p-12 text-center border border-rose-200 space-y-3">
-            <AlertCircle className="w-10 h-10 text-rose-600 mx-auto" />
-            <h3 className="text-sm font-extrabold text-rose-900">
-              Erro ao acessar o Banco de Talentos
-            </h3>
-            <p className="text-xs text-rose-700 max-w-md mx-auto">
-              {loadError}
-            </p>
-          </div>
-        ) : talentCandidates.length === 0 ? (
-          <div className="bg-white rounded-3xl p-12 text-center border border-slate-200 space-y-3">
-            <UserCheck className="w-10 h-10 text-slate-300 mx-auto" />
-            <h3 className="text-sm font-extrabold text-slate-800">
-              Nenhum candidato real cadastrado no Banco de Talentos.
-            </h3>
           </div>
         ) : filteredMatches.length === 0 ? (
           <div className="bg-white rounded-3xl p-12 text-center border border-slate-200 space-y-3">

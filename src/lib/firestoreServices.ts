@@ -10,7 +10,6 @@ import {
 } from 'firebase/firestore';
 import { db, auth } from './firebase';
 import { sanitizeFirestoreData } from './firestoreUtils';
-import { fetchCompanyReleasedModules } from '../services/ModuleCatalogService';
 import { ClientTenant, PlatformModule, TenantModulePermissions } from '../master-admin/types/master';
 
 export enum OperationType {
@@ -339,7 +338,39 @@ export async function saveEmpresaModuloFirestore(
 export async function fetchEmpresaModulosFirestore(empresaId: string): Promise<Record<string, boolean>> {
   if (!empresaId) return {};
   try {
-    return await fetchCompanyReleasedModules(empresaId);
+    const docRef = doc(db, COLLECTIONS.EMPRESA_MODULOS, empresaId);
+    const snap = await getDoc(docRef);
+    if (snap.exists()) {
+      const data = snap.data();
+      if (data && data.modulos && typeof data.modulos === 'object') {
+        return data.modulos as Record<string, boolean>;
+      }
+    }
+
+    const q = query(
+      collection(db, COLLECTIONS.EMPRESA_MODULOS), 
+      where('empresaId', '==', empresaId)
+    );
+    const snapCollection = await getDocs(q);
+    const result: Record<string, boolean> = {};
+    snapCollection.forEach(docSnap => {
+      const data = docSnap.data() as EmpresaModuloDoc;
+      if (data.moduloId) {
+        result[data.moduloId] = data.ativo;
+      }
+    });
+
+    if (Object.keys(result).length > 0) {
+      return result;
+    }
+    
+    // Check rawTenantData in EMPRESAS
+    const empresaRef = doc(db, COLLECTIONS.EMPRESAS, empresaId);
+    const empSnap = await getDoc(empresaRef);
+    if (empSnap.exists()) {
+      const empData = empSnap.data() as EmpresaFirestoreDoc;
+      return (empData.rawTenantData?.modules as unknown as Record<string, boolean>) || {};
+    }
   } catch (err: any) {
     console.warn('Informação de empresa_modulos indisponível no Firestore:', err?.message || err);
   }

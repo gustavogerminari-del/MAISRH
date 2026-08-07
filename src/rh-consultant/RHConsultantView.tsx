@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   Briefcase, 
   Users, 
@@ -22,6 +22,7 @@ import {
 } from 'lucide-react';
 import { ConsultantClient, ConsultantJob, ConsultantCandidateScreening, JobExpense } from './types';
 import { formatFirestoreDate } from '../lib/firestoreUtils';
+import { ConsultantDataService, syncConsultantDataWithFirestore } from './services/consultantDataService';
 
 export const RHConsultantView: React.FC = () => {
   const [activeTab, setActiveTab] = useState<'dashboard' | 'vagas' | 'clientes' | 'financeiro'>('dashboard');
@@ -29,6 +30,16 @@ export const RHConsultantView: React.FC = () => {
   const [jobs, setJobs] = useState<ConsultantJob[]>([]);
   const [screenings, setScreenings] = useState<ConsultantCandidateScreening[]>([]);
   const [selectedClientFilter, setSelectedClientFilter] = useState('Todos');
+
+  useEffect(() => {
+    async function loadConsultantData() {
+      await syncConsultantDataWithFirestore();
+      setClients(ConsultantDataService.getClients());
+      setJobs(ConsultantDataService.getJobs());
+      setScreenings(ConsultantDataService.getScreenings());
+    }
+    loadConsultantData();
+  }, []);
 
   // New Job Modal State
   const [showNewJobModal, setShowNewJobModal] = useState(false);
@@ -55,7 +66,7 @@ export const RHConsultantView: React.FC = () => {
   const netProfit = totalRevenueReceived - totalCommissions - totalExpenses;
 
   // Handler for adding new job
-  const handleCreateJob = (e: React.FormEvent) => {
+  const handleCreateJob = async (e: React.FormEvent) => {
     e.preventDefault();
     const client = clients.find(c => c.id === newJobClientId);
     if (!client) return;
@@ -82,13 +93,14 @@ export const RHConsultantView: React.FC = () => {
       createdAt: new Date().toISOString().split('T')[0]
     };
 
-    setJobs([newJob, ...jobs]);
+    const saved = await ConsultantDataService.saveJob(newJob);
+    setJobs([saved, ...jobs.filter(j => j.id !== saved.id)]);
     setShowNewJobModal(false);
     setNewJobTitle('');
   };
 
   // Handler for adding new expense
-  const handleAddExpense = (e: React.FormEvent) => {
+  const handleAddExpense = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedJobForExpense) return;
 
@@ -102,12 +114,15 @@ export const RHConsultantView: React.FC = () => {
       date: new Date().toISOString().split('T')[0]
     };
 
-    setJobs(jobs.map(j => {
-      if (j.id === selectedJobForExpense) {
-        return { ...j, expenses: [...j.expenses, newExpense] };
-      }
-      return j;
-    }));
+    const targetJob = jobs.find(j => j.id === selectedJobForExpense);
+    if (targetJob) {
+      const updatedJob: ConsultantJob = {
+        ...targetJob,
+        expenses: [...(targetJob.expenses || []), newExpense]
+      };
+      await ConsultantDataService.saveJob(updatedJob);
+      setJobs(jobs.map(j => j.id === selectedJobForExpense ? updatedJob : j));
+    }
 
     setShowExpenseModal(false);
     setExpenseDescription('');
